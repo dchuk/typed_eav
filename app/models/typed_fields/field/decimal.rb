@@ -22,6 +22,10 @@ module TypedFields
         return result unless scale && scale >= 0
         result.round(scale)
       end
+
+      def validate_typed_value(record, val)
+        validate_range(record, val)
+      end
     end
   end
 end

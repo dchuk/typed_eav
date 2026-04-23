@@ -20,6 +20,10 @@ module TypedFields
         mark_cast_invalid!
         nil
       end
+
+      def validate_typed_value(record, val)
+        validate_datetime_range(record, val)
+      end
     end
   end
 end

@@ -10,6 +10,10 @@ module TypedFields
       def cast_value(raw)
         raw&.to_s
       end
+
+      def validate_typed_value(record, val)
+        validate_length(record, val)
+      end
     end
   end
 end

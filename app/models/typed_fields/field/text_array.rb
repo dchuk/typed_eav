@@ -14,6 +14,10 @@ module TypedFields
         return nil if raw.nil?
         Array(raw).map(&:to_s).presence
       end
+
+      def validate_typed_value(record, val)
+        validate_array_size(record, val)
+      end
     end
   end
 end

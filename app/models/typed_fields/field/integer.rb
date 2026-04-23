@@ -24,6 +24,10 @@ module TypedFields
         end
         bd.to_i
       end
+
+      def validate_typed_value(record, val)
+        validate_range(record, val)
+      end
     end
   end
 end

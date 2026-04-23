@@ -16,6 +16,11 @@ module TypedFields
         raw&.to_s
       end
 
+      def validate_typed_value(record, val)
+        validate_length(record, val)
+        validate_pattern(record, val) if pattern.present?
+      end
+
       private
 
       def max_gte_min_length

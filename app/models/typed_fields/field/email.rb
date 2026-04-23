@@ -18,6 +18,12 @@ module TypedFields
         EMAIL_FORMAT.match?(val)
       end
 
+      def validate_typed_value(record, val)
+        validate_length(record, val)
+        validate_pattern(record, val) if pattern.present?
+        record.errors.add(:value, "is not a valid email address") unless email_format_valid?(val)
+      end
+
       private
 
       def validate_pattern_syntax

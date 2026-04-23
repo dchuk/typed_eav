@@ -18,6 +18,10 @@ module TypedFields
         mark_cast_invalid! if result.size < elements.size
         result.presence
       end
+
+      def validate_typed_value(record, val)
+        validate_array_size(record, val)
+      end
     end
   end
 end
