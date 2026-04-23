@@ -269,6 +269,11 @@ TypedFields::Field::Text.create!(
 
 ## Custom Field Types
 
+Override `cast(raw)` to return a `[casted_value, invalid?]` tuple.
+`invalid?` tells `Value#validate_value` whether to surface `:invalid`
+(vs `:blank`) when raw input can't be coerced. For types that never
+fail to coerce, always return `[value, false]`.
+
 ```ruby
 # app/models/fields/phone.rb
 module Fields
@@ -276,9 +281,9 @@ module Fields
     value_column :string_value
     operators :eq, :contains, :starts_with, :is_null, :is_not_null
 
-    def cast_value(raw)
-      # Strip everything but digits and +
-      raw&.to_s&.gsub(/[^\d+]/, "")
+    def cast(raw)
+      # Strip everything but digits and +; never rejects as invalid
+      [raw&.to_s&.gsub(/[^\d+]/, ""), false]
     end
   end
 end

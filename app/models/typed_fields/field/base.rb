@@ -54,7 +54,7 @@ module TypedFields
       # column can hold any type's default without an extra typed column.
 
       def default_value
-        cast_value(default_value_meta["v"])
+        cast(default_value_meta["v"]).first
       end
 
       def default_value=(val)
@@ -62,17 +62,6 @@ module TypedFields
       end
 
       # ── Type casting ──
-      # Returns the coerced value for this field type, or nil when raw is
-      # nil/blank/invalid. Subclasses that never fail to coerce (Text,
-      # Color, Select, etc.) should override this. Subclasses that can
-      # reject garbage input (Integer, Date, Boolean, etc.) should
-      # override `cast` instead so callers can distinguish "blank" from
-      # "invalid".
-      def cast_value(raw)
-        cast(raw).first
-      end
-
-      # ── Typed cast ──
       # Returns a tuple: [casted_value, invalid?].
       #
       # - casted_value is the coerced value (or nil when raw is nil/blank)
@@ -80,7 +69,11 @@ module TypedFields
       #   type; Value#validate_value uses the flag to surface :invalid
       #   errors (vs :blank for nil-from-nil).
       #
-      # Default is an identity pass-through that never flags invalid.
+      # Subclasses override to enforce type semantics. Default is an
+      # identity pass-through that never flags invalid.
+      #
+      # Callers that only need the coerced value should use
+      # `cast(raw).first`.
       def cast(raw)
         [raw, false]
       end

@@ -97,11 +97,11 @@ RSpec.describe "Field type casting" do
     let(:field) { build(:integer_field) }
 
     it "casts strings to integers" do
-      expect(field.cast_value("42")).to eq(42)
+      expect(field.cast("42").first).to eq(42)
     end
 
     it "returns nil for non-numeric strings" do
-      expect(field.cast_value("abc")).to be_nil
+      expect(field.cast("abc").first).to be_nil
     end
 
     it "rejects decimal input" do
@@ -113,7 +113,7 @@ RSpec.describe "Field type casting" do
     let(:field) { build(:decimal_field) }
 
     it "casts strings to BigDecimal" do
-      expect(field.cast_value("19.99")).to eq(BigDecimal("19.99"))
+      expect(field.cast("19.99").first).to eq(BigDecimal("19.99"))
     end
   end
 
@@ -121,15 +121,15 @@ RSpec.describe "Field type casting" do
     let(:field) { build(:boolean_field) }
 
     it "casts string 'true' to true" do
-      expect(field.cast_value("true")).to eq(true)
+      expect(field.cast("true").first).to eq(true)
     end
 
     it "casts string '0' to false" do
-      expect(field.cast_value("0")).to eq(false)
+      expect(field.cast("0").first).to eq(false)
     end
 
     it "casts nil to nil" do
-      expect(field.cast_value(nil)).to be_nil
+      expect(field.cast(nil).first).to be_nil
     end
   end
 
@@ -137,16 +137,16 @@ RSpec.describe "Field type casting" do
     let(:field) { build(:date_field) }
 
     it "casts string to Date" do
-      expect(field.cast_value("2025-06-15")).to eq(Date.new(2025, 6, 15))
+      expect(field.cast("2025-06-15").first).to eq(Date.new(2025, 6, 15))
     end
 
     it "passes through Date objects" do
       date = Date.today
-      expect(field.cast_value(date)).to eq(date)
+      expect(field.cast(date).first).to eq(date)
     end
 
     it "returns nil for invalid dates" do
-      expect(field.cast_value("not-a-date")).to be_nil
+      expect(field.cast("not-a-date").first).to be_nil
     end
   end
 
@@ -154,7 +154,7 @@ RSpec.describe "Field type casting" do
     let(:field) { build(:email_typed_field) }
 
     it "downcases and strips" do
-      expect(field.cast_value("  USER@Example.COM  ")).to eq("user@example.com")
+      expect(field.cast("  USER@Example.COM  ").first).to eq("user@example.com")
     end
   end
 
@@ -162,11 +162,11 @@ RSpec.describe "Field type casting" do
     let(:field) { build(:integer_array_field) }
 
     it "casts array elements to integers" do
-      expect(field.cast_value(["1", "2", "3"])).to eq([1, 2, 3])
+      expect(field.cast(["1", "2", "3"]).first).to eq([1, 2, 3])
     end
 
     it "filters out non-numeric elements" do
-      expect(field.cast_value(["1", "abc", "3"])).to eq([1, 3])
+      expect(field.cast(["1", "abc", "3"]).first).to eq([1, 3])
     end
   end
 
@@ -291,12 +291,12 @@ RSpec.describe "Decimal field precision_scale" do
   let(:field) { build(:decimal_field, options: { "precision_scale" => "2" }) }
 
   it "applies rounding" do
-    expect(field.cast_value("19.999")).to eq(BigDecimal("20.00"))
+    expect(field.cast("19.999").first).to eq(BigDecimal("20.00"))
   end
 
   it "ignores invalid precision_scale" do
     field = build(:decimal_field, options: { "precision_scale" => "abc" })
-    expect(field.cast_value("19.99")).to eq(BigDecimal("19.99"))
+    expect(field.cast("19.99").first).to eq(BigDecimal("19.99"))
   end
 end
 
@@ -304,11 +304,11 @@ RSpec.describe "LongText casting" do
   let(:field) { build(:long_text_field) }
 
   it "casts to string" do
-    expect(field.cast_value(123)).to eq("123")
+    expect(field.cast(123).first).to eq("123")
   end
 
   it "returns nil for nil" do
-    expect(field.cast_value(nil)).to be_nil
+    expect(field.cast(nil).first).to be_nil
   end
 end
 
@@ -316,13 +316,13 @@ RSpec.describe "DateTime casting" do
   let(:field) { build(:datetime_field) }
 
   it "casts valid datetime string" do
-    result = field.cast_value("2025-06-15 14:30:00")
+    result = field.cast("2025-06-15 14:30:00").first
     expect(result).to be_a(Time)
   end
 
   it "passes through Time objects" do
     time = Time.current
-    expect(field.cast_value(time)).to eq(time)
+    expect(field.cast(time).first).to eq(time)
   end
 
   it "returns nil and marks invalid for unparseable strings" do
@@ -334,7 +334,7 @@ RSpec.describe "DecimalArray casting" do
   let(:field) { build(:decimal_array_field) }
 
   it "casts elements to BigDecimal" do
-    expect(field.cast_value(["1.5", "2.5"])).to eq([BigDecimal("1.5"), BigDecimal("2.5")])
+    expect(field.cast(["1.5", "2.5"]).first).to eq([BigDecimal("1.5"), BigDecimal("2.5")])
   end
 
   it "filters invalid and marks cast invalid" do
@@ -342,11 +342,11 @@ RSpec.describe "DecimalArray casting" do
   end
 
   it "returns nil for nil" do
-    expect(field.cast_value(nil)).to be_nil
+    expect(field.cast(nil).first).to be_nil
   end
 
   it "returns nil for empty array via .presence" do
-    expect(field.cast_value([])).to be_nil
+    expect(field.cast([]).first).to be_nil
   end
 end
 
@@ -354,7 +354,7 @@ RSpec.describe "DateArray casting" do
   let(:field) { build(:date_array_field) }
 
   it "casts date strings" do
-    result = field.cast_value(["2025-01-01", "2025-06-15"])
+    result = field.cast(["2025-01-01", "2025-06-15"]).first
     expect(result).to eq([Date.new(2025, 1, 1), Date.new(2025, 6, 15)])
   end
 
@@ -363,7 +363,7 @@ RSpec.describe "DateArray casting" do
   end
 
   it "returns nil for nil" do
-    expect(field.cast_value(nil)).to be_nil
+    expect(field.cast(nil).first).to be_nil
   end
 end
 
@@ -371,11 +371,11 @@ RSpec.describe "Url casting and validation" do
   let(:field) { build(:url_field) }
 
   it "strips whitespace" do
-    expect(field.cast_value("  https://example.com  ")).to eq("https://example.com")
+    expect(field.cast("  https://example.com  ").first).to eq("https://example.com")
   end
 
   it "does not downcase" do
-    expect(field.cast_value("https://Example.COM/Path")).to eq("https://Example.COM/Path")
+    expect(field.cast("https://Example.COM/Path").first).to eq("https://Example.COM/Path")
   end
 
   it "validates URL format" do
@@ -388,11 +388,11 @@ RSpec.describe "Color casting" do
   let(:field) { build(:color_field) }
 
   it "downcases and strips" do
-    expect(field.cast_value("  #FF0000  ")).to eq("#ff0000")
+    expect(field.cast("  #FF0000  ").first).to eq("#ff0000")
   end
 
   it "returns nil for nil" do
-    expect(field.cast_value(nil)).to be_nil
+    expect(field.cast(nil).first).to be_nil
   end
 end
 
@@ -400,15 +400,15 @@ RSpec.describe "Json casting" do
   let(:field) { build(:json_field) }
 
   it "passes through hash" do
-    expect(field.cast_value({ "key" => "val" })).to eq({ "key" => "val" })
+    expect(field.cast({ "key" => "val" }).first).to eq({ "key" => "val" })
   end
 
   it "passes through array" do
-    expect(field.cast_value([1, 2, 3])).to eq([1, 2, 3])
+    expect(field.cast([1, 2, 3]).first).to eq([1, 2, 3])
   end
 
   it "passes through nil" do
-    expect(field.cast_value(nil)).to be_nil
+    expect(field.cast(nil).first).to be_nil
   end
 end
 
@@ -416,13 +416,13 @@ RSpec.describe "Boolean casting edge cases" do
   let(:field) { build(:boolean_field) }
 
   it "casts standard truthy strings" do
-    expect(field.cast_value("true")).to eq(true)
-    expect(field.cast_value("1")).to eq(true)
+    expect(field.cast("true").first).to eq(true)
+    expect(field.cast("1").first).to eq(true)
   end
 
   it "casts standard falsy strings" do
-    expect(field.cast_value("false")).to eq(false)
-    expect(field.cast_value("0")).to eq(false)
+    expect(field.cast("false").first).to eq(false)
+    expect(field.cast("0").first).to eq(false)
   end
 end
 
@@ -433,7 +433,7 @@ RSpec.describe "cast_value(nil) returns nil for all field types" do
      email_typed_field url_field color_field json_field].each do |factory_name|
     it "#{factory_name} returns nil" do
       field = build(factory_name)
-      expect(field.cast_value(nil)).to be_nil
+      expect(field.cast(nil).first).to be_nil
     end
   end
 end
