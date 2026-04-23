@@ -12,8 +12,8 @@ module TypedFields
 
       URL_FORMAT = /\A#{URI::DEFAULT_PARSER.make_regexp(%w[http https])}\z/
 
-      def cast_value(raw)
-        raw&.to_s&.strip
+      def cast(raw)
+        [raw&.to_s&.strip, false]
       end
 
       def url_format_valid?(val)

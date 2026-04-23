@@ -7,18 +7,17 @@ module TypedFields
 
       store_accessor :options, :min_datetime, :max_datetime
 
-      def cast_value(raw)
-        return nil if raw.nil?
-        reset_cast_state!
-        return raw if raw.is_a?(::Time)
+      def cast(raw)
+        return [nil, false] if raw.nil?
+        return [raw, false] if raw.is_a?(::Time)
         result = ::Time.zone.parse(raw.to_s)
-        if result.nil? && !raw.to_s.strip.empty?
-          mark_cast_invalid!
+        if result.nil?
+          [nil, !raw.to_s.strip.empty?]
+        else
+          [result, false]
         end
-        result
       rescue ArgumentError
-        mark_cast_invalid!
-        nil
+        [nil, true]
       end
 
       def validate_typed_value(record, val)

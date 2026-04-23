@@ -10,8 +10,8 @@ module TypedFields
 
       EMAIL_FORMAT = /\A[^@\s]+@[^@\s]+\.[^@\s]+\z/
 
-      def cast_value(raw)
-        raw&.to_s&.strip&.downcase
+      def cast(raw)
+        [raw&.to_s&.strip&.downcase, false]
       end
 
       def email_format_valid?(val)

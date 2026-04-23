@@ -38,7 +38,9 @@ module TypedFields
       if field
         # Cast through the field type, then write to the native column.
         # Rails will further cast via the column type on save.
-        self[value_column] = field.cast_value(val)
+        casted, invalid = field.cast(val)
+        self[value_column] = casted
+        @cast_was_invalid = invalid
       else
         # Field not yet assigned - stash for later
         @pending_value = val
@@ -65,12 +67,9 @@ module TypedFields
     def validate_value
       return unless field
 
-      # Check if the last cast produced an invalid result, then reset
-      # to prevent flag leakage across multiple validations on the same field.
-      cast_was_invalid = field.last_cast_invalid
-      field.send(:reset_cast_state!) if cast_was_invalid
-      if cast_was_invalid
+      if @cast_was_invalid
         errors.add(:value, :invalid)
+        @cast_was_invalid = false
         return
       end
 

@@ -105,8 +105,7 @@ RSpec.describe "Field type casting" do
     end
 
     it "rejects decimal input" do
-      expect(field.cast_value("3.7")).to be_nil
-      expect(field.last_cast_invalid).to be true
+      expect(field.cast("3.7")).to eq([nil, true])
     end
   end
 
@@ -327,9 +326,7 @@ RSpec.describe "DateTime casting" do
   end
 
   it "returns nil and marks invalid for unparseable strings" do
-    result = field.cast_value("not-a-datetime")
-    expect(result).to be_nil
-    expect(field.last_cast_invalid).to be true
+    expect(field.cast("not-a-datetime")).to eq([nil, true])
   end
 end
 
@@ -341,9 +338,7 @@ RSpec.describe "DecimalArray casting" do
   end
 
   it "filters invalid and marks cast invalid" do
-    result = field.cast_value(["1.5", "abc", "3.0"])
-    expect(result).to eq([BigDecimal("1.5"), BigDecimal("3.0")])
-    expect(field.last_cast_invalid).to be true
+    expect(field.cast(["1.5", "abc", "3.0"])).to eq([[BigDecimal("1.5"), BigDecimal("3.0")], true])
   end
 
   it "returns nil for nil" do
@@ -364,9 +359,7 @@ RSpec.describe "DateArray casting" do
   end
 
   it "filters invalid dates and marks invalid" do
-    result = field.cast_value(["2025-01-01", "not-a-date"])
-    expect(result).to eq([Date.new(2025, 1, 1)])
-    expect(field.last_cast_invalid).to be true
+    expect(field.cast(["2025-01-01", "not-a-date"])).to eq([[Date.new(2025, 1, 1)], true])
   end
 
   it "returns nil for nil" do

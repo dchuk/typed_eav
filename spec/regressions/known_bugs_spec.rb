@@ -38,16 +38,14 @@ RSpec.describe "Regressions from ANALYSIS.md" do
     let(:field) { build(:boolean_field) }
 
     it "should mark garbage input as invalid" do
-      field.cast_value("banana")
-      expect(field.last_cast_invalid).to be true
+      expect(field.cast("banana")).to eq([nil, true])
     end
   end
 
   describe "ANALYSIS 2.6: DateTime should mark invalid input" do
     it "should mark unparseable datetime as invalid" do
       field = build(:datetime_field)
-      field.cast_value("hello")
-      expect(field.last_cast_invalid).to be true
+      expect(field.cast("hello")).to eq([nil, true])
     end
   end
 
@@ -69,8 +67,7 @@ RSpec.describe "Regressions from ANALYSIS.md" do
   describe "ANALYSIS 3.1: Integer should reject decimal input" do
     it "should mark decimal input as invalid" do
       field = build(:integer_field)
-      field.cast_value("3.7")
-      expect(field.last_cast_invalid).to be true
+      expect(field.cast("3.7")).to eq([nil, true])
     end
   end
 

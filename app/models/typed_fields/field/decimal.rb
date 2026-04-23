@@ -9,18 +9,16 @@ module TypedFields
 
       validates :max, comparison: { greater_than_or_equal_to: :min }, allow_nil: true, if: :min
 
-      def cast_value(raw)
-        return nil if raw.nil?
-        reset_cast_state!
+      def cast(raw)
+        return [nil, false] if raw.nil?
         result = BigDecimal(raw.to_s, exception: false)
-        if result.nil? && !raw.to_s.strip.empty?
-          mark_cast_invalid!
-          return nil
+        if result.nil?
+          return [nil, !raw.to_s.strip.empty?]
         end
-        return result unless result && precision_scale.present?
+        return [result, false] unless precision_scale.present?
         scale = Kernel.Integer(precision_scale, exception: false)
-        return result unless scale && scale >= 0
-        result.round(scale)
+        return [result, false] unless scale && scale >= 0
+        [result.round(scale), false]
       end
 
       def validate_typed_value(record, val)

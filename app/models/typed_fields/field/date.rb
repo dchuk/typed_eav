@@ -7,13 +7,12 @@ module TypedFields
 
       store_accessor :options, :min_date, :max_date
 
-      def cast_value(raw)
-        return nil if raw.nil?
-        reset_cast_state!
-        raw.is_a?(::Date) ? raw : ::Date.parse(raw.to_s)
+      def cast(raw)
+        return [nil, false] if raw.nil?
+        casted = raw.is_a?(::Date) ? raw : ::Date.parse(raw.to_s)
+        [casted, false]
       rescue ::Date::Error
-        mark_cast_invalid!
-        nil
+        [nil, true]
       end
 
       def validate_typed_value(record, val)

@@ -6,8 +6,8 @@ module TypedFields
       value_column :json_value
       operators :is_null, :is_not_null
 
-      def cast_value(raw)
-        raw
+      def cast(raw)
+        [raw, false]
       end
     end
   end

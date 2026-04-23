@@ -12,8 +12,8 @@ module TypedFields
         field_options.sorted.pluck(:value)
       end
 
-      def cast_value(raw)
-        raw&.to_s
+      def cast(raw)
+        [raw&.to_s, false]
       end
 
       def validate_typed_value(record, val)

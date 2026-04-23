@@ -10,13 +10,11 @@ module TypedFields
 
       def array_field? = true
 
-      def cast_value(raw)
-        return nil if raw.nil?
-        reset_cast_state!
+      def cast(raw)
+        return [nil, false] if raw.nil?
         elements = Array(raw)
         result = elements.filter_map { |v| BigDecimal(v.to_s, exception: false)&.to_i }
-        mark_cast_invalid! if result.size < elements.size
-        result.presence
+        [result.presence, result.size < elements.size]
       end
 
       def validate_typed_value(record, val)

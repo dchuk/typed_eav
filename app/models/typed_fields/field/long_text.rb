@@ -7,8 +7,8 @@ module TypedFields
 
       store_accessor :options, :min_length, :max_length
 
-      def cast_value(raw)
-        raw&.to_s
+      def cast(raw)
+        [raw&.to_s, false]
       end
 
       def validate_typed_value(record, val)

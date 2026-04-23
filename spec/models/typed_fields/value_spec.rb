@@ -404,12 +404,15 @@ RSpec.describe TypedFields::Value, type: :model do
       expect(value.errors[:value]).to include(match(/invalid/))
     end
 
-    it "resets cast state after validation" do
+    it "does not leak cast-invalid flag across value instances sharing a field" do
       field = create(:integer_field)
-      value = described_class.new(entity: contact, field: field)
-      value.value = "abc"
-      value.valid?
-      expect(field.last_cast_invalid).to be_falsey
+      bad = described_class.new(entity: contact, field: field)
+      bad.value = "abc"
+      bad.valid? # surfaces :invalid on this record only
+
+      good = described_class.new(entity: contact, field: field)
+      good.value = "42"
+      expect(good).to be_valid
     end
   end
 

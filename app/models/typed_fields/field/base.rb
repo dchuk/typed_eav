@@ -62,12 +62,27 @@ module TypedFields
       end
 
       # ── Type casting ──
-      # Subclasses can override for custom casting logic.
-      # For most types, Rails' column type handles it, so this is
-      # just a pass-through. Override for things like enum validation.
-
+      # Returns the coerced value for this field type, or nil when raw is
+      # nil/blank/invalid. Subclasses that never fail to coerce (Text,
+      # Color, Select, etc.) should override this. Subclasses that can
+      # reject garbage input (Integer, Date, Boolean, etc.) should
+      # override `cast` instead so callers can distinguish "blank" from
+      # "invalid".
       def cast_value(raw)
-        raw
+        cast(raw).first
+      end
+
+      # ── Typed cast ──
+      # Returns a tuple: [casted_value, invalid?].
+      #
+      # - casted_value is the coerced value (or nil when raw is nil/blank)
+      # - invalid? is true when raw was non-empty but unparseable for this
+      #   type; Value#validate_value uses the flag to surface :invalid
+      #   errors (vs :blank for nil-from-nil).
+      #
+      # Default is an identity pass-through that never flags invalid.
+      def cast(raw)
+        [raw, false]
       end
 
       # ── Introspection ──
@@ -104,13 +119,6 @@ module TypedFields
       # validate_pattern, validate_range, etc.) are available to subclasses.
       def validate_typed_value(record, val)
         # no-op by default
-      end
-
-      # Track whether the last cast_value call encountered unparseable input.
-      # The Value model checks this to distinguish "blank" from "invalid".
-      # Thread-safe: each call to cast_value resets the flag first.
-      def last_cast_invalid
-        @last_cast_invalid
       end
 
       protected
@@ -204,25 +212,13 @@ module TypedFields
 
       private
 
-      def mark_cast_invalid!
-        @last_cast_invalid = true
-      end
-
-      def reset_cast_state!
-        @last_cast_invalid = false
-      end
-
       def validate_default_value
         return if default_value_meta.blank? || !default_value_meta.key?("v")
         raw = default_value_meta["v"]
         return if raw.nil?
 
-        cast_value(raw)
-        if last_cast_invalid
-          errors.add(:default_value, "is not valid for this field type")
-        end
-      ensure
-        reset_cast_state!
+        _, invalid = cast(raw)
+        errors.add(:default_value, "is not valid for this field type") if invalid
       end
 
       # Enforces type restrictions set via `has_typed_fields types: [...]`.

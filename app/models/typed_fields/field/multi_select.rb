@@ -13,9 +13,9 @@ module TypedFields
         field_options.sorted.pluck(:value)
       end
 
-      def cast_value(raw)
-        return nil if raw.nil?
-        Array(raw).map(&:to_s).presence
+      def cast(raw)
+        return [nil, false] if raw.nil?
+        [Array(raw).map(&:to_s).presence, false]
       end
 
       def validate_typed_value(record, val)
