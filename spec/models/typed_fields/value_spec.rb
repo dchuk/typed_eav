@@ -68,8 +68,8 @@ RSpec.describe TypedFields::Value, type: :model do
         value.save!
         value.reload
 
-        expect(value.value).to eq(true)
-        expect(value.boolean_value).to eq(true)
+        expect(value.value).to be(true)
+        expect(value.boolean_value).to be(true)
       end
 
       it "casts string 'true' to boolean" do
@@ -78,7 +78,7 @@ RSpec.describe TypedFields::Value, type: :model do
         value.save!
         value.reload
 
-        expect(value.value).to eq(true)
+        expect(value.value).to be(true)
       end
     end
 
@@ -129,12 +129,12 @@ RSpec.describe TypedFields::Value, type: :model do
 
       it "stores array in json_value column" do
         value = described_class.create!(entity: contact, field: field)
-        value.value = ["vip", "partner"]
+        value.value = %w[vip partner]
         value.save!
         value.reload
 
-        expect(value.value).to match_array(["vip", "partner"])
-        expect(value.json_value).to match_array(["vip", "partner"])
+        expect(value.value).to match_array(%w[vip partner])
+        expect(value.json_value).to match_array(%w[vip partner])
       end
     end
 
@@ -152,7 +152,7 @@ RSpec.describe TypedFields::Value, type: :model do
 
       it "casts string elements to integers" do
         value = described_class.create!(entity: contact, field: field)
-        value.value = ["10", "20", "30"]
+        value.value = %w[10 20 30]
         value.save!
         value.reload
 
@@ -328,7 +328,7 @@ RSpec.describe TypedFields::Value, type: :model do
 
       it "stores dates in json_value column" do
         value = described_class.create!(entity: contact, field: field)
-        value.value = ["2025-01-01", "2025-06-15"]
+        value.value = %w[2025-01-01 2025-06-15]
         value.save!
         value.reload
         expect(value.json_value).to be_an(Array)
@@ -341,10 +341,10 @@ RSpec.describe TypedFields::Value, type: :model do
 
       it "stores string array in json_value" do
         value = described_class.create!(entity: contact, field: field)
-        value.value = ["hello", "world"]
+        value.value = %w[hello world]
         value.save!
         value.reload
-        expect(value.value).to eq(["hello", "world"])
+        expect(value.value).to eq(%w[hello world])
       end
     end
 
@@ -516,7 +516,10 @@ RSpec.describe TypedFields::Value, type: :model do
 
   describe "datetime range validation" do
     let(:contact) { create(:contact) }
-    let(:field) { create(:datetime_field, options: { "min_datetime" => "2020-01-01 00:00:00", "max_datetime" => "2030-12-31 23:59:59" }) }
+    let(:field) do
+      create(:datetime_field,
+             options: { "min_datetime" => "2020-01-01 00:00:00", "max_datetime" => "2030-12-31 23:59:59" })
+    end
 
     it "rejects datetime before min" do
       value = described_class.new(entity: contact, field: field)
@@ -537,14 +540,14 @@ RSpec.describe TypedFields::Value, type: :model do
 
     it "rejects when any value not in options" do
       value = described_class.new(entity: contact, field: field)
-      value.value = ["vip", "nonexistent"]
+      value.value = %w[vip nonexistent]
       expect(value).not_to be_valid
       expect(value.errors[:value]).to include(match(/included in the list/))
     end
 
     it "accepts all valid options" do
       value = described_class.new(entity: contact, field: field)
-      value.value = ["vip", "partner"]
+      value.value = %w[vip partner]
       expect(value).to be_valid
     end
   end

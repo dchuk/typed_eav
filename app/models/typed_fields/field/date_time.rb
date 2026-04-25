@@ -10,6 +10,7 @@ module TypedFields
       def cast(raw)
         return [nil, false] if raw.nil?
         return [raw, false] if raw.is_a?(::Time)
+
         result = ::Time.zone.parse(raw.to_s)
         if result.nil?
           [nil, !raw.to_s.strip.empty?]

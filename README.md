@@ -221,6 +221,176 @@ Contact.with_field("active", "true")
 
 This works because `ActiveRecord::Base.columns_hash` knows every column's type from the schema, and `where()` / Arel predicates automatically cast values through the column's registered `ActiveRecord::Type`.
 
+## Forms
+
+Wire typed fields into Rails forms via nested attributes:
+
+```erb
+<%= form_with model: @contact do |f| %>
+  <%= f.text_field :name %>
+
+  <%= render_typed_value_inputs(form: f, record: @contact) %>
+
+  <%= f.submit %>
+<% end %>
+```
+
+The helper emits one input per available field, including the hidden `id` / `field_id` markers required by `accepts_nested_attributes_for`. Permit the nested shape in your controller — the `value: []` form is required for array/multi-select types:
+
+```ruby
+def contact_params
+  params.require(:contact).permit(
+    :name,
+    typed_values_attributes: [
+      :id, :field_id, :_destroy, :value, { value: [] }
+    ]
+  )
+end
+```
+
+For list pages, preload the field association to avoid N+1:
+
+```ruby
+@contacts = Contact.includes(typed_values: :field).all
+```
+
+## Admin Scaffold
+
+To manage field definitions through a UI, run the scaffold generator:
+
+```bash
+bin/rails g typed_fields:scaffold
+bin/rails db:migrate
+```
+
+This copies a controller, views, helper, Stimulus controllers, and an initializer into your app, and adds routes mounted at `/typed_fields`.
+
+**Security**: the generated controller ships with `authorize_typed_fields_admin!` returning `head :not_found` by default — fail-closed. Edit the method directly in `app/controllers/typed_fields_controller.rb` to wire it to your auth system:
+
+```ruby
+def authorize_typed_fields_admin!
+  return if current_user&.admin?
+  head :not_found
+end
+```
+
+Defining `authorize_typed_fields_admin!` in `ApplicationController` does **not** override it — the scaffold sets it on its own controller.
+
+## Multi-Tenant Scoping
+
+Field definitions are partitioned by a `scope` column so multiple tenants (or accounts, workspaces, orgs — any partition key your app uses) can each define their own fields without collisions. Fields with `scope = NULL` are global, visible to every partition.
+
+### Declaring a scoped model
+
+```ruby
+class Contact < ApplicationRecord
+  has_typed_fields scope_method: :tenant_id
+end
+```
+
+`scope_method:` names an instance method on your model. When the record reads its own field definitions (e.g., in a form), that method tells TypedFields which partition the record belongs to.
+
+### Class-level queries resolve scope automatically
+
+Queries like `Contact.where_typed_fields(...)` consult an **ambient scope resolver** — no need to pass `scope:` on every call:
+
+```ruby
+# The resolver tells TypedFields which partition is active.
+Contact.where_typed_fields({ name: "age", op: :gt, value: 21 })
+```
+
+The resolver chain (highest priority first):
+
+1. Explicit `scope:` keyword argument on the query
+2. Active `TypedFields.with_scope(value) { ... }` block
+3. Configured `TypedFields.config.scope_resolver` callable
+4. `nil`
+
+If every step returns `nil` and the model declared `scope_method:`, queries raise `TypedFields::ScopeRequired` — the **fail-closed default**. This is the whole point: forgetting to set scope can't silently leak other partitions' data.
+
+### Wiring the resolver
+
+Pick the pattern that matches your app and set it once in `config/initializers/typed_fields.rb`:
+
+```ruby
+TypedFields.configure do |c|
+  # acts_as_tenant (auto-detected — no config needed if loaded)
+  # c.scope_resolver = -> { ActsAsTenant.current_tenant&.id }
+
+  # Rails CurrentAttributes
+  # c.scope_resolver = -> { Current.account&.id }
+
+  # Custom class
+  # c.scope_resolver = -> { MyApp::Tenancy.current_workspace_id }
+
+  # Subdomain / session / thread-local
+  # c.scope_resolver = -> { Thread.current[:org_id] }
+
+  # Disable ambient resolution entirely
+  # c.scope_resolver = nil
+
+  c.require_scope = true  # fail-closed (default). Set false for gradual adoption.
+end
+```
+
+The resolver can return a raw value (`"t1"`, `42`) or an AR record — TypedFields calls `.id.to_s` when the return value responds to `#id`.
+
+### Block APIs
+
+```ruby
+# Run a block with a specific ambient scope (background jobs, console, rake tasks):
+TypedFields.with_scope(tenant_id) do
+  Contact.where_typed_fields({ name: "status", op: :eq, value: "active" })
+end
+
+# Escape hatch for admin tools, migrations, or cross-tenant audits:
+TypedFields.unscoped do
+  Contact.where_typed_fields({ name: "status", op: :eq, value: "active" })
+  # returns matches across ALL partitions
+end
+```
+
+Both are exception-safe via `ensure` and nest cleanly.
+
+### Explicit `scope:` override
+
+Any query method accepts `scope:` as an override for admin tools and tests:
+
+```ruby
+Contact.where_typed_fields({ name: "status", value: "active" }, scope: "t1")
+Contact.with_field("age", :gt, 21, scope: "t1")
+```
+
+Explicit wins over ambient. Passing `scope: nil` explicitly (as opposed to omitting the kwarg) means "filter to global fields only" — useful for admin UIs that want to see unscoped field definitions without activating `unscoped` mode.
+
+### Background jobs
+
+ActiveJob (including Sidekiq via the ActiveJob adapter) wraps every `perform` in Rails' executor, which already clears `ActiveSupport::CurrentAttributes` between jobs — so if your resolver reads from `Current.account`, each job starts clean. For raw `Sidekiq::Job` (no ActiveJob), wrap the job body manually:
+
+```ruby
+class ExportJob
+  include Sidekiq::Job
+
+  def perform(tenant_id, ...)
+    TypedFields.with_scope(tenant_id) do
+      Contact.where_typed_fields(...)
+    end
+  end
+end
+```
+
+### Disabling enforcement for gradual adoption
+
+If your app has existing typed-field queries that don't yet pass scope, flip `require_scope` to `false` in the initializer. When no scope resolves, queries fall back to **global fields only** (definitions stored with `scope: nil`) instead of raising — they do **not** return all partitions' fields. Audit and fix callers, then flip back to `true`.
+
+To intentionally query across every partition (admin tools, migrations, cross-tenant audits), use the explicit escape hatch `TypedFields.unscoped { ... }` rather than relying on `require_scope = false`.
+
+### Name collisions across scopes
+
+When both a global field (`scope: nil`) and a scoped field share a name, the **scoped definition wins** for the partition that owns it: forms render exactly one input (the scoped one), reads return the scoped value, and writes target the scoped row.
+
+`TypedFields.unscoped { Contact.where_typed_fields(...) }` OR-across every partition's matching `field_id` per filter (still AND-ing across filters), so cross-tenant audit queries see every partition's matches — they don't collapse to a single tenant.
+
 ## Field Types
 
 | Type | Column | Ruby Type | Options |
@@ -293,6 +463,18 @@ TypedFields.configure do |c|
   c.register_field_type :phone, "Fields::Phone"
 end
 ```
+
+## Validation Behavior
+
+A few non-obvious contracts worth knowing about up front:
+
+- **Required + blank**: `required: true` fields reject empty strings, whitespace-only strings, and arrays whose every element is nil/blank/whitespace.
+- **Array all-or-nothing cast**: integer/decimal/date arrays mark the **whole** value invalid (stored as `nil`) when any element fails to cast. There is no silent partial — a failed form re-renders with the original input intact so the user can correct the bad element.
+- **`Integer` array rejects fractional input**: `"1.9"` is rejected rather than truncated to `1`. Same rules as the scalar `Integer` field.
+- **`Json` parses string input**: a JSON string posted from a form is parsed; parse failures surface as `:invalid` rather than being stored as the literal string.
+- **`TextArray` does not support `:contains`**: it backs a jsonb column where SQL `LIKE` doesn't apply. Use `:any_eq` for "array contains element".
+- **Orphaned values are skipped**: if a field row is deleted while values remain, `typed_field_value` and `typed_fields_hash` silently skip the orphans rather than raising.
+- **Cross-scope writes are rejected**: assigning a `Value` to a record whose `typed_fields_scope` doesn't match the field's `scope` adds a validation error on `:field`.
 
 ## Database Support
 

@@ -11,7 +11,9 @@ module TypedFields
       EMAIL_FORMAT = /\A[^@\s]+@[^@\s]+\.[^@\s]+\z/
 
       def cast(raw)
-        [raw&.to_s&.strip&.downcase, false]
+        return [nil, false] if raw.nil?
+
+        [raw.to_s.strip.downcase, false]
       end
 
       def email_format_valid?(val)
@@ -28,6 +30,7 @@ module TypedFields
 
       def validate_pattern_syntax
         return if pattern.blank?
+
         Regexp.new(pattern)
       rescue RegexpError => e
         errors.add(:pattern, "is invalid: #{e.message}")

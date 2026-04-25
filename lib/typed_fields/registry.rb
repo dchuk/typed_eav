@@ -30,6 +30,7 @@ module TypedFields
       def allowed_types_for(entity_type)
         entry = entities[entity_type]
         return nil unless entry
+
         entry[:types]
       end
 

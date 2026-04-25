@@ -9,6 +9,7 @@ module TypedFields
 
       def cast(raw)
         return [nil, false] if raw.nil?
+
         casted = raw.is_a?(::Date) ? raw : ::Date.parse(raw.to_s)
         [casted, false]
       rescue ::Date::Error

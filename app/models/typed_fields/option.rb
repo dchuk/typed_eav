@@ -5,14 +5,13 @@ module TypedFields
     self.table_name = "typed_field_options"
 
     belongs_to :field,
-      class_name: "TypedFields::Field::Base",
-      foreign_key: :field_id,
-      inverse_of: :field_options
+               class_name: "TypedFields::Field::Base",
+               inverse_of: :field_options
 
     validates :label, presence: true
     validates :value, presence: true, uniqueness: { scope: :field_id }
 
-    scope :sorted, -> { order(sort_order: :asc, label: :asc) }
+    scope :sorted, -> { order(sort_order: :asc, label: :asc, id: :asc) }
 
     after_commit :clear_field_option_cache
 

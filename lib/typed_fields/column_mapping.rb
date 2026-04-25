@@ -21,14 +21,27 @@ module TypedFields
   module ColumnMapping
     extend ActiveSupport::Concern
 
+    DEFAULT_OPERATORS_BY_COLUMN = {
+      boolean_value: %i[eq not_eq is_null is_not_null],
+      string_value: %i[eq not_eq contains not_contains starts_with ends_with is_null is_not_null],
+      text_value: %i[eq not_eq contains not_contains starts_with ends_with is_null is_not_null],
+      integer_value: %i[eq not_eq gt gteq lt lteq between is_null is_not_null],
+      decimal_value: %i[eq not_eq gt gteq lt lteq between is_null is_not_null],
+      date_value: %i[eq not_eq gt gteq lt lteq between is_null is_not_null],
+      datetime_value: %i[eq not_eq gt gteq lt lteq between is_null is_not_null],
+      json_value: %i[contains is_null is_not_null],
+    }.freeze
+    FALLBACK_OPERATORS = %i[eq not_eq is_null is_not_null].freeze
+
     class_methods do
       # Declare which typed column this field type stores its value in.
       def value_column(column_name = nil)
-        if column_name
-          @value_column = column_name.to_sym
-        else
-          @value_column || raise(NotImplementedError, "#{name} must declare `value_column :column_name`")
+        unless column_name
+          return @value_column || raise(NotImplementedError,
+                                        "#{name} must declare `value_column :column_name`")
         end
+
+        @value_column = column_name.to_sym
       end
 
       # All operators this field type supports for querying.
@@ -44,20 +57,7 @@ module TypedFields
       private
 
       def default_operators_for(col)
-        case col
-        when :boolean_value
-          %i[eq not_eq is_null is_not_null]
-        when :string_value, :text_value
-          %i[eq not_eq contains not_contains starts_with ends_with is_null is_not_null]
-        when :integer_value, :decimal_value
-          %i[eq not_eq gt gteq lt lteq between is_null is_not_null]
-        when :date_value, :datetime_value
-          %i[eq not_eq gt gteq lt lteq between is_null is_not_null]
-        when :json_value
-          %i[contains is_null is_not_null]
-        else
-          %i[eq not_eq is_null is_not_null]
-        end
+        DEFAULT_OPERATORS_BY_COLUMN.fetch(col, FALLBACK_OPERATORS)
       end
     end
   end

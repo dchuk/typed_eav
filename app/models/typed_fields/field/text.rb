@@ -25,11 +25,13 @@ module TypedFields
 
       def max_gte_min_length
         return unless min_length && max_length
+
         errors.add(:max_length, "must be >= min_length") if max_length < min_length
       end
 
       def validate_pattern_syntax
         return if pattern.blank?
+
         Regexp.new(pattern)
       rescue RegexpError => e
         errors.add(:pattern, "is invalid: #{e.message}")

@@ -3,11 +3,11 @@
 require "spec_helper"
 
 RSpec.describe "TypedFields full lifecycle", type: :model do
-  describe "entity lifecycle" do
+  describe "entity lifecycle", :unscoped do
     it "creates, assigns, queries, updates, and deletes" do
       # 1. Create field definitions
-      age = create(:integer_field, name: "age", entity_type: "Contact")
-      city = create(:text_field, name: "city", entity_type: "Contact")
+      create(:integer_field, name: "age", entity_type: "Contact")
+      create(:text_field, name: "city", entity_type: "Contact")
 
       # 2. Create entity and assign values
       contact = create(:contact, name: "Alice")
@@ -40,7 +40,7 @@ RSpec.describe "TypedFields full lifecycle", type: :model do
     end
   end
 
-  describe "multi-field AND query" do
+  describe "multi-field AND query", :unscoped do
     it "filters by multiple fields simultaneously" do
       age_field = create(:integer_field, name: "age", entity_type: "Contact")
       city_field = create(:text_field, name: "city", entity_type: "Contact")
@@ -50,16 +50,22 @@ RSpec.describe "TypedFields full lifecycle", type: :model do
       charlie = create(:contact, name: "Charlie")
 
       { alice => [30, "Portland"], bob => [25, "Seattle"], charlie => [40, "Portland"] }.each do |c, (age, city)|
-        TypedFields::Value.create!(entity: c, field: age_field).tap { |v| v.value = age; v.save! }
-        TypedFields::Value.create!(entity: c, field: city_field).tap { |v| v.value = city; v.save! }
+        TypedFields::Value.create!(entity: c, field: age_field).tap do |v|
+          v.value = age
+          v.save!
+        end
+        TypedFields::Value.create!(entity: c, field: city_field).tap do |v|
+          v.value = city
+          v.save!
+        end
       end
 
       # Age > 28 AND city = Portland
       results = Contact.where_typed_fields(
         [{ name: "age", op: :gt, value: 28 },
-         { name: "city", op: :eq, value: "Portland" }]
+         { name: "city", op: :eq, value: "Portland" }],
       )
-      expect(results).to match_array([alice, charlie])
+      expect(results).to contain_exactly(alice, charlie)
     end
   end
 
@@ -67,7 +73,10 @@ RSpec.describe "TypedFields full lifecycle", type: :model do
     it "field destroy cascades to values and options" do
       field = create(:select_field, name: "status", entity_type: "Contact")
       contact = create(:contact)
-      TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = "active"; v.save! }
+      TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+        v.value = "active"
+        v.save!
+      end
 
       option_count = field.field_options.count
       expect(option_count).to be > 0
@@ -105,8 +114,8 @@ RSpec.describe "TypedFields full lifecycle", type: :model do
 
   describe "Product with type restrictions" do
     it "only allows specified field types" do
-      text_field = create(:text_field, name: "desc", entity_type: "Product")
-      int_field = create(:integer_field, name: "qty", entity_type: "Product")
+      create(:text_field, name: "desc", entity_type: "Product")
+      create(:integer_field, name: "qty", entity_type: "Product")
 
       product = create(:product)
       product.typed_fields_attributes = [
@@ -120,14 +129,20 @@ RSpec.describe "TypedFields full lifecycle", type: :model do
     end
   end
 
-  describe "chaining with ActiveRecord scopes" do
+  describe "chaining with ActiveRecord scopes", :unscoped do
     it "works with standard where clauses" do
       field = create(:integer_field, name: "age", entity_type: "Contact")
       alice = create(:contact, name: "Alice")
       bob = create(:contact, name: "Bob")
 
-      TypedFields::Value.create!(entity: alice, field: field).tap { |v| v.value = 30; v.save! }
-      TypedFields::Value.create!(entity: bob, field: field).tap { |v| v.value = 30; v.save! }
+      TypedFields::Value.create!(entity: alice, field: field).tap do |v|
+        v.value = 30
+        v.save!
+      end
+      TypedFields::Value.create!(entity: bob, field: field).tap do |v|
+        v.value = 30
+        v.save!
+      end
 
       results = Contact.where(name: "Alice").where_typed_fields([{ name: "age", op: :eq, value: 30 }])
       expect(results).to eq([alice])

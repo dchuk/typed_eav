@@ -16,7 +16,10 @@ RSpec.describe TypedFields::QueryBuilder do
         [contact_b, 35],
         [contact_c, 45],
       ].each do |contact, age|
-        TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = age; v.save! }
+        TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+          v.value = age
+          v.save!
+        end
       end
     end
 
@@ -27,7 +30,7 @@ RSpec.describe TypedFields::QueryBuilder do
 
     it ":gt finds greater than" do
       results = described_class.filter(field, :gt, 30)
-      expect(results.pluck(:entity_id)).to match_array([contact_b.id, contact_c.id])
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_b.id, contact_c.id)
     end
 
     it ":lt finds less than" do
@@ -37,12 +40,12 @@ RSpec.describe TypedFields::QueryBuilder do
 
     it ":gteq finds greater than or equal" do
       results = described_class.filter(field, :gteq, 35)
-      expect(results.pluck(:entity_id)).to match_array([contact_b.id, contact_c.id])
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_b.id, contact_c.id)
     end
 
     it ":lteq finds less than or equal" do
       results = described_class.filter(field, :lteq, 35)
-      expect(results.pluck(:entity_id)).to match_array([contact_a.id, contact_b.id])
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_a.id, contact_b.id)
     end
 
     it ":between finds within range" do
@@ -52,7 +55,7 @@ RSpec.describe TypedFields::QueryBuilder do
 
     it ":not_eq excludes match and includes NULLs" do
       # contact without any age value
-      contact_d = create(:contact, name: "Diana")
+      create(:contact, name: "Diana")
 
       results = described_class.filter(field, :not_eq, 35)
       entity_ids = results.pluck(:entity_id)
@@ -77,7 +80,10 @@ RSpec.describe TypedFields::QueryBuilder do
         [contact_b, "San Francisco"],
         [contact_c, "Portland Heights"],
       ].each do |contact, city|
-        TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = city; v.save! }
+        TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+          v.value = city
+          v.save!
+        end
       end
     end
 
@@ -88,7 +94,7 @@ RSpec.describe TypedFields::QueryBuilder do
 
     it ":contains finds substring match (ILIKE)" do
       results = described_class.filter(field, :contains, "portland")
-      expect(results.pluck(:entity_id)).to match_array([contact_a.id, contact_c.id])
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_a.id, contact_c.id)
     end
 
     it ":starts_with finds prefix match" do
@@ -123,7 +129,10 @@ RSpec.describe TypedFields::QueryBuilder do
 
     before do
       [[contact_a, true], [contact_b, false]].each do |contact, val|
-        TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = val; v.save! }
+        TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+          v.value = val
+          v.save!
+        end
       end
     end
 
@@ -147,7 +156,10 @@ RSpec.describe TypedFields::QueryBuilder do
         [contact_b, Date.new(2000, 6, 20)],
         [contact_c, Date.new(1985, 12, 1)],
       ].each do |contact, date|
-        TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = date; v.save! }
+        TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+          v.value = date
+          v.save!
+        end
       end
     end
 
@@ -171,13 +183,16 @@ RSpec.describe TypedFields::QueryBuilder do
         [contact_b, [20, 40, 60]],
         [contact_c, [5, 10, 15]],
       ].each do |contact, scores|
-        TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = scores; v.save! }
+        TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+          v.value = scores
+          v.save!
+        end
       end
     end
 
     it ":any_eq finds arrays containing element" do
       results = described_class.filter(field, :any_eq, 20)
-      expect(results.pluck(:entity_id)).to match_array([contact_a.id, contact_b.id])
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_a.id, contact_b.id)
     end
 
     it ":all_eq finds arrays containing all elements" do
@@ -190,7 +205,10 @@ RSpec.describe TypedFields::QueryBuilder do
     let!(:field) { create(:text_field, name: "notes") }
 
     before do
-      TypedFields::Value.create!(entity: contact_a, field: field).tap { |v| v.value = "has notes"; v.save! }
+      TypedFields::Value.create!(entity: contact_a, field: field).tap do |v|
+        v.value = "has notes"
+        v.save!
+      end
       TypedFields::Value.create!(entity: contact_b, field: field) # nil value
     end
 
@@ -209,7 +227,10 @@ RSpec.describe TypedFields::QueryBuilder do
     let!(:field) { create(:integer_field, name: "score") }
 
     before do
-      TypedFields::Value.create!(entity: contact_a, field: field).tap { |v| v.value = 100; v.save! }
+      TypedFields::Value.create!(entity: contact_a, field: field).tap do |v|
+        v.value = 100
+        v.save!
+      end
     end
 
     it "returns a relation suitable for subqueries" do
@@ -236,7 +257,10 @@ RSpec.describe TypedFields::QueryBuilder do
         [contact_b, BigDecimal("29.99")],
         [contact_c, BigDecimal("9.99")],
       ].each do |contact, price|
-        TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = price; v.save! }
+        TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+          v.value = price
+          v.save!
+        end
       end
     end
 
@@ -247,7 +271,7 @@ RSpec.describe TypedFields::QueryBuilder do
 
     it ":gt finds greater than" do
       results = described_class.filter(field, :gt, BigDecimal("15"))
-      expect(results.pluck(:entity_id)).to match_array([contact_a.id, contact_b.id])
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_a.id, contact_b.id)
     end
 
     it ":between finds within range" do
@@ -265,18 +289,21 @@ RSpec.describe TypedFields::QueryBuilder do
         [contact_b, Time.zone.parse("2025-06-20 14:30:00")],
         [contact_c, Time.zone.parse("2025-12-01 08:00:00")],
       ].each do |contact, time|
-        TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = time; v.save! }
+        TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+          v.value = time
+          v.save!
+        end
       end
     end
 
     it ":gt finds datetimes after" do
       results = described_class.filter(field, :gt, Time.zone.parse("2025-06-01"))
-      expect(results.pluck(:entity_id)).to match_array([contact_b.id, contact_c.id])
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_b.id, contact_c.id)
     end
 
     it ":between finds datetimes in range" do
       results = described_class.filter(field, :between,
-        Time.zone.parse("2025-01-01")..Time.zone.parse("2025-03-01"))
+                                       Time.zone.parse("2025-01-01")..Time.zone.parse("2025-03-01"))
       expect(results.pluck(:entity_id)).to eq([contact_a.id])
     end
 
@@ -295,7 +322,10 @@ RSpec.describe TypedFields::QueryBuilder do
         [contact_b, "inactive"],
         [contact_c, "lead"],
       ].each do |contact, status|
-        TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = status; v.save! }
+        TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+          v.value = status
+          v.save!
+        end
       end
     end
 
@@ -306,7 +336,7 @@ RSpec.describe TypedFields::QueryBuilder do
 
     it ":not_eq excludes matching" do
       results = described_class.filter(field, :not_eq, "active")
-      expect(results.pluck(:entity_id)).to match_array([contact_b.id, contact_c.id])
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_b.id, contact_c.id)
     end
   end
 
@@ -315,21 +345,24 @@ RSpec.describe TypedFields::QueryBuilder do
 
     before do
       [
-        [contact_a, ["vip", "partner"]],
+        [contact_a, %w[vip partner]],
         [contact_b, ["prospect"]],
-        [contact_c, ["vip", "prospect"]],
+        [contact_c, %w[vip prospect]],
       ].each do |contact, tags|
-        TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = tags; v.save! }
+        TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+          v.value = tags
+          v.save!
+        end
       end
     end
 
     it ":any_eq finds arrays containing element" do
       results = described_class.filter(field, :any_eq, "vip")
-      expect(results.pluck(:entity_id)).to match_array([contact_a.id, contact_c.id])
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_a.id, contact_c.id)
     end
 
     it ":all_eq finds arrays containing all elements" do
-      results = described_class.filter(field, :all_eq, ["vip", "partner"])
+      results = described_class.filter(field, :all_eq, %w[vip partner])
       expect(results.pluck(:entity_id)).to eq([contact_a.id])
     end
   end
@@ -338,8 +371,14 @@ RSpec.describe TypedFields::QueryBuilder do
     let!(:field) { create(:color_field, name: "brand_color") }
 
     before do
-      TypedFields::Value.create!(entity: contact_a, field: field).tap { |v| v.value = "#ff0000"; v.save! }
-      TypedFields::Value.create!(entity: contact_b, field: field).tap { |v| v.value = "#00ff00"; v.save! }
+      TypedFields::Value.create!(entity: contact_a, field: field).tap do |v|
+        v.value = "#ff0000"
+        v.save!
+      end
+      TypedFields::Value.create!(entity: contact_b, field: field).tap do |v|
+        v.value = "#00ff00"
+        v.save!
+      end
     end
 
     it ":eq finds exact color" do
@@ -359,7 +398,10 @@ RSpec.describe TypedFields::QueryBuilder do
     let!(:field) { create(:integer_field, name: "score") }
 
     before do
-      TypedFields::Value.create!(entity: contact_a, field: field).tap { |v| v.value = 100; v.save! }
+      TypedFields::Value.create!(entity: contact_a, field: field).tap do |v|
+        v.value = 100
+        v.save!
+      end
       TypedFields::Value.create!(entity: contact_b, field: field) # nil value
     end
 

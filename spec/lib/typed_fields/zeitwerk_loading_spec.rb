@@ -24,14 +24,14 @@ RSpec.describe "TypedFields::Field STI loading" do
   it "registers all 17 subclasses on the STI descendants list" do
     # Force resolution via the config map (mirrors how Config#field_class_for
     # looks up STI classes at runtime).
-    expected_types.each { |k| k.name }
+    expected_types.each(&:name)
 
     descendants = TypedFields::Field::Base.descendants
     expect(descendants).to include(*expected_types)
     expect(descendants.size).to be >= 17
   end
 
-  # Note: a mid-suite `Rails.application.reloader.reload!` assertion was
+  # NOTE: a mid-suite `Rails.application.reloader.reload!` assertion was
   # considered but removed — it unloads the TypedFields.registry and
   # pollutes downstream specs. Reload-safety is verified manually in
   # the demo app (touch a view, re-request a page; no NameError).

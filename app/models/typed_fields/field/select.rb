@@ -9,7 +9,11 @@ module TypedFields
       def optionable? = true
 
       def allowed_values
-        field_options.sorted.pluck(:value)
+        if field_options.loaded?
+          field_options.sort_by { |o| [o.sort_order || 0, o.label.to_s] }.map(&:value)
+        else
+          field_options.sorted.pluck(:value)
+        end
       end
 
       def cast(raw)

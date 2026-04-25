@@ -72,7 +72,7 @@ RSpec.describe TypedFields::Section, type: :model do
 
   describe "default active value" do
     it "defaults to true" do
-      expect(TypedFields::Section.new.active).to be true
+      expect(described_class.new.active).to be true
     end
   end
 end

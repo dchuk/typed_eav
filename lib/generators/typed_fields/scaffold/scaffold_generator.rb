@@ -12,7 +12,11 @@ module TypedFields
       def copy_controller
         copy_file "controllers/typed_fields_controller.rb", "app/controllers/typed_fields_controller.rb"
         copy_file "controllers/concerns/typed_fields_controller_concern.rb",
-          "app/controllers/concerns/typed_fields_controller_concern.rb"
+                  "app/controllers/concerns/typed_fields_controller_concern.rb"
+      end
+
+      def copy_initializer
+        copy_file "config/initializers/typed_fields.rb", "config/initializers/typed_fields.rb"
       end
 
       def copy_helper
@@ -46,10 +50,28 @@ module TypedFields
         say ""
         say "Next steps:", :yellow
         say ""
-        say "  1. Include the concern in controllers that use typed-field",
-           :yellow
+        say "  1. WIRE THE ADMIN AUTH HOOK (security-critical):", :red
+        say ""
+        say "       Edit app/controllers/typed_fields_controller.rb and replace"
+        say "       `authorize_typed_fields_admin!` with your auth check. The"
+        say "       default returns `head :not_found` (fail-closed). Defining"
+        say "       this method in ApplicationController does NOT override it."
+        say ""
+        say "         def authorize_typed_fields_admin!"
+        say "           return if current_user&.admin?"
+        say "           head :not_found"
+        say "         end"
+        say ""
+        say "  2. Configure ambient scope resolution for multi-tenancy:", :yellow
+        say ""
+        say "       Edit config/initializers/typed_fields.rb and uncomment the"
+        say "       scope_resolver pattern that matches your app (acts_as_tenant"
+        say "       is auto-detected; no config needed if you use it)."
+        say ""
+        say "  3. Include the concern in controllers that use typed-field",
+            :yellow
         say "     search params (your host model's controller, usually):",
-           :yellow
+            :yellow
         say ""
         say "       class ProductsController < ApplicationController"
         say "         include TypedFieldsControllerConcern"
@@ -57,14 +79,25 @@ module TypedFields
         say "         ..."
         say "       end"
         say ""
-        say "  2. Render typed field inputs in your entity forms:", :yellow
+        say "  4. Render typed field inputs in your entity forms:", :yellow
         say ""
-        say '       <%= render_typed_value_inputs(form: f, record: @record) %>'
+        say "       <%= render_typed_value_inputs(form: f, record: @record) %>"
         say ""
-        say "  3. Add a search form to filter entities by typed fields:",
-           :yellow
+        say "     Permit nested attributes in your host controller", :yellow
+        say "     (the `value: []` form is required for array/multi-select):",
+            :yellow
         say ""
-        say '       <%= render_typed_fields_search(fields: Model.typed_field_definitions, url: search_path) %>'
+        say "       params.require(:contact).permit("
+        say "         :name,"
+        say "         typed_values_attributes: ["
+        say "           :id, :field_id, :_destroy, :value, { value: [] }"
+        say "         ]"
+        say "       )"
+        say ""
+        say "  5. Add a search form to filter entities by typed fields:",
+            :yellow
+        say ""
+        say "       <%= render_typed_fields_search(fields: Model.typed_field_definitions, url: search_path) %>"
         say ""
       end
     end

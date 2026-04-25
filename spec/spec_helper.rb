@@ -21,7 +21,7 @@ end
 
 # Tell FactoryBot where to find our factory definitions
 FactoryBot.definition_file_paths = [
-  File.expand_path("factories", __dir__)
+  File.expand_path("factories", __dir__),
 ]
 FactoryBot.find_definitions
 
@@ -42,4 +42,25 @@ RSpec.configure do |config|
 
   # No registry reset — let has_typed_fields registrations from
   # class loading persist so registration tests are meaningful.
+
+  # Scope-handling metadata contract:
+  #
+  #   :scoping  - "I manage scope explicitly, don't wrap me." These specs
+  #               drive `with_scope` / `unscoped` / resolver config themselves
+  #               and must run with a clean ambient state.
+  #   :unscoped - "Wrap me in `TypedFields.unscoped` so the fail-closed default
+  #               on scoped models (e.g. Contact with `scope_method: :tenant_id`)
+  #               doesn't raise when the example calls class-level query
+  #               methods without setting up a scope."
+  #
+  # Everything else runs as-is. Previously this block wrapped every example
+  # in `unscoped` by default, which masked scoped+global name-collision bugs
+  # in the class-level query path — opt-in is the safer contract.
+  config.around do |example|
+    if example.metadata[:unscoped]
+      TypedFields.unscoped { example.run }
+    else
+      example.run
+    end
+  end
 end

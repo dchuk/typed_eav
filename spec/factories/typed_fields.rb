@@ -60,10 +60,10 @@ FactoryBot.define do
 
     after(:create) do |field|
       field.field_options.create!([
-        { label: "Active",   value: "active",   sort_order: 1 },
-        { label: "Inactive", value: "inactive", sort_order: 2 },
-        { label: "Lead",     value: "lead",     sort_order: 3 },
-      ])
+                                    { label: "Active",   value: "active",   sort_order: 1 },
+                                    { label: "Inactive", value: "inactive", sort_order: 2 },
+                                    { label: "Lead",     value: "lead",     sort_order: 3 },
+                                  ])
     end
   end
 
@@ -73,10 +73,10 @@ FactoryBot.define do
 
     after(:create) do |field|
       field.field_options.create!([
-        { label: "VIP",      value: "vip",      sort_order: 1 },
-        { label: "Partner",  value: "partner",   sort_order: 2 },
-        { label: "Prospect", value: "prospect",  sort_order: 3 },
-      ])
+                                    { label: "VIP",      value: "vip",      sort_order: 1 },
+                                    { label: "Partner",  value: "partner",   sort_order: 2 },
+                                    { label: "Prospect", value: "prospect",  sort_order: 3 },
+                                  ])
     end
   end
 

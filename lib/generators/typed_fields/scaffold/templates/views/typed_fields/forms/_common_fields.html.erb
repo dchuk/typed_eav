@@ -36,12 +36,15 @@
   <%= f.text_field :name, required: true %>
 </div>
 
-<% unless field.persisted? %>
-  <div>
-    <%= f.label :scope, "Scope (optional)" %>
-    <%= f.text_field :scope, placeholder: "Leave blank for global" %>
-  </div>
-<% end %>
+<div>
+  <label>Scope</label>
+  <%# The controller derives scope from the ambient value (TypedFields.current_scope)
+      and never permits it from params. Display it read-only so users can see which
+      partition this field belongs to without implying they can change it. %>
+  <input type="text"
+         value="<%= field.scope.presence || (field.new_record? ? (TypedFields.current_scope || "Global (all scopes)") : "Global (all scopes)") %>"
+         disabled readonly />
+</div>
 
 <div>
   <%= f.label :required %>

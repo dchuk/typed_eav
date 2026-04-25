@@ -30,6 +30,7 @@ module TypedFields
 
       def validate_pattern_syntax
         return if pattern.blank?
+
         Regexp.new(pattern)
       rescue RegexpError => e
         errors.add(:pattern, "is invalid: #{e.message}")

@@ -17,12 +17,14 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
       expect(Contact.typed_fields_scope_method).to eq(:tenant_id)
     end
 
-    it "stores type restrictions" do
-      expect(Product.allowed_typed_field_types).to eq(%i[text integer decimal boolean])
+    it "stores type restrictions normalized to strings" do
+      # Normalized to strings once at registration so hot paths (type-
+      # restriction validation, `typed_fields_attributes=`) don't re-map.
+      expect(Product.allowed_typed_field_types).to eq(%w[text integer decimal boolean])
     end
   end
 
-  describe ".typed_field_definitions" do
+  describe ".typed_field_definitions", :unscoped do
     let!(:age_field) { create(:integer_field, name: "age", entity_type: "Contact") }
     let!(:product_weight) { create(:decimal_field, name: "weight", entity_type: "Product") }
 
@@ -41,7 +43,7 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
     end
   end
 
-  describe ".where_typed_fields" do
+  describe ".where_typed_fields", :unscoped do
     let!(:age_field) { create(:integer_field, name: "age", entity_type: "Contact") }
     let!(:city_field) { create(:text_field, name: "city", entity_type: "Contact") }
 
@@ -51,14 +53,20 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
 
     before do
       { alice => [30, "Portland"], bob => [25, "Seattle"], charlie => [40, "Portland"] }.each do |c, (age, city)|
-        TypedFields::Value.create!(entity: c, field: age_field).tap { |v| v.value = age; v.save! }
-        TypedFields::Value.create!(entity: c, field: city_field).tap { |v| v.value = city; v.save! }
+        TypedFields::Value.create!(entity: c, field: age_field).tap do |v|
+          v.value = age
+          v.save!
+        end
+        TypedFields::Value.create!(entity: c, field: city_field).tap do |v|
+          v.value = city
+          v.save!
+        end
       end
     end
 
     it "filters by a single field" do
       results = Contact.where_typed_fields([{ name: "age", op: :gt, value: 28 }])
-      expect(results).to match_array([alice, charlie])
+      expect(results).to contain_exactly(alice, charlie)
     end
 
     it "filters by multiple fields (AND)" do
@@ -66,12 +74,12 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
         { name: "age", op: :gt, value: 28 },
         { name: "city", op: :eq, value: "Portland" },
       )
-      expect(results).to match_array([alice, charlie])
+      expect(results).to contain_exactly(alice, charlie)
     end
 
     it "supports compact keys (n, op, v)" do
       results = Contact.where_typed_fields([{ n: "city", op: :contains, v: "port" }])
-      expect(results).to match_array([alice, charlie])
+      expect(results).to contain_exactly(alice, charlie)
     end
 
     it "defaults to :eq when operator is omitted" do
@@ -80,11 +88,11 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
     end
 
     it "raises ArgumentError for nonexistent field names" do
-      expect {
+      expect do
         Contact.where_typed_fields(
-          [{ name: "nonexistent", op: :eq, value: "x" }]
+          [{ name: "nonexistent", op: :eq, value: "x" }],
         )
-      }.to raise_error(ArgumentError, /Unknown typed field/)
+      end.to raise_error(ArgumentError, /Unknown typed field/)
     end
 
     it "chains with standard ActiveRecord scopes" do
@@ -93,12 +101,15 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
     end
   end
 
-  describe ".with_field" do
+  describe ".with_field", :unscoped do
     let!(:field) { create(:integer_field, name: "score", entity_type: "Contact") }
     let!(:alice) { create(:contact, name: "Alice") }
 
     before do
-      TypedFields::Value.create!(entity: alice, field: field).tap { |v| v.value = 95; v.save! }
+      TypedFields::Value.create!(entity: alice, field: field).tap do |v|
+        v.value = 95
+        v.save!
+      end
     end
 
     it "short form: with_field(name, value) implies :eq" do
@@ -112,17 +123,21 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
 
   describe "#initialize_typed_values" do
     let!(:field_a) { create(:text_field, name: "bio", entity_type: "Contact") }
-    let!(:field_b) { create(:integer_field, name: "age", entity_type: "Contact") }
     let(:contact) { create(:contact) }
+
+    before { create(:integer_field, name: "age", entity_type: "Contact") }
 
     it "builds missing values with defaults" do
       values = contact.initialize_typed_values
       expect(values.size).to eq(2)
-      expect(values.map { |v| v.field.name }).to match_array(["bio", "age"])
+      expect(values.map { |v| v.field.name }).to match_array(%w[bio age])
     end
 
     it "does not duplicate existing values" do
-      TypedFields::Value.create!(entity: contact, field: field_a).tap { |v| v.value = "existing"; v.save! }
+      TypedFields::Value.create!(entity: contact, field: field_a).tap do |v|
+        v.value = "existing"
+        v.save!
+      end
 
       values = contact.initialize_typed_values
       expect(values.size).to eq(2)
@@ -131,8 +146,9 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
 
   describe "#typed_fields_attributes=" do
     let!(:age_field) { create(:integer_field, name: "age", entity_type: "Contact") }
-    let!(:bio_field) { create(:text_field, name: "bio", entity_type: "Contact") }
     let(:contact) { create(:contact) }
+
+    before { create(:text_field, name: "bio", entity_type: "Contact") }
 
     it "creates values from attribute hashes" do
       contact.typed_fields_attributes = [
@@ -146,7 +162,10 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
     end
 
     it "updates existing values" do
-      TypedFields::Value.create!(entity: contact, field: age_field).tap { |v| v.value = 25; v.save! }
+      TypedFields::Value.create!(entity: contact, field: age_field).tap do |v|
+        v.value = 25
+        v.save!
+      end
 
       contact.typed_fields_attributes = [{ name: "age", value: 30 }]
       contact.save!
@@ -164,8 +183,9 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
   end
 
   describe "#typed_field_value and #set_typed_field_value" do
-    let!(:field) { create(:text_field, name: "nickname", entity_type: "Contact") }
     let(:contact) { create(:contact) }
+
+    before { create(:text_field, name: "nickname", entity_type: "Contact") }
 
     it "sets and reads a value by field name" do
       contact.set_typed_field_value("nickname", "Ace")
@@ -181,8 +201,14 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
     let(:contact) { create(:contact) }
 
     before do
-      TypedFields::Value.create!(entity: contact, field: age_field).tap { |v| v.value = 30; v.save! }
-      TypedFields::Value.create!(entity: contact, field: bio_field).tap { |v| v.value = "Hello"; v.save! }
+      TypedFields::Value.create!(entity: contact, field: age_field).tap do |v|
+        v.value = 30
+        v.save!
+      end
+      TypedFields::Value.create!(entity: contact, field: bio_field).tap do |v|
+        v.value = "Hello"
+        v.save!
+      end
     end
 
     it "returns all values as a hash" do
@@ -209,8 +235,9 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
   end
 
   describe "#typed_fields_attributes= with _destroy" do
-    let!(:field) { create(:integer_field, name: "age", entity_type: "Contact") }
     let(:contact) { create(:contact) }
+
+    before { create(:integer_field, name: "age", entity_type: "Contact") }
 
     it "destroys existing values when _destroy is truthy" do
       contact.typed_fields_attributes = [{ name: "age", value: 30 }]
@@ -241,7 +268,7 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
     end
 
     it "allows fields of permitted types" do
-      text_field = create(:text_field, name: "description", entity_type: "Product")
+      create(:text_field, name: "description", entity_type: "Product")
       product = create(:product)
       product.typed_fields_attributes = [{ name: "description", value: "hello" }]
       product.save!
@@ -250,9 +277,12 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
   end
 
   describe "#typed_fields_attributes= with Hash input" do
-    let!(:age_field) { create(:integer_field, name: "age", entity_type: "Contact") }
-    let!(:bio_field) { create(:text_field, name: "bio", entity_type: "Contact") }
     let(:contact) { create(:contact) }
+
+    before do
+      create(:integer_field, name: "age", entity_type: "Contact")
+      create(:text_field, name: "bio", entity_type: "Contact")
+    end
 
     it "accepts hash-of-hashes (ActionController params format)" do
       contact.typed_fields_attributes = {
@@ -266,8 +296,9 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
   end
 
   describe "#set_typed_field_value edge cases" do
-    let!(:field) { create(:text_field, name: "nickname", entity_type: "Contact") }
     let(:contact) { create(:contact) }
+
+    before { create(:text_field, name: "nickname", entity_type: "Contact") }
 
     it "returns nil for non-existent field name" do
       result = contact.set_typed_field_value("nonexistent", "value")
@@ -287,8 +318,8 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
     let(:contact) { create(:contact) }
 
     it "populates built values with field defaults" do
-      field = create(:integer_field, name: "score", entity_type: "Contact",
-                     default_value_meta: { "v" => 100 })
+      create(:integer_field, name: "score", entity_type: "Contact",
+                             default_value_meta: { "v" => 100 })
       values = contact.initialize_typed_values
       score_value = values.detect { |v| v.field.name == "score" }
       expect(score_value).to be_present
@@ -298,7 +329,7 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
 
   describe "dependent: :destroy" do
     it "destroys typed_values when entity is destroyed" do
-      field = create(:text_field, name: "note", entity_type: "Contact")
+      create(:text_field, name: "note", entity_type: "Contact")
       contact = create(:contact)
       contact.set_typed_field_value("note", "test")
       contact.save!
@@ -310,7 +341,10 @@ RSpec.describe TypedFields::HasTypedFields, type: :model do
     it "destroying a field cascades to values" do
       field = create(:text_field, name: "temp", entity_type: "Contact")
       contact = create(:contact)
-      TypedFields::Value.create!(entity: contact, field: field).tap { |v| v.value = "x"; v.save! }
+      TypedFields::Value.create!(entity: contact, field: field).tap do |v|
+        v.value = "x"
+        v.save!
+      end
       expect { field.destroy! }.to change(TypedFields::Value, :count).by(-1)
     end
 

@@ -1,0 +1,162 @@
+plugins:
+  - rubocop-performance
+  - rubocop-rails
+  - rubocop-rspec
+
+inherit_mode:
+  merge:
+    - Exclude
+
+AllCops:
+  TargetRubyVersion: 3.1
+  TargetRailsVersion: 7.1
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - "bin/**/*"
+    - "vendor/**/*"
+    - "tmp/**/*"
+    - "log/**/*"
+    - "gemfiles/**/*"
+    - "spec/dummy/bin/**/*"
+    - "spec/dummy/config/**/*"
+    - "spec/dummy/db/**/*"
+    - "spec/dummy/log/**/*"
+    - "spec/dummy/tmp/**/*"
+    - "lib/generators/**/templates/**/*"
+
+# --- Layout -----------------------------------------------------------
+Layout/LineLength:
+  Max: 120
+  AllowedPatterns:
+    - '\A\s*#'
+
+# --- Style ------------------------------------------------------------
+Style/Documentation:
+  Enabled: false
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: double_quotes
+Style/FrozenStringLiteralComment:
+  Enabled: true
+  EnforcedStyle: always
+  Exclude:
+    - "db/migrate/**/*"
+    - "spec/dummy/**/*"
+Style/ClassAndModuleChildren:
+  Enabled: false
+Style/TrailingCommaInArguments:
+  EnforcedStyleForMultiline: comma
+Style/TrailingCommaInArrayLiteral:
+  EnforcedStyleForMultiline: comma
+Style/TrailingCommaInHashLiteral:
+  EnforcedStyleForMultiline: comma
+
+# --- Metrics ----------------------------------------------------------
+Metrics/MethodLength:
+  Max: 25
+  Exclude:
+    - "db/migrate/**/*"
+    - "lib/generators/**/*"
+Metrics/ClassLength:
+  Max: 250
+Metrics/ModuleLength:
+  Max: 250
+Metrics/AbcSize:
+  Max: 25
+  Exclude:
+    - "db/migrate/**/*"
+    - "lib/generators/**/*"
+Metrics/CyclomaticComplexity:
+  Max: 12
+  Exclude:
+    - "db/migrate/**/*"
+    - "lib/generators/**/*"
+Metrics/PerceivedComplexity:
+  Max: 12
+  Exclude:
+    - "db/migrate/**/*"
+    - "lib/generators/**/*"
+Metrics/BlockLength:
+  AllowedMethods:
+    - describe
+    - context
+    - it
+    - specify
+    - shared_examples
+    - shared_context
+    - define
+    - configure
+    - included
+    - class_methods
+    - namespace
+  Exclude:
+    - "spec/**/*"
+    - "*.gemspec"
+    - "lib/tasks/**/*.rake"
+    - "db/migrate/**/*"
+
+# --- Gemspec ----------------------------------------------------------
+Gemspec/RequireMFA:
+  Enabled: false
+Gemspec/DevelopmentDependencies:
+  EnforcedStyle: Gemfile
+
+# --- Naming -----------------------------------------------------------
+Naming/PredicateMethod:
+  Enabled: false
+
+# --- Rails ------------------------------------------------------------
+Rails:
+  Enabled: true
+Rails/SkipsModelValidations:
+  Exclude:
+    - "spec/**/*"
+    - "db/migrate/**/*"
+Rails/HasManyOrHasOneDependent:
+  Enabled: false
+Rails/ApplicationRecord:
+  Exclude:
+    - "app/models/typed_fields/application_record.rb"
+    - "spec/dummy/**/*"
+Rails/Output:
+  Exclude:
+    - "lib/generators/**/*"
+Rails/I18nLocaleTexts:
+  Exclude:
+    - "app/**/*"
+    - "lib/**/*"
+
+# --- Performance ------------------------------------------------------
+Performance:
+  Exclude:
+    - "spec/**/*"
+
+# --- RSpec ------------------------------------------------------------
+RSpec/ExampleLength:
+  Max: 25
+RSpec/MultipleExpectations:
+  Max: 10
+RSpec/NestedGroups:
+  Max: 5
+RSpec/MultipleMemoizedHelpers:
+  Max: 12
+RSpec/DescribeClass:
+  Exclude:
+    - "spec/integration/**/*"
+    - "spec/regressions/**/*"
+    - "spec/lib/typed_fields/scoping_spec.rb"
+    - "spec/lib/typed_fields/zeitwerk_loading_spec.rb"
+    - "spec/models/typed_fields/field_spec.rb"
+RSpec/MultipleDescribes:
+  Exclude:
+    - "spec/models/typed_fields/field_spec.rb"
+    - "spec/models/typed_fields/section_and_option_spec.rb"
+    - "spec/lib/typed_fields/config_and_registry_spec.rb"
+RSpec/SpecFilePathFormat:
+  Enabled: true
+RSpec/IndexedLet:
+  Enabled: false
+RSpec/VerifiedDoubles:
+  Enabled: false

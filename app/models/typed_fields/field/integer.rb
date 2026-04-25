@@ -11,11 +11,14 @@ module TypedFields
 
       def cast(raw)
         return [nil, false] if raw.nil?
+
         str = raw.to_s.strip
         return [nil, false] if str.empty?
+
         bd = BigDecimal(str, exception: false)
         return [nil, true] if bd.nil?
         return [nil, true] if bd.frac != 0
+
         [bd.to_i, false]
       end
 

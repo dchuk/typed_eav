@@ -28,6 +28,7 @@ module TypedFields
       #
       # The relation is suitable for subquery use:
       #   Model.where(id: QueryBuilder.filter(field, :gt, 5).select(:entity_id))
+      # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength -- one operator-dispatch case statement; flattening keeps the supported-operators list scannable in one place.
       def filter(field, operator, value)
         col = field.class.value_column
         operator = operator.to_sym
@@ -36,8 +37,8 @@ module TypedFields
         supported = field.class.supported_operators
         unless supported.include?(operator)
           raise ArgumentError,
-            "Operator :#{operator} is not supported for #{field.class.name}. " \
-            "Supported operators: #{supported.map { |o| ":#{o}" }.join(', ')}"
+                "Operator :#{operator} is not supported for #{field.class.name}. " \
+                "Supported operators: #{supported.map { |o| ":#{o}" }.join(", ")}"
         end
 
         arel_col = values_table[col]
@@ -58,7 +59,11 @@ module TypedFields
         when :lteq
           base.where(arel_col.lteq(value))
         when :between
-          raise ArgumentError, ":between expects a Range or two-element Array" unless value.respond_to?(:first) && value.respond_to?(:last)
+          unless value.respond_to?(:first) && value.respond_to?(:last)
+            raise ArgumentError,
+                  ":between expects a Range or two-element Array"
+          end
+
           base.where(arel_col.between(value.first..value.last))
         when :contains
           base.where(arel_col.matches("%#{sanitize_like(value)}%"))
@@ -83,6 +88,8 @@ module TypedFields
         end
       end
 
+      # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength
+
       # Convenience: returns entity IDs matching the filter.
       # Useful for subqueries: Model.where(id: QueryBuilder.entity_ids(field, :gt, 5))
       def entity_ids(field, operator, value)
@@ -100,17 +107,11 @@ module TypedFields
         TypedFields::Value.where(field: field)
       end
 
-      # NULL-safe equality: `= value` for non-nil, `IS NULL` for nil,
-      # `IS TRUE/FALSE` for booleans
-      def eq_predicate(base, arel_col, col, value)
-        if value.nil?
-          base.where(col => nil)
-        elsif value.is_a?(TrueClass) || value.is_a?(FalseClass)
-          # Boolean columns: use IS TRUE / IS FALSE for clarity
-          base.where(col => value)
-        else
-          base.where(col => value)
-        end
+      # NULL-safe equality: AR `where(col => nil)` already emits IS NULL, and
+      # `where(col => true/false)` already emits IS TRUE/FALSE on PG, so the
+      # same `base.where(col => value)` covers booleans and other types.
+      def eq_predicate(base, _arel_col, col, value)
+        base.where(col => value)
       end
 
       # NULL-safe inequality: includes NULL rows (they're "not equal" to any value)

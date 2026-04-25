@@ -41,7 +41,7 @@ RSpec.describe TypedFields::Config do
     end
 
     it "resolves all 17 builtin types" do
-      TypedFields::Config::BUILTIN_FIELD_TYPES.each do |name, class_name|
+      TypedFields::Config::BUILTIN_FIELD_TYPES.each_key do |name|
         expect { config.field_class_for(name) }.not_to raise_error
       end
     end

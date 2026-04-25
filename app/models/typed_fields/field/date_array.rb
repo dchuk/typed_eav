@@ -10,11 +10,20 @@ module TypedFields
 
       def array_field? = true
 
+      # See IntegerArray#cast for the "invalid element → whole value invalid"
+      # rationale.
       def cast(raw)
         return [nil, false] if raw.nil?
-        elements = Array(raw)
-        result = elements.filter_map { |v| ::Date.parse(v.to_s) rescue nil }
-        [result.presence, result.size < elements.size]
+
+        elements = Array(raw).reject { |v| v.nil? || (v.respond_to?(:empty?) && v.empty?) }
+        casted = elements.map do |v|
+          ::Date.parse(v.to_s)
+        rescue StandardError
+          nil
+        end
+        return [nil, true] if casted.any?(&:nil?) && elements.any?
+
+        [casted.presence, false]
       end
 
       def validate_typed_value(record, val)

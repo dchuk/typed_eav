@@ -8,15 +8,15 @@ module TypedFields
 
     belongs_to :entity, polymorphic: true, inverse_of: :typed_values
     belongs_to :field,
-      class_name: "TypedFields::Field::Base",
-      foreign_key: :field_id,
-      inverse_of: :values
+               class_name: "TypedFields::Field::Base",
+               inverse_of: :values
 
     # ── Validations ──
 
     validates :field, uniqueness: { scope: %i[entity_type entity_id] }
     validate :validate_value
     validate :validate_entity_matches_field
+    validate :validate_field_scope_matches_entity
     validate :validate_json_size
 
     # ── Value access ──
@@ -31,6 +31,7 @@ module TypedFields
 
     def value
       return nil unless field
+
       self[value_column]
     end
 
@@ -60,6 +61,7 @@ module TypedFields
 
     def apply_pending_value
       return unless @pending_value && field
+
       self.value = @pending_value
       @pending_value = nil
     end
@@ -75,8 +77,9 @@ module TypedFields
 
       val = value
 
-      # Required check
-      if field.required? && val.nil?
+      # Required check. Treat blank strings and empty arrays as missing so
+      # required fields can't be saved as effectively empty.
+      if field.required? && blank_typed_value?(val)
         errors.add(:value, :blank)
         return
       end
@@ -89,16 +92,35 @@ module TypedFields
       field.validate_typed_value(self, val)
     end
 
+    def blank_typed_value?(val)
+      return true if val.nil?
+      # Whitespace-only strings count as blank even inside arrays so a
+      # required TextArray can't slip through with `[" "]` or `["", nil]`.
+      return val.all? { |e| blank_array_element?(e) } if val.is_a?(Array)
+      return val.strip.empty? if val.is_a?(String)
+
+      false
+    end
+
+    def blank_array_element?(element)
+      return true if element.nil?
+      return element.strip.empty? if element.is_a?(String)
+
+      element.respond_to?(:empty?) && element.empty?
+    end
+
     MAX_JSON_BYTES = 1_000_000 # 1MB
+    private_constant :MAX_JSON_BYTES
 
     def validate_json_size
       return unless field && value_column == :json_value
+
       val = self[:json_value]
       return if val.nil?
 
-      if val.to_json.bytesize > MAX_JSON_BYTES
-        errors.add(:value, "is too large (maximum 1MB)")
-      end
+      return unless val.to_json.bytesize > MAX_JSON_BYTES
+
+      errors.add(:value, "is too large (maximum 1MB)")
     end
 
     def validate_entity_matches_field
@@ -106,6 +128,22 @@ module TypedFields
       return if entity_type == field.entity_type
 
       errors.add(:entity, :invalid)
+    end
+
+    # Cross-tenant guard: when nested attributes let a client submit a raw
+    # field_id, the entity_type match above is not enough — another tenant's
+    # field with the same entity_type but a different scope would still
+    # attach. Reject unless the field's scope matches the entity's
+    # typed_fields_scope (globals, scope=NULL, remain shared).
+    def validate_field_scope_matches_entity
+      return unless field && entity
+      return if field.scope.nil?
+      return unless entity.respond_to?(:typed_fields_scope)
+
+      entity_scope = entity.typed_fields_scope
+      return if entity_scope && field.scope == entity_scope.to_s
+
+      errors.add(:field, :invalid)
     end
   end
 end

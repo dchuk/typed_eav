@@ -12,21 +12,21 @@ module TypedFields
       # ── Associations ──
 
       belongs_to :section,
-        class_name: "TypedFields::Section",
-        optional: true,
-        inverse_of: :fields
+                 class_name: "TypedFields::Section",
+                 optional: true,
+                 inverse_of: :fields
 
       has_many :values,
-        class_name: "TypedFields::Value",
-        foreign_key: :field_id,
-        inverse_of: :field,
-        dependent: :destroy
+               class_name: "TypedFields::Value",
+               foreign_key: :field_id,
+               inverse_of: :field,
+               dependent: :destroy
 
       has_many :field_options,
-        class_name: "TypedFields::Option",
-        foreign_key: :field_id,
-        inverse_of: :field,
-        dependent: :destroy
+               class_name: "TypedFields::Option",
+               foreign_key: :field_id,
+               inverse_of: :field,
+               dependent: :destroy
 
       # ── Validations ──
 
@@ -41,7 +41,7 @@ module TypedFields
 
       # ── Scopes ──
 
-      scope :for_entity, ->(entity_type, scope: nil) {
+      scope :for_entity, lambda { |entity_type, scope: nil|
         scopes = [scope, nil].uniq
         where(entity_type: entity_type, scope: scopes)
       }
@@ -93,10 +93,14 @@ module TypedFields
       end
 
       # Allowed option values for select/multi-select validation.
-      # Queries fresh each time to avoid stale cache across instances.
-      # For bulk validation, callers should preload field_options.
+      # When `field_options` is already loaded (eager-load path), read from
+      # memory instead of issuing a fresh `pluck` query.
       def allowed_option_values
-        field_options.pluck(:value)
+        if field_options.loaded?
+          field_options.map(&:value)
+        else
+          field_options.pluck(:value)
+        end
       end
 
       # Kept for backward compatibility but now a no-op since we don't cache.
@@ -126,9 +130,9 @@ module TypedFields
         if opts[:min_length] && str.length < opts[:min_length].to_i
           record.errors.add(:value, :too_short, count: opts[:min_length])
         end
-        if opts[:max_length] && str.length > opts[:max_length].to_i
-          record.errors.add(:value, :too_long, count: opts[:max_length])
-        end
+        return unless opts[:max_length] && str.length > opts[:max_length].to_i
+
+        record.errors.add(:value, :too_long, count: opts[:max_length])
       end
 
       def validate_pattern(record, val)
@@ -146,12 +150,10 @@ module TypedFields
 
       def validate_range(record, val)
         opts = options_hash
-        if opts[:min] && val < opts[:min].to_d
-          record.errors.add(:value, :greater_than_or_equal_to, count: opts[:min])
-        end
-        if opts[:max] && val > opts[:max].to_d
-          record.errors.add(:value, :less_than_or_equal_to, count: opts[:max])
-        end
+        record.errors.add(:value, :greater_than_or_equal_to, count: opts[:min]) if opts[:min] && val < opts[:min].to_d
+        return unless opts[:max] && val > opts[:max].to_d
+
+        record.errors.add(:value, :less_than_or_equal_to, count: opts[:max])
       end
 
       def validate_date_range(record, val)
@@ -184,6 +186,7 @@ module TypedFields
 
       def validate_option_inclusion(record, val)
         return if allowed_option_values.include?(val&.to_s)
+
         record.errors.add(:value, :inclusion)
       end
 
@@ -198,15 +201,16 @@ module TypedFields
         if opts[:min_size] && arr.size < opts[:min_size].to_i
           record.errors.add(:value, :too_short, count: opts[:min_size])
         end
-        if opts[:max_size] && arr.size > opts[:max_size].to_i
-          record.errors.add(:value, :too_long, count: opts[:max_size])
-        end
+        return unless opts[:max_size] && arr.size > opts[:max_size].to_i
+
+        record.errors.add(:value, :too_long, count: opts[:max_size])
       end
 
       private
 
       def validate_default_value
         return if default_value_meta.blank? || !default_value_meta.key?("v")
+
         raw = default_value_meta["v"]
         return if raw.nil?
 

@@ -33,7 +33,7 @@ RSpec.describe TypedFields::Field::Base, type: :model do
   describe "STI resolution" do
     it "loads as the correct subclass" do
       field = TypedFields::Field::Integer.create!(name: "age", entity_type: "Contact")
-      reloaded = TypedFields::Field::Base.find(field.id)
+      reloaded = described_class.find(field.id)
       expect(reloaded).to be_a(TypedFields::Field::Integer)
     end
   end
@@ -41,23 +41,23 @@ end
 
 RSpec.describe "Field type column mappings" do
   {
-    TypedFields::Field::Text         => :string_value,
-    TypedFields::Field::LongText     => :text_value,
-    TypedFields::Field::Integer      => :integer_value,
-    TypedFields::Field::Decimal      => :decimal_value,
-    TypedFields::Field::Boolean      => :boolean_value,
-    TypedFields::Field::Date         => :date_value,
-    TypedFields::Field::DateTime     => :datetime_value,
-    TypedFields::Field::Select       => :string_value,
-    TypedFields::Field::MultiSelect  => :json_value,
+    TypedFields::Field::Text => :string_value,
+    TypedFields::Field::LongText => :text_value,
+    TypedFields::Field::Integer => :integer_value,
+    TypedFields::Field::Decimal => :decimal_value,
+    TypedFields::Field::Boolean => :boolean_value,
+    TypedFields::Field::Date => :date_value,
+    TypedFields::Field::DateTime => :datetime_value,
+    TypedFields::Field::Select => :string_value,
+    TypedFields::Field::MultiSelect => :json_value,
     TypedFields::Field::IntegerArray => :json_value,
     TypedFields::Field::DecimalArray => :json_value,
-    TypedFields::Field::TextArray    => :json_value,
-    TypedFields::Field::DateArray    => :json_value,
-    TypedFields::Field::Email        => :string_value,
-    TypedFields::Field::Url          => :string_value,
-    TypedFields::Field::Color        => :string_value,
-    TypedFields::Field::Json         => :json_value,
+    TypedFields::Field::TextArray => :json_value,
+    TypedFields::Field::DateArray => :json_value,
+    TypedFields::Field::Email => :string_value,
+    TypedFields::Field::Url => :string_value,
+    TypedFields::Field::Color => :string_value,
+    TypedFields::Field::Json => :json_value,
   }.each do |klass, expected_column|
     it "#{klass.name.demodulize} maps to #{expected_column}" do
       expect(klass.value_column).to eq(expected_column)
@@ -121,11 +121,11 @@ RSpec.describe "Field type casting" do
     let(:field) { build(:boolean_field) }
 
     it "casts string 'true' to true" do
-      expect(field.cast("true").first).to eq(true)
+      expect(field.cast("true").first).to be(true)
     end
 
     it "casts string '0' to false" do
-      expect(field.cast("0").first).to eq(false)
+      expect(field.cast("0").first).to be(false)
     end
 
     it "casts nil to nil" do
@@ -141,7 +141,7 @@ RSpec.describe "Field type casting" do
     end
 
     it "passes through Date objects" do
-      date = Date.today
+      date = Time.zone.today
       expect(field.cast(date).first).to eq(date)
     end
 
@@ -162,11 +162,13 @@ RSpec.describe "Field type casting" do
     let(:field) { build(:integer_array_field) }
 
     it "casts array elements to integers" do
-      expect(field.cast(["1", "2", "3"]).first).to eq([1, 2, 3])
+      expect(field.cast(%w[1 2 3]).first).to eq([1, 2, 3])
     end
 
-    it "filters out non-numeric elements" do
-      expect(field.cast(["1", "abc", "3"]).first).to eq([1, 3])
+    it "marks cast invalid and stores nil when any element is non-numeric" do
+      # Prior behavior was to silently drop bad elements. That hid bad input
+      # from users on form re-renders; see review_round_2_array_cast_spec.rb.
+      expect(field.cast(%w[1 abc 3])).to eq([nil, true])
     end
   end
 
@@ -337,8 +339,8 @@ RSpec.describe "DecimalArray casting" do
     expect(field.cast(["1.5", "2.5"]).first).to eq([BigDecimal("1.5"), BigDecimal("2.5")])
   end
 
-  it "filters invalid and marks cast invalid" do
-    expect(field.cast(["1.5", "abc", "3.0"])).to eq([[BigDecimal("1.5"), BigDecimal("3.0")], true])
+  it "marks cast invalid and stores nil when any element is unparseable" do
+    expect(field.cast(["1.5", "abc", "3.0"])).to eq([nil, true])
   end
 
   it "returns nil for nil" do
@@ -354,12 +356,12 @@ RSpec.describe "DateArray casting" do
   let(:field) { build(:date_array_field) }
 
   it "casts date strings" do
-    result = field.cast(["2025-01-01", "2025-06-15"]).first
+    result = field.cast(%w[2025-01-01 2025-06-15]).first
     expect(result).to eq([Date.new(2025, 1, 1), Date.new(2025, 6, 15)])
   end
 
-  it "filters invalid dates and marks invalid" do
-    expect(field.cast(["2025-01-01", "not-a-date"])).to eq([[Date.new(2025, 1, 1)], true])
+  it "marks cast invalid and stores nil when any element is not a valid date" do
+    expect(field.cast(["2025-01-01", "not-a-date"])).to eq([nil, true])
   end
 
   it "returns nil for nil" do
@@ -416,13 +418,13 @@ RSpec.describe "Boolean casting edge cases" do
   let(:field) { build(:boolean_field) }
 
   it "casts standard truthy strings" do
-    expect(field.cast("true").first).to eq(true)
-    expect(field.cast("1").first).to eq(true)
+    expect(field.cast("true").first).to be(true)
+    expect(field.cast("1").first).to be(true)
   end
 
   it "casts standard falsy strings" do
-    expect(field.cast("false").first).to eq(false)
-    expect(field.cast("0").first).to eq(false)
+    expect(field.cast("false").first).to be(false)
+    expect(field.cast("0").first).to be(false)
   end
 end
 
@@ -471,9 +473,13 @@ RSpec.describe "Supported operators for all field types" do
     expect(TypedFields::Field::DecimalArray.supported_operators).to include(:any_eq, :all_eq)
   end
 
-  it "TextArray supports array + contains operators" do
+  it "TextArray supports JSONB array containment operators but not :contains" do
+    # :contains previously mapped to Arel `matches` (SQL LIKE), which is
+    # invalid against jsonb. Element containment is expressed via :any_eq /
+    # :all_eq, which map to the JSONB `@>` operator.
     ops = TypedFields::Field::TextArray.supported_operators
-    expect(ops).to include(:any_eq, :all_eq, :contains)
+    expect(ops).to include(:any_eq, :all_eq)
+    expect(ops).not_to include(:contains)
   end
 
   it "DateArray supports array operators" do

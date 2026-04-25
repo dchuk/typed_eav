@@ -3,32 +3,67 @@
 module TypedFieldsHelper
   # ─── Value Input Rendering ───────────────────────────────────
 
-  # Render all typed field inputs for a record's form.
+  # Render all typed field inputs for a record's form. Owns the
+  # `fields_for :typed_values` builder so the submitted params are
+  # shaped correctly for `accepts_nested_attributes_for :typed_values`.
   #
   #   <%= render_typed_value_inputs(form: f, record: @contact) %>
   #
+  # The controller's strong params must permit:
+  #
+  #   typed_values_attributes: [:id, :field_id, :value, :_destroy,
+  #                             { value: [] }]
+  #
   def render_typed_value_inputs(form:, record:)
-    parts = record.initialize_typed_values.sort_by { |v| v.field.sort_order || 0 }.map do |typed_value|
-      render_typed_value_input(form: form, typed_value: typed_value)
+    # Index the in-scope definitions by id. Used both to look up sort_order
+    # without touching `v.field` (avoids per-value field load when typed_values
+    # was preloaded but `:field` was not) AND to thread the resolved field
+    # into `render_typed_value_input` so it doesn't re-trigger that lookup.
+    fields_by_id = record.typed_field_definitions.index_by(&:id)
+
+    typed_values = record.initialize_typed_values.sort_by do |v|
+      # Newly-built values may have field_id=nil but carry an in-memory
+      # `field` object; fall back to that to avoid sorting them all to 0.
+      field = fields_by_id[v.field_id] || v.field
+      field&.sort_order || 0
+    end
+
+    parts = typed_values.map do |typed_value|
+      form.fields_for(:typed_values, typed_value, child_index: nested_child_index(typed_value)) do |vf|
+        render_typed_value_input(form: vf, typed_value: typed_value, fields_by_id: fields_by_id)
+      end
     end
     safe_join(parts)
   end
 
-  # Render a single typed value input within a fields_for block.
+  # Render a single typed value input. Expects `form` to be a typed-value
+  # builder (from `fields_for :typed_values`) — it emits the hidden `id` /
+  # `field_id` inputs nested attributes need to resolve the row, then
+  # delegates to the type-specific partial for the value input itself.
   #
-  #   <%= form.fields_for :typed_values, record.initialize_typed_values do |vf| %>
+  # Advanced callers that own their own `fields_for` block can invoke this
+  # directly:
+  #
+  #   <%= form.fields_for :typed_values, typed_value do |vf| %>
   #     <%= render_typed_value_input(form: vf, typed_value: vf.object) %>
   #   <% end %>
   #
-  def render_typed_value_input(form:, typed_value:)
-    field = typed_value.field
+  # Pass `fields_by_id:` (a {field_id => Field} map) when iterating many
+  # values to avoid triggering a per-value `typed_value.field` query in the
+  # association-loaded-but-`:field`-not-preloaded case.
+  def render_typed_value_input(form:, typed_value:, fields_by_id: nil)
+    field = (fields_by_id && fields_by_id[typed_value.field_id]) || typed_value.field
     partial_name = value_input_partial(field)
 
-    render partial: partial_name, locals: {
+    hidden = "".html_safe
+    hidden << form.hidden_field(:id) if typed_value.persisted?
+    hidden << form.hidden_field(:field_id, value: field.id)
+
+    hidden + render(partial: partial_name, locals: {
       form: form,
       typed_value: typed_value,
       field: field,
-    }
+    })
   end
 
   # Render an array field with add/remove buttons (Stimulus-powered).
@@ -67,20 +102,6 @@ module TypedFieldsHelper
     }
   end
 
-  # Render a single finder input for a field.
-  def render_typed_field_finder_input(form:, field:, template: false, selected: {})
-    partial = finder_input_partial(field)
-    operators = field.class.supported_operators
-
-    render partial: partial, locals: {
-      form: form,
-      field: field,
-      operators: operators,
-      template: template,
-      selected: selected,
-    }
-  end
-
   # ─── Operator Labels ────────────────────────────────────────
 
   def typed_field_operator_label(operator)
@@ -105,6 +126,13 @@ module TypedFieldsHelper
 
   private
 
+  # Distinct `child_index` for each nested value so Rails generates unique
+  # param names. Use the object id for new records (stable within a request),
+  # the record id for persisted rows.
+  def nested_child_index(typed_value)
+    typed_value.persisted? ? typed_value.id : "new_#{typed_value.object_id}"
+  end
+
   # Resolve the value input partial for a field type.
   # Falls back to a generic text input if no specific partial exists.
   def value_input_partial(field)
@@ -118,12 +146,5 @@ module TypedFieldsHelper
     type_key = field.field_type_name
     partial = "typed_fields/forms/#{type_key}"
     lookup_context.exists?(partial, [], true) ? partial : "typed_fields/forms/base"
-  end
-
-  # Resolve the finder input partial.
-  def finder_input_partial(field)
-    type_key = field.field_type_name
-    partial = "typed_fields/finders/inputs/#{type_key}"
-    lookup_context.exists?(partial, [], true) ? partial : "typed_fields/finders/inputs/text"
   end
 end
