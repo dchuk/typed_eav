@@ -3,14 +3,17 @@ phase: 01
 round: 01
 title: "QA remediation: plan-amendment for tracked deviations"
 type: remediation
-status: in-progress
-completed:
-tasks_completed: 4
+status: complete
+completed: 2026-04-29
+tasks_completed: 5
 tasks_total: 5
 commit_hashes:
   - a1c01e3
   - 67dcdf1
+  - 2e5f76f
+  - c7cfb37
   - a21ab0a
+  - b2e462f
 files_modified:
   - .vbw-planning/phases/01-two-level-scope-partitioning/01-01-PLAN.md
   - .vbw-planning/phases/01-two-level-scope-partitioning/01-02-PLAN.md
@@ -21,7 +24,30 @@ files_modified:
   - .vbw-planning/phases/01-two-level-scope-partitioning/01-07-PLAN.md
   - .vbw-planning/phases/01-two-level-scope-partitioning/remediation/qa/round-01/R01-SUMMARY.md
 deviations: []
-known_issue_outcomes: []
+known_issue_outcomes:
+  - '{"test":"TypedEAV scope enforcement .with_scope accepts an AR-like object and normalizes to id.to_s","file":"spec/lib/typed_eav/scoping_spec.rb:38","error":"assertion-shape mismatch: expected \"42\", got [\"42\", nil] — plan 06 owns rewriting assertions","disposition":"resolved","rationale":"Plan 06 (commit e5e78a4) rewrote this assertion to expect [\"42\", nil] tuple shape. Verified: full suite at 440 examples, 0 failures."}'
+  - '{"test":"TypedEAV scope enforcement .with_scope accepts an AR-like object and normalizes to id.to_s","file":"spec/lib/typed_eav/scoping_spec.rb:38","error":"assertion-shape mismatch: expected \"42\", got [\"42\", nil] — pre-existing plan-02 leftover","disposition":"resolved","rationale":"Duplicate carryover from plan 05 SUMMARY of the same plan-02-anticipated leftover. Resolved by plan 06 (commit e5e78a4) — assertion now expects tuple shape. Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement .with_scope restores the prior scope after the block exits","file":"spec/lib/typed_eav/scoping_spec.rb:22","error":"assertion-shape mismatch: expected \"inner\", got [\"inner\", nil] — plan 06 owns rewriting assertions","disposition":"resolved","rationale":"Plan 06 (commit e5e78a4) rewrote the assertion to expect [\"inner\", nil] tuple. Verified: full suite at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement .with_scope restores the prior scope after the block exits","file":"spec/lib/typed_eav/scoping_spec.rb:22","error":"assertion-shape mismatch: expected \"inner\", got [\"inner\", nil] — pre-existing plan-02 leftover","disposition":"resolved","rationale":"Duplicate carryover from plan 05 SUMMARY of the same plan-02-anticipated leftover. Resolved by plan 06 (commit e5e78a4). Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement .with_scope sets the ambient scope inside the block","file":"spec/lib/typed_eav/scoping_spec.rb:16","error":"assertion-shape mismatch: expected \"t1\", got [\"t1\", nil] — plan 06 owns rewriting assertions to expect tuples","disposition":"resolved","rationale":"Plan 06 (commit e5e78a4) rewrote assertion to expect [\"t1\", nil] tuple. Verified: full suite at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement .with_scope sets the ambient scope inside the block","file":"spec/lib/typed_eav/scoping_spec.rb:16","error":"assertion-shape mismatch: expected \"t1\", got [\"t1\", nil] — pre-existing plan-02 leftover, plan 06 owns rewriting assertions to expect tuples","disposition":"resolved","rationale":"Duplicate carryover. Resolved by plan 06 (commit e5e78a4). Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement acts_as_tenant bridge (default resolver) reads ActsAsTenant.current_tenant when ActsAsTenant is defined","file":"spec/lib/typed_eav/scoping_spec.rb:91","error":"assertion-shape mismatch: expected \"99\", got [\"99\", nil] — plan 06 owns rewriting assertions","disposition":"resolved","rationale":"Plan 06 (commit e5e78a4) rewrote AAT-bridge assertion to expect [\"99\", nil] tuple matching the new DEFAULT_SCOPE_RESOLVER contract. Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement acts_as_tenant bridge (default resolver) reads ActsAsTenant.current_tenant when ActsAsTenant is defined","file":"spec/lib/typed_eav/scoping_spec.rb:91","error":"assertion-shape mismatch: expected \"99\", got [\"99\", nil] — pre-existing plan-02 leftover","disposition":"resolved","rationale":"Duplicate carryover. Resolved by plan 06 (commit e5e78a4). Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement fail-closed enforcement on scoped models … does NOT raise when the resolver returns a value","file":"spec/lib/typed_eav/scoping_spec.rb:140","error":"ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar (line 142) — pre-existing plan-02 leftover","disposition":"resolved","rationale":"Plan 06 (commit e5e78a4) updated the resolver stub to return [\"value\", nil] tuple matching the new strict contract. Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement fail-closed enforcement on scoped models … does NOT raise when the resolver returns a value","file":"spec/lib/typed_eav/scoping_spec.rb:140","error":"ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar (line 142); plan 06 owns updating resolver stubs","disposition":"resolved","rationale":"Duplicate carryover. Resolved by plan 06 (commit e5e78a4). Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement resolver chain normalizes AR-record return values from the resolver","file":"spec/lib/typed_eav/scoping_spec.rb:79","error":"ArgumentError raised by current_scope because the spec stubs the resolver with a bare AR record (not a tuple) — pre-existing plan-02 leftover","disposition":"resolved","rationale":"Plan 06 (commit e5e78a4) updated the resolver stub to return [ar_record, nil] tuple. Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement resolver chain normalizes AR-record return values from the resolver","file":"spec/lib/typed_eav/scoping_spec.rb:79","error":"ArgumentError raised by current_scope because the spec stubs the resolver with a bare AR record (not a tuple); plan 06 owns updating resolver stubs","disposition":"resolved","rationale":"Duplicate carryover. Resolved by plan 06 (commit e5e78a4). Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement resolver chain uses the configured resolver when no block is active","file":"spec/lib/typed_eav/scoping_spec.rb:67","error":"ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar; the Phase 1 strict contract requires a tuple — pre-existing plan-02 leftover","disposition":"resolved","rationale":"Plan 06 (commit e5e78a4) updated the resolver stub to return a tuple per the new strict contract. Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement resolver chain uses the configured resolver when no block is active","file":"spec/lib/typed_eav/scoping_spec.rb:67","error":"ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar; the new Phase 1 strict contract requires a tuple — plan 06 owns updating resolver stubs","disposition":"resolved","rationale":"Duplicate carryover. Resolved by plan 06 (commit e5e78a4). Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement resolver chain with_scope wins over the configured resolver","file":"spec/lib/typed_eav/scoping_spec.rb:72","error":"assertion-shape mismatch: expected \"from_block\", got [\"from_block\", nil] — plan 06 owns rewriting assertions","disposition":"resolved","rationale":"Plan 06 (commit e5e78a4) rewrote assertion to expect [\"from_block\", nil] tuple. Suite green at 440/0."}'
+  - '{"test":"TypedEAV scope enforcement resolver chain with_scope wins over the configured resolver","file":"spec/lib/typed_eav/scoping_spec.rb:72","error":"assertion-shape mismatch: expected \"from_block\", got [\"from_block\", nil] — pre-existing plan-02 leftover","disposition":"resolved","rationale":"Duplicate carryover. Resolved by plan 06 (commit e5e78a4). Suite green at 440/0."}'
+  - '{"test":"rubocop","file":"typed_eav.gemspec:22-26","error":"Layout/HashAlignment: hash literal keys not aligned in metadata{} block (5 occurrences). Verified pre-existing at HEAD e5e78a4 before plan 01-07 started; no file in this plan touched typed_eav.gemspec.","disposition":"accepted-process-exception","rationale":"Pre-existing rubocop offenses verified at HEAD e5e78a4 (before phase 01 started). No file in any phase 01 plan touched typed_eav.gemspec. ROADMAP already flags these for separate housekeeping along with the typed_eav-0.1.0.gem cleanup. Out-of-scope for phase 01; no PLAN.md edit warranted."}'
+  - '{"test":"rubocop Layout/HashAlignment (5 offenses)","file":"typed_eav.gemspec:22-26","error":"5 Layout/HashAlignment offenses in metadata{} block hash keys. Confirmed pre-existing: bundle exec rubocop typed_eav.gemspec reports 5 offenses at lines 22-26. No file in this phase touched typed_eav.gemspec. Flagged for housekeeping per ROADMAP.","disposition":"accepted-process-exception","rationale":"Aggregated form of the 5 individual line offenses; same pre-existing root cause. Verified at HEAD e5e78a4. Out-of-scope housekeeping per ROADMAP."}'
+  - '{"test":"rubocop Layout/HashAlignment (offense 1)","file":"typed_eav.gemspec:22","error":"Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.","disposition":"accepted-process-exception","rationale":"Pre-existing rubocop offense at typed_eav.gemspec:22. Verified at HEAD e5e78a4. Out-of-scope housekeeping per ROADMAP."}'
+  - '{"test":"rubocop Layout/HashAlignment (offense 2)","file":"typed_eav.gemspec:23","error":"Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.","disposition":"accepted-process-exception","rationale":"Pre-existing rubocop offense at typed_eav.gemspec:23. Verified at HEAD e5e78a4. Out-of-scope housekeeping per ROADMAP."}'
+  - '{"test":"rubocop Layout/HashAlignment (offense 3)","file":"typed_eav.gemspec:24","error":"Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.","disposition":"accepted-process-exception","rationale":"Pre-existing rubocop offense at typed_eav.gemspec:24. Verified at HEAD e5e78a4. Out-of-scope housekeeping per ROADMAP."}'
+  - '{"test":"rubocop Layout/HashAlignment (offense 4)","file":"typed_eav.gemspec:25","error":"Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.","disposition":"accepted-process-exception","rationale":"Pre-existing rubocop offense at typed_eav.gemspec:25. Verified at HEAD e5e78a4. Out-of-scope housekeeping per ROADMAP."}'
+  - '{"test":"rubocop Layout/HashAlignment (offense 5)","file":"typed_eav.gemspec:26","error":"Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.","disposition":"accepted-process-exception","rationale":"Pre-existing rubocop offense at typed_eav.gemspec:26. Verified at HEAD e5e78a4. Out-of-scope housekeeping per ROADMAP."}'
 ---
 
 QA round 01 — appending "Plan amendment (R01)" rationale blocks to phase 01 PLAN.md files so the documented plan reflects what actually shipped, without modifying any production code or specs.
@@ -96,6 +122,53 @@ QA round 01 — appending "Plan amendment (R01)" rationale blocks to phase 01 PL
 
 ### Known Issue Outcomes
 - None for this task; known issue outcomes are aggregated at round close.
+
+### Deviations
+- No deviations.
+
+## Task 5: Final consistency pass
+
+### What Was Built
+- Verification-only task: no PLAN.md edits in this task. Cross-validated all R01 amendments grep cleanly, all FAIL classifications are accounted for in their source PLAN.md files (or recorded as process-exception in R01 frontmatter), all 23 known issues have matching resolutions, no production code was modified, and the full RSpec suite remains green at the established baseline.
+- Finalized R01-SUMMARY.md frontmatter: `status: complete`, `completed: 2026-04-29`, `tasks_completed: 5`, aggregated `commit_hashes` from all 6 R01 commits (a1c01e3, 67dcdf1, 2e5f76f, c7cfb37, a21ab0a, b2e462f), aggregated `files_modified` (7 PLAN.md paths + R01-SUMMARY.md), and populated `known_issue_outcomes` with all 23 entries from R01-PLAN.md's `known_issue_resolutions` (16 `resolved` scoping_spec entries + 7 `accepted-process-exception` rubocop entries; matching keys verbatim).
+
+### Verification Checks (5 of 5 PASS)
+
+1. **PASS — All 7 PLAN.md files contain `## Plan amendment (R01)`**: `grep -l "Plan amendment (R01)" .vbw-planning/phases/01-two-level-scope-partitioning/01-*-PLAN.md` returned all 7 files (01-01, 01-02, 01-03, 01-04, 01-05, 01-06, 01-07).
+
+2. **PASS — All 11 FAIL classifications have rationale blocks (or process-exception notes) in their source PLAN.md**:
+   - DEVIATION-01-01-A: 01-01-PLAN.md contains "AddParentScopeToTypedEAVPartitions" + "inflector acronym" — VERIFIED.
+   - DEVIATION-01-01-B: 01-01-PLAN.md contains "feat(migration)" + commit-format hook constraint citation — VERIFIED.
+   - DEVIATION-01-02: 01-02-PLAN.md contains "anticipated cross-plan handoff" + "plan 06" — VERIFIED.
+   - DEVIATION-01-03: 01-03-PLAN.md contains "single-commit consolidation" (1 occurrence in amendment header) — VERIFIED.
+   - DEVIATION-01-04: 01-04-PLAN.md contains "single-commit consolidation" (1 occurrence) — VERIFIED.
+   - DEVIATION-01-05-A: 01-05-PLAN.md contains "single-commit consolidation" (2 occurrences: header + sub-amendment label) — VERIFIED.
+   - DEVIATION-01-05-B: 01-05-PLAN.md contains "anticipated 8-failure carryover" — VERIFIED.
+   - DEVIATION-01-06-A: 01-06-PLAN.md contains "single-commit consolidation" (2 occurrences) — VERIFIED.
+   - DEVIATION-01-06-B: 01-06-PLAN.md contains "any-explicit-disables-ambient" + "contain_exactly(project_global)" — VERIFIED.
+   - DEVIATION-01-07-A: 01-07-PLAN.md contains "Gemfile.lock" + "Bundler auto-rewrites" — VERIFIED.
+   - DEVIATION-01-07-B: 01-07-PLAN.md contains the informational process-exception note (recorded in amendment block as "no plan amendment" sub-section); also recorded in R01-PLAN.md `fail_classifications` and `known_issue_resolutions` — VERIFIED.
+
+3. **PASS — Known-issue coverage complete**: R01-PLAN.md frontmatter has `known_issues_input` with 23 entries and `known_issue_resolutions` with 23 entries with matching `{test, file}` keys. Disposition counts: 16 `resolved` (scoping_spec entries fixed by plan 06's commit `e5e78a4`) + 7 `accepted-process-exception` (rubocop entries pre-existing at HEAD `e5e78a4`) + 0 `unresolved` (sums to 23). All 23 entries are mirrored verbatim into this SUMMARY's `known_issue_outcomes` frontmatter array.
+
+4. **PASS — No production code, spec, ROADMAP.md, STATE.md, or .contracts/ files modified by R01**: Inspected all 6 R01 commits via `git show --stat --format="" <hash>`:
+   - `a1c01e3`: 01-01-PLAN.md (+6) + R01-SUMMARY.md (+32). Only `.vbw-planning/`.
+   - `67dcdf1`: 01-02-PLAN.md (+6) + R01-SUMMARY.md (+25/-3). Only `.vbw-planning/`.
+   - `2e5f76f`: R01-SUMMARY.md (+3/-1). Bookkeeping only.
+   - `c7cfb37`: 01-03 (+4), 01-04 (+4), 01-05 (+6), 01-06 (+6), R01-SUMMARY.md (+29/-1). Only `.vbw-planning/`.
+   - `a21ab0a`: 01-07-PLAN.md (+7) + R01-SUMMARY.md (+23/-1). Only `.vbw-planning/`.
+   - `b2e462f`: R01-SUMMARY.md (+1/-1). Bookkeeping only.
+   - No commit touched `app/`, `lib/`, `db/`, `spec/`, `README.md`, `CHANGELOG.md`, `lib/typed_eav/version.rb`, `Gemfile.lock`, ROADMAP.md, STATE.md, or `.contracts/`.
+
+5. **PASS — Full RSpec suite green at 440 examples / 0 failures**: `bundle exec rspec` ran to completion in 3.62s. Final output: `Finished in 3.62 seconds (files took 1.72 seconds to load) — 440 examples, 0 failures`. Suite baseline preserved; this remediation introduced zero behavioral change.
+
+### Files Modified
+- `.vbw-planning/phases/01-two-level-scope-partitioning/remediation/qa/round-01/R01-SUMMARY.md` -- finalized: `status: complete`, `completed: 2026-04-29`, `tasks_completed: 5`, aggregated `commit_hashes` (6 entries), aggregated `files_modified` (8 entries: 7 PLAN.md paths + this SUMMARY), populated `known_issue_outcomes` (23 entries: 16 `resolved` scoping_spec + 7 `accepted-process-exception` rubocop, mirrored verbatim from R01-PLAN.md `known_issue_resolutions`); Task 5 narrative appended to body documenting the 5 PASS verification checks.
+
+### Known Issue Outcomes (Round-Close Aggregate)
+- 16 scoping_spec entries: `resolved` — plan 06 (commit `e5e78a4`) updated assertion shapes to expect `[scope, parent_scope]` tuples and updated resolver stubs to return tuples per the new strict contract. Final suite at 440 examples / 0 failures verifies resolution.
+- 7 rubocop `Layout/HashAlignment` entries (1 generic + 1 aggregate + 5 individual line offenses in `typed_eav.gemspec:22-26`): `accepted-process-exception` — pre-existing at HEAD `e5e78a4` before phase 01 started; no file in any phase 01 plan touched `typed_eav.gemspec`; ROADMAP already flags for separate housekeeping. Out-of-scope for phase 01 by construction.
+- 0 entries `unresolved` — nothing carried into a future remediation round.
 
 ### Deviations
 - No deviations.
