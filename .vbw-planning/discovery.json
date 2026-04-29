@@ -1,0 +1,58 @@
+{
+  "answered": [
+    {
+      "question": "How should the parent_scope sentinel(s) work?",
+      "answer": "Reuse the existing UNSET_SCOPE / ALL_SCOPES pair for both scope and parent_scope. Kwarg name (scope: vs parent_scope:) disambiguates. Thread-local stack stores tuples; sentinel applies to whichever slot is being set.",
+      "area": "sentinel-design",
+      "phase": "01",
+      "date": "2026-04-28"
+    },
+    {
+      "question": "How should the resolver protocol shape look?",
+      "answer": "Tuple-returning resolver: Config.scope_resolver returns [scope, parent_scope]. Hard breaking change — every consumer with a custom scope_resolver must update on upgrade. Major version bump, explicit CHANGELOG entry, migration note in README. Carves out an exception to the milestone-level BC commitment for resolver shape only.",
+      "area": "resolver-protocol",
+      "phase": "01",
+      "date": "2026-04-28"
+    },
+    {
+      "question": "How should Section and Field share the partition-tuple logic?",
+      "answer": "Inline duplicate the symmetric pattern in field/base.rb and section.rb (mirrors the existing for_entity pattern). Do NOT extract a Scopable concern in this phase. Defer extraction until a third caller appears or implementations diverge.",
+      "area": "section-field-sharing",
+      "phase": "01",
+      "date": "2026-04-28"
+    },
+    {
+      "question": "How should `unscoped { }` interact with both keys?",
+      "answer": "Atomic bypass — unscoped { } drops both scope AND parent_scope predicates entirely. Multimap stays at the field_id level; no scope or parent_scope filtering inside unscoped. Plan-canonical. Preserves today's audit-query semantic.",
+      "area": "unscoped-semantics",
+      "phase": "01",
+      "date": "2026-04-28"
+    }
+  ],
+  "inferred": [
+    {
+      "id": "REQ-06",
+      "text": "Resolver protocol shape change is a documented breaking change for the v0.2 release; CHANGELOG and README must include migration notes for custom Config.scope_resolver implementations.",
+      "priority": "Must-have",
+      "source": "Phase 1 discussion: resolver-protocol"
+    },
+    {
+      "id": "REQ-06",
+      "text": "spec/regressions/review_round_2_scope_leak_spec.rb and review_round_3_collision_spec.rb gain parallel coverage for the parent_scope axis (atomic-bypass semantic preserved).",
+      "priority": "Must-have",
+      "source": "Phase 1 discussion: unscoped-semantics"
+    }
+  ],
+  "deferred": [
+    {
+      "idea": "Extract a shared Scopable concern between Section and Field once a third caller appears or implementations diverge.",
+      "mentioned_during": "Phase 1 discussion: section-field-sharing",
+      "date": "2026-04-28"
+    },
+    {
+      "idea": "Auto-coerce non-array returns from custom resolvers as [value, nil] (BC-shim alternative). Explicitly rejected in favor of the hard-break path; documented to prevent future reintroduction without a deliberate reversal.",
+      "mentioned_during": "Phase 1 discussion: resolver-protocol",
+      "date": "2026-04-28"
+    }
+  ]
+}
