@@ -32,18 +32,39 @@ module TypedEAV
 
       RESERVED_NAMES = %w[id type class created_at updated_at].freeze
 
-      validates :name, presence: true, uniqueness: { scope: %i[entity_type scope] }
+      validates :name, presence: true, uniqueness: { scope: %i[entity_type scope parent_scope] }
       validates :name, exclusion: { in: RESERVED_NAMES, message: "is reserved" }
       validates :type, presence: true
       validates :entity_type, presence: true
       validate :validate_default_value
       validate :validate_type_allowed_for_entity
+      validate :validate_parent_scope_invariant
 
       # ── Scopes ──
 
-      scope :for_entity, lambda { |entity_type, scope: nil|
-        scopes = [scope, nil].uniq
-        where(entity_type: entity_type, scope: scopes)
+      # Partition lookup across the three-key tuple `(entity_type, scope,
+      # parent_scope)`. Both scope kwargs default to nil and are expanded via
+      # `[val, nil].uniq` so a caller asking for "tenant t1, parent p1" also
+      # picks up the partial-overlap rows: `(t1, nil)` and `(nil, nil)`.
+      #
+      # The orphan-parent invariant (`scope.nil? ⇒ parent_scope.nil?`,
+      # enforced by `validate_parent_scope_invariant` below and the paired
+      # partial unique indexes from the parent_scope migration) lets us write
+      # `parent_scope: [parent_scope, nil].uniq` unconditionally — the
+      # `(nil, parent_scope)` tuple cannot exist in the table, so widening
+      # the IN-list never matches a stray orphan row.
+      #
+      # Backwards compatibility: single-scope callers `for_entity(et, scope: s)`
+      # continue to work with no code change because `parent_scope` defaults
+      # to nil and the `[nil, nil].uniq == [nil]` filter selects only rows
+      # with parent_scope IS NULL — the only rows a single-scope tenant ever
+      # has.
+      scope :for_entity, lambda { |entity_type, scope: nil, parent_scope: nil|
+        where(
+          entity_type: entity_type,
+          scope: [scope, nil].uniq,
+          parent_scope: [parent_scope, nil].uniq,
+        )
       }
 
       scope :sorted, -> { order(sort_order: :asc, name: :asc) }
@@ -228,6 +249,31 @@ module TypedEAV
         return if TypedEAV.registry.type_allowed?(entity_type, self.class)
 
         errors.add(:type, "#{field_type_name} is not allowed for #{entity_type}")
+      end
+
+      # Orphan-parent invariant: when `scope` is nil (global field),
+      # `parent_scope` MUST also be nil. A "global parent_scope" makes no
+      # semantic sense — a field that's global across tenants cannot be
+      # partitioned within one tenant.
+      #
+      # Without this, the paired-partial unique indexes from the
+      # parent_scope migration would silently allow `(scope=nil,
+      # parent_scope='p1')` rows: the global partial (`scope IS NULL`)
+      # omits parent_scope from its column list and the scoped partials
+      # only fire when `scope IS NOT NULL`. The model-level check is the
+      # canonical guard — once enforced, the Value-side
+      # `validate_field_scope_matches_entity` (plan 05) never has to
+      # handle an orphan-field case.
+      #
+      # `blank?` rather than `nil?` rejects empty-string `parent_scope`
+      # too, which would otherwise slip past a `.nil?` check and produce
+      # the same incoherent state as a literal NULL. Same reasoning for
+      # `scope.present?`.
+      def validate_parent_scope_invariant
+        return if parent_scope.blank?
+        return if scope.present?
+
+        errors.add(:parent_scope, "cannot be set when scope is blank")
       end
     end
   end
