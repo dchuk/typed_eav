@@ -135,15 +135,43 @@ module TypedEAV
     # field with the same entity_type but a different scope would still
     # attach. Reject unless the field's scope matches the entity's
     # typed_eav_scope (globals, scope=NULL, remain shared).
+    #
+    # Two-axis check: when `field.parent_scope` is set, also enforce that
+    # `entity.typed_eav_parent_scope` matches. The Field-level orphan-parent
+    # invariant (`Field::Base#validate_parent_scope_invariant`) guarantees
+    # `field.parent_scope.present?` implies `field.scope.present?`, so the
+    # scope-axis check above has already validated the scope half by the
+    # time we reach the parent_scope branch. Same `errors.add(:field, :invalid)`
+    # error key/value as today — no new symbol introduced.
+    # rubocop:disable Metrics/AbcSize -- two axis-checks (scope + parent_scope) with respond_to? + match guards belong in one validator; splitting would obscure that they share a single error symbol and that the parent_scope branch trusts the Field-level orphan-parent invariant.
     def validate_field_scope_matches_entity
       return unless field && entity
-      return if field.scope.nil?
-      return unless entity.respond_to?(:typed_eav_scope)
 
-      entity_scope = entity.typed_eav_scope
-      return if entity_scope && field.scope == entity_scope.to_s
+      # Scope axis: skip when the field is global (scope nil). Otherwise the
+      # entity must declare typed_eav_scope (host opted into has_typed_eav)
+      # and its scope must match the field's.
+      if field.scope.present?
+        return errors.add(:field, :invalid) unless entity.respond_to?(:typed_eav_scope)
+
+        entity_scope = entity.typed_eav_scope
+        return errors.add(:field, :invalid) unless entity_scope && field.scope == entity_scope.to_s
+      end
+
+      # Parent-scope axis: only fires when field.parent_scope is set. The
+      # `respond_to?(:typed_eav_parent_scope)` check is redundant for hosts
+      # that went through `has_typed_eav` (the InstanceMethods mixin defines
+      # the method unconditionally now), but kept for the rare path where
+      # external code instantiates Value records bypassing has_typed_eav —
+      # the same pattern as the scope-axis check above.
+      return if field.parent_scope.blank?
+
+      return errors.add(:field, :invalid) unless entity.respond_to?(:typed_eav_parent_scope)
+
+      entity_parent_scope = entity.typed_eav_parent_scope
+      return if entity_parent_scope && field.parent_scope == entity_parent_scope.to_s
 
       errors.add(:field, :invalid)
     end
+    # rubocop:enable Metrics/AbcSize
   end
 end

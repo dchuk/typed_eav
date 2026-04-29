@@ -31,15 +31,33 @@ module TypedEAV
   module HasTypedEAV
     extend ActiveSupport::Concern
 
-    # Indexes field definitions by name with deterministic collision
-    # resolution: when a global (scope=NULL) and a scoped field share a
-    # name, the scoped row wins. `for_entity(name, scope:)` returns both
-    # rows on a collision, and a bare `index_by(&:name)` would let DB row
-    # order pick the winner. Shared by the class-query path
+    # Indexes field definitions by name with deterministic three-way
+    # collision resolution: when global (scope=NULL, parent_scope=NULL),
+    # scope-only (scope set, parent_scope=NULL), and full-triple (both set)
+    # fields share a name, the most-specific row wins.
+    #
+    # Sort key `[scope.nil? ? 0 : 1, parent_scope.nil? ? 0 : 1]` orders rows:
+    #   [0, 0] global              (least specific) → comes first
+    #   [1, 0] scope-only          (middle)
+    #   [1, 1] full triple         (most specific)  → comes last
+    #
+    # `index_by(&:name)` keeps the LAST entry on duplicate keys (Rails
+    # convention via `Array#to_h`), so most-specific wins. The two-key sort
+    # extends the prior "scoped beats global" rule into "two-key beats
+    # one-key beats global" without changing the index_by-last-wins
+    # mechanism. The `(scope=NULL, parent_scope=NOT NULL)` slot is unreachable
+    # by construction (orphan-parent invariant in Field::Base), so the
+    # ordering is exhaustive across the three valid shapes.
+    #
+    # `for_entity(name, scope:, parent_scope:)` returns the union across
+    # all three shapes on a collision, and a bare `index_by(&:name)` would
+    # let DB row order pick the winner. Shared by the class-query path
     # (ClassQueryMethods#where_typed_eav) and the instance path
     # (InstanceMethods#typed_eav_defs_by_name) so the two can't drift.
     def self.definitions_by_name(defs)
-      defs.to_a.sort_by { |d| d.scope.nil? ? 0 : 1 }.index_by(&:name)
+      defs.to_a
+          .sort_by { |d| [d.scope.nil? ? 0 : 1, d.parent_scope.nil? ? 0 : 1] }
+          .index_by(&:name)
     end
 
     # Indexes field definitions by name into a multi-map (one name →
@@ -55,13 +73,40 @@ module TypedEAV
       # Register this model as having typed fields.
       #
       # Options:
-      #   scope_method: - method name that returns a scope value (e.g. :tenant_id)
-      #                   for multi-tenant field isolation
-      #   types:        - restrict which field types are allowed (array of symbols)
-      #                   e.g. [:text, :integer, :boolean]
-      #                   default: all types
+      #   scope_method:        - method name that returns a scope value (e.g. :tenant_id)
+      #                          for multi-tenant field isolation. Optional; nil means
+      #                          the model is "global" (no per-tenant partitioning).
+      #   parent_scope_method: - method name that returns a parent_scope value
+      #                          (e.g. :workspace_id) for two-level partitioning under
+      #                          `scope_method:`. Optional; nil means the model uses a
+      #                          single-axis partition. REQUIRES `scope_method:` to also
+      #                          be set — declaring `parent_scope_method:` alone raises
+      #                          `ArgumentError` at class load (see below).
+      #   types:               - restrict which field types are allowed (array of symbols)
+      #                          e.g. [:text, :integer, :boolean]
+      #                          default: all types
+      #
+      # Configuration error: `parent_scope_method:` without `scope_method:` raises
+      # `ArgumentError` at class load time. This closes the silent dead-letter mode
+      # where ambient scope resolution would short-circuit to `[nil, nil]` for a model
+      # declaring parent_scope but no scope, routing every query to the global-only
+      # branch and silently discarding the parent_scope intent.
+      #
       # Public DSL macro modeled on `acts_as_*`; renaming would break callers.
-      def has_typed_eav(scope_method: nil, types: nil) # rubocop:disable Naming/PredicatePrefix
+      def has_typed_eav(scope_method: nil, parent_scope_method: nil, types: nil) # rubocop:disable Naming/PredicatePrefix
+        # Macro-time configuration guard. Failing fast at class-load time is strictly
+        # better than at query time because the misconfiguration is static (a
+        # property of the macro call, not of the request). Closes the silent
+        # dead-letter mode that would otherwise route every parent-scope-aware
+        # query to the global-only branch.
+        if parent_scope_method && !scope_method
+          raise ArgumentError,
+                "has_typed_eav: `parent_scope_method:` requires `scope_method:` to also be set. " \
+                "A model declaring parent_scope without scope is a configuration error — " \
+                "ambient resolution would silently return [nil, nil] and queries would dead-letter. " \
+                "Either add `scope_method: :your_scope_method` or remove `parent_scope_method:`."
+        end
+
         # class_attribute rather than cattr_accessor: class variables are
         # copied-on-write across subclasses and reload well under Rails'
         # code reloader. Normalize the types list to strings once so hot
@@ -69,6 +114,8 @@ module TypedEAV
         # don't have to re-map per call.
         class_attribute :typed_eav_scope_method, instance_accessor: false,
                                                  default: scope_method
+        class_attribute :typed_eav_parent_scope_method, instance_accessor: false,
+                                                        default: parent_scope_method
         class_attribute :allowed_typed_eav_types, instance_accessor: false,
                                                   default: types && types.map(&:to_s).freeze
 
@@ -116,8 +163,18 @@ module TypedEAV
       #     { name: "city", value: "Portland" }   # op defaults to :eq
       #   )
       #
+      # `scope:` and `parent_scope:` behavior:
+      #   - omitted        → resolve from ambient (`with_scope` → resolver → raise/nil)
+      #   - passed a value → use verbatim (explicit override; admin/test path)
+      #   - passed nil     → filter to global-only on that axis (prior behavior)
+      #
+      # Single-scope BC: callers that don't pass `parent_scope:` see no
+      # behavior change. The kwarg defaults to `UNSET_SCOPE` — ambient
+      # resolution applies if the model declares `parent_scope_method:`,
+      # otherwise resolves to nil.
+      #
       # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity -- input normalization + multimap branch + filter dispatch genuinely belong together; splitting hurts readability of the scope-collision logic.
-      def where_typed_eav(*filters, scope: UNSET_SCOPE)
+      def where_typed_eav(*filters, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
         # Normalize input: accept splat args, a single array, a single filter hash,
         # a hash-of-hashes (form params), or ActionController::Parameters.
         filters = filters.map { |f| f.respond_to?(:to_unsafe_h) ? f.to_unsafe_h : f }
@@ -142,19 +199,24 @@ module TypedEAV
 
         filters = Array(filters)
 
-        # Resolve the scope once so we can branch on whether we're inside
-        # `TypedEAV.unscoped { }` (ALL_SCOPES) or a normal single-scope
-        # query. Under ALL_SCOPES the same name can legitimately appear
-        # across multiple tenant partitions; collapsing to one definition
-        # would silently drop all but one tenant's matches. See the
-        # multimap branch below.
-        resolved = resolve_scope(scope)
+        # Resolve the (scope, parent_scope) tuple once so we can branch on
+        # whether we're inside `TypedEAV.unscoped { }` (ALL_SCOPES) or a
+        # normal single-scope query. Under ALL_SCOPES the same name can
+        # legitimately appear across multiple tenant partitions; collapsing
+        # to one definition would silently drop all but one tenant's
+        # matches. See the multimap branch below.
+        resolved = resolve_scope(scope, parent_scope)
         all_scopes = resolved.equal?(ALL_SCOPES)
 
         defs = if all_scopes
+                 # Multimap branch is structurally unchanged — atomic-bypass
+                 # per CONTEXT.md drops both scope AND parent_scope predicates.
+                 # The OR-collapse at field_id level naturally OR's across all
+                 # (scope, parent_scope) combinations.
                  TypedEAV::Field::Base.where(entity_type: name)
                else
-                 TypedEAV::Field::Base.for_entity(name, scope: resolved)
+                 s, ps = resolved
+                 TypedEAV::Field::Base.for_entity(name, scope: s, parent_scope: ps)
                end
 
         if all_scopes
@@ -212,43 +274,95 @@ module TypedEAV
       #   Contact.with_field("active", true)      # op defaults to :eq
       #   Contact.with_field("name", :contains, "smith")
       #
-      def with_field(name, operator_or_value = nil, value = nil, scope: UNSET_SCOPE)
+      # Accepts both `scope:` and `parent_scope:` kwargs with the same
+      # ambient/explicit/nil semantics as `where_typed_eav`. Single-scope
+      # callers (no `parent_scope:`) are unaffected.
+      def with_field(name, operator_or_value = nil, value = nil, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
         if value.nil? && !operator_or_value.is_a?(Symbol)
           # Two-arg form: with_field("name", "value") implies :eq
-          where_typed_eav({ name: name, op: :eq, value: operator_or_value }, scope: scope)
+          where_typed_eav(
+            { name: name, op: :eq, value: operator_or_value },
+            scope: scope, parent_scope: parent_scope,
+          )
         else
-          where_typed_eav({ name: name, op: operator_or_value, value: value }, scope: scope)
+          where_typed_eav(
+            { name: name, op: operator_or_value, value: value },
+            scope: scope, parent_scope: parent_scope,
+          )
         end
       end
 
       # Returns field definitions for this entity type.
       #
-      # `scope:` behavior:
+      # `scope:` and `parent_scope:` behavior:
       #   - omitted        → resolve from ambient (`with_scope` → resolver → raise/nil)
       #   - passed a value → use verbatim (explicit override; admin/test path)
-      #   - passed nil     → filter to global-only fields (prior behavior preserved)
-      def typed_eav_definitions(scope: UNSET_SCOPE)
-        resolved = resolve_scope(scope)
+      #   - passed nil     → filter to global-only on that axis (prior behavior preserved)
+      def typed_eav_definitions(scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
+        resolved = resolve_scope(scope, parent_scope)
         if resolved.equal?(ALL_SCOPES)
           TypedEAV::Field::Base.where(entity_type: name)
         else
-          TypedEAV::Field::Base.for_entity(name, scope: resolved)
+          s, ps = resolved
+          TypedEAV::Field::Base.for_entity(name, scope: s, parent_scope: ps)
         end
       end
 
       private
 
-      # Resolves the scope kwarg into a concrete value for field-definition
-      # lookup. See `typed_eav_definitions` docs for kwarg semantics.
-      # Raises `TypedEAV::ScopeRequired` when the model declares
-      # `scope_method:` but ambient scope can't be resolved and fail-closed
-      # mode is enabled.
-      def resolve_scope(explicit)
-        # Explicit override (including explicit nil) — use verbatim.
-        return TypedEAV.normalize_scope(explicit) unless explicit.equal?(UNSET_SCOPE)
-
-        # Inside `TypedEAV.unscoped { }` — skip the scope filter entirely.
+      # Resolves the scope and parent_scope kwargs into a concrete tuple for
+      # field-definition lookup. See `typed_eav_definitions` docs for kwarg
+      # semantics.
+      #
+      # Returns one of:
+      #   - `ALL_SCOPES`          — inside `TypedEAV.unscoped { }`, atomic bypass.
+      #   - `[scope, parent_scope]` — both elements are String or nil.
+      # Raises:
+      #   - `TypedEAV::ScopeRequired` when the model declares `scope_method:`
+      #     but ambient scope can't be resolved and `require_scope` is true.
+      #
+      # Resolver-callable contract violations (`Config.scope_resolver`
+      # returning a bare scalar) raise `ArgumentError` directly inside
+      # `TypedEAV.current_scope` (plan 02), BEFORE this method consumes the
+      # value. By the time `resolve_scope` calls `TypedEAV.current_scope`,
+      # the result is guaranteed to be `nil` or a 2-element Array — no shape
+      # check is duplicated here; that would be dead code.
+      def resolve_scope(explicit_scope, explicit_parent_scope)
+        # Inside `TypedEAV.unscoped { }` — atomic bypass, drops both predicates
+        # entirely (per CONTEXT.md). The multimap branch in `where_typed_eav`
+        # handles ALL_SCOPES; do not narrow to per-axis predicates inside unscoped.
         return ALL_SCOPES if TypedEAV.unscoped?
+
+        # Determine the explicit-overrides path. If EITHER kwarg was passed
+        # explicitly (i.e., not UNSET_SCOPE), normalize what was given and skip
+        # ambient resolution entirely. Mixing explicit + ambient resolution
+        # within one call would be confusing; explicit wins for the whole tuple.
+        explicit_given = !explicit_scope.equal?(UNSET_SCOPE) || !explicit_parent_scope.equal?(UNSET_SCOPE)
+
+        if explicit_given
+          # Per-slot normalize: an explicit kwarg passes through `normalize_scope`
+          # to coerce scalars/AR-records to strings, with UNSET_SCOPE collapsing
+          # to nil for the corresponding slot. We pass `[value, nil]` to extract
+          # the first slot and `[nil, value]` to extract the second so the
+          # public `normalize_scope` BC contract (used by with_scope) handles
+          # the per-slot coercion uniformly.
+          s = if explicit_scope.equal?(UNSET_SCOPE)
+                nil
+              else
+                TypedEAV.normalize_scope([explicit_scope, nil]).first
+              end
+          ps = if explicit_parent_scope.equal?(UNSET_SCOPE)
+                 nil
+               else
+                 TypedEAV.normalize_scope([nil, explicit_parent_scope]).last
+               end
+          # Orphan-parent invariant at the read layer: a request for parent_scope
+          # without scope is dead-letter (no rows can match — the Field-level
+          # validator forbids `(scope=NULL, parent_scope=NOT NULL)` rows). Don't
+          # raise here — just narrow the predicate. The Field-level invariant
+          # (plan 03) prevents the corresponding write.
+          return [s, ps]
+        end
 
         # Models that did NOT opt into scoping must NOT see ambient scope.
         # If the host declared `has_typed_eav` without `scope_method:`, it
@@ -259,23 +373,34 @@ module TypedEAV
         # leak cross-model ambient state into a model that never opted in.
         # An explicit `scope:` kwarg (handled above) still overrides this, so
         # admin/test paths retain the ability to query arbitrary scopes.
-        return nil unless typed_eav_scope_method
+        #
+        # NOTE: a model with `parent_scope_method:` but no `scope_method:` is
+        # impossible to construct — the macro-time guard in `has_typed_eav`
+        # raises `ArgumentError` at class-load time. If we get here, either
+        # both are set or only `scope_method` is set, never only
+        # `parent_scope_method`.
+        return [nil, nil] unless typed_eav_scope_method
 
-        # Ambient resolver (via `with_scope` stack or configured lambda).
+        # Ambient resolver (via `with_scope` stack or configured lambda). The
+        # return value is already validated as `nil | [a, b]` by
+        # `TypedEAV.current_scope` — no shape check needed here.
         resolved = TypedEAV.current_scope
-        return resolved unless resolved.nil?
-
-        # Fail-closed: the model opted into scoping (`scope_method:` declared)
-        # but nothing resolved. Raise so data can't leak across partitions.
-        if typed_eav_scope_method && TypedEAV.config.require_scope
-          raise TypedEAV::ScopeRequired,
-                "No ambient scope resolvable for #{name}. " \
-                "Wrap the call in `TypedEAV.with_scope(value) { ... }`, " \
-                "configure `TypedEAV.config.scope_resolver`, or use " \
-                "`TypedEAV.unscoped { ... }` to deliberately bypass."
+        if resolved.nil?
+          # Fail-closed: the model opted into scoping (`scope_method:` declared)
+          # but nothing resolved. Raise so data can't leak across partitions.
+          if TypedEAV.config.require_scope
+            raise TypedEAV::ScopeRequired,
+                  "No ambient scope resolvable for #{name}. " \
+                  "Wrap the call in `TypedEAV.with_scope(value) { ... }`, " \
+                  "configure `TypedEAV.config.scope_resolver`, or use " \
+                  "`TypedEAV.unscoped { ... }` to deliberately bypass."
+          end
+          return [nil, nil]
         end
 
-        nil
+        # `resolved` is guaranteed to be a 2-element Array by current_scope's
+        # contract (plan 02). Return verbatim — both halves already normalized.
+        resolved
       end
     end
 
@@ -285,7 +410,10 @@ module TypedEAV
     module InstanceMethods
       # The field definitions available for this record
       def typed_eav_definitions
-        self.class.typed_eav_definitions(scope: typed_eav_scope)
+        self.class.typed_eav_definitions(
+          scope: typed_eav_scope,
+          parent_scope: typed_eav_parent_scope,
+        )
       end
 
       # Current scope value (for multi-tenant)
@@ -293,6 +421,19 @@ module TypedEAV
         return nil unless self.class.typed_eav_scope_method
 
         send(self.class.typed_eav_scope_method)&.to_s
+      end
+
+      # Current parent_scope value (for two-level partitioning).
+      #
+      # Returns nil for models that did not declare `parent_scope_method:` —
+      # the method is defined unconditionally so callers (e.g. the Value-side
+      # cross-axis validator) can `respond_to?` and read uniformly without
+      # branching on `parent_scope_method` configuration. Mirrors the
+      # `&.to_s` normalization on `typed_eav_scope`.
+      def typed_eav_parent_scope
+        return nil unless self.class.typed_eav_parent_scope_method
+
+        send(self.class.typed_eav_parent_scope_method)&.to_s
       end
 
       # Build missing values with defaults for all available fields.

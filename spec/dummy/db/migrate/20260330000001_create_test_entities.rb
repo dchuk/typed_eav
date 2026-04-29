@@ -14,5 +14,12 @@ class CreateTestEntities < ActiveRecord::Migration[7.1]
       t.decimal :price
       t.timestamps
     end
+
+    create_table :projects do |t|
+      t.string :name, null: false
+      t.string :tenant_id
+      t.string :workspace_id
+      t.timestamps
+    end
   end
 end
