@@ -4,13 +4,13 @@
 **Milestone:** Enhancement plan v1
 
 ## Current Phase
-Phase: 1 of 7
-Plans: 0/7
+Phase: 2 of 7 (Pipeline Completions)
+Plans: 0/0
 Progress: 0%
-Status: planned
+Status: pending
 
 ## Phase Status
-- **Phase 1:** Planned (7 plans, waves 0-4)
+- **Phase 1:** ✓ Complete (7 plans / 5 waves shipped, R01 remediation applied, UAT 3/3 pass)
 - **Phase 2:** Pending
 - **Phase 3:** Pending
 - **Phase 4:** Pending
@@ -28,7 +28,7 @@ Status: planned
 | Idempotence key for Phase 6 schema import is `(name, entity_type, scope, parent_scope)` | 2026-04-28 | Using field name alone collapses two tenants' identically-named fields. Key derives directly from Phase 1's partition tuple. |
 
 ## Todos
-None.
+_(All Phase 01 known issues resolved by R01 remediation: 16 scoping_spec entries fixed by plan 06 (commit e5e78a4); 7 rubocop entries accepted as process-exception (typed_eav.gemspec:22-26 — pre-existing, ROADMAP housekeeping item.)_
 
 ## Blockers
 None
@@ -36,3 +36,6 @@ None
 ## Activity Log
 - 2026-04-28: Created Enhancement plan v1 milestone (7 phases)
 - 2026-04-29: Planned phase 01 (two-level scope partitioning) — 7 plans across 5 waves
+- 2026-04-29: Built phase 01 — 7 plans landed (commits 5ff7c30, 52014a3, 6c3afb5, 9c7e916, c628372, e5e78a4, b8fbc91). Suite 440/440 green. Version 0.2.0.
+- 2026-04-29: Phase 01 QA remediation R01 applied (8 commits) — plan-amendments for 11 tracked deviations + known-issue reconciliation (16 resolved, 7 accepted-process-exception)
+- 2026-04-29: Phase 01 UAT 3/3 pass (docs quality, migration guide, validation behavior section)

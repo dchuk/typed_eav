@@ -1,1 +1,442 @@
-{"schema_version":1,"items":{}}
+{
+  "schema_version": 1,
+  "items": {
+    "2700395c": {
+      "summary": "TypedEAV scope enforcement .with_scope accepts an AR-like object and normalizes to id.to_s (spec/lib/typed_eav/scoping_spec.rb:38): assertion-shape mismatch: expected \"42\", got [\"42\", nil] — plan 06 owns rewri...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement .with_scope accepts an AR-like object and normalizes to id.to_s. File: spec/lib/typed_eav/scoping_spec.rb:38. Error: assertion-shape mismatch: expected \"42\", got [\"42\", nil] — plan 06 owns rewriting assertions. Seen 1 time(s). Source: 01-02-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:38"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement .with_scope accepts an AR-like object and normalizes to id.to_s",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:38",
+        "error": "assertion-shape mismatch: expected \"42\", got [\"42\", nil] — plan 06 owns rewriting assertions",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-02-SUMMARY.md"
+      }
+    },
+    "072440ed": {
+      "summary": "TypedEAV scope enforcement .with_scope accepts an AR-like object and normalizes to id.to_s (spec/lib/typed_eav/scoping_spec.rb:38): assertion-shape mismatch: expected \"42\", got [\"42\", nil] — pre-existing plan-...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement .with_scope accepts an AR-like object and normalizes to id.to_s. File: spec/lib/typed_eav/scoping_spec.rb:38. Error: assertion-shape mismatch: expected \"42\", got [\"42\", nil] — pre-existing plan-02 leftover. Seen 1 time(s). Source: 01-05-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:38"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement .with_scope accepts an AR-like object and normalizes to id.to_s",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:38",
+        "error": "assertion-shape mismatch: expected \"42\", got [\"42\", nil] — pre-existing plan-02 leftover",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-05-SUMMARY.md"
+      }
+    },
+    "8283836b": {
+      "summary": "TypedEAV scope enforcement .with_scope restores the prior scope after the block exits (spec/lib/typed_eav/scoping_spec.rb:22): assertion-shape mismatch: expected \"inner\", got [\"inner\", nil] — plan 06 owns...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement .with_scope restores the prior scope after the block exits. File: spec/lib/typed_eav/scoping_spec.rb:22. Error: assertion-shape mismatch: expected \"inner\", got [\"inner\", nil] — plan 06 owns rewriting assertions. Seen 1 time(s). Source: 01-02-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:22"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement .with_scope restores the prior scope after the block exits",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:22",
+        "error": "assertion-shape mismatch: expected \"inner\", got [\"inner\", nil] — plan 06 owns rewriting assertions",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-02-SUMMARY.md"
+      }
+    },
+    "b7d47bb1": {
+      "summary": "TypedEAV scope enforcement .with_scope restores the prior scope after the block exits (spec/lib/typed_eav/scoping_spec.rb:22): assertion-shape mismatch: expected \"inner\", got [\"inner\", nil] — pre-existing...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement .with_scope restores the prior scope after the block exits. File: spec/lib/typed_eav/scoping_spec.rb:22. Error: assertion-shape mismatch: expected \"inner\", got [\"inner\", nil] — pre-existing plan-02 leftover. Seen 1 time(s). Source: 01-05-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:22"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement .with_scope restores the prior scope after the block exits",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:22",
+        "error": "assertion-shape mismatch: expected \"inner\", got [\"inner\", nil] — pre-existing plan-02 leftover",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-05-SUMMARY.md"
+      }
+    },
+    "9fece700": {
+      "summary": "TypedEAV scope enforcement .with_scope sets the ambient scope inside the block (spec/lib/typed_eav/scoping_spec.rb:16): assertion-shape mismatch: expected \"t1\", got [\"t1\", nil] — plan 06 owns rewri...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement .with_scope sets the ambient scope inside the block. File: spec/lib/typed_eav/scoping_spec.rb:16. Error: assertion-shape mismatch: expected \"t1\", got [\"t1\", nil] — plan 06 owns rewriting assertions to expect tuples. Seen 1 time(s). Source: 01-02-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:16"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement .with_scope sets the ambient scope inside the block",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:16",
+        "error": "assertion-shape mismatch: expected \"t1\", got [\"t1\", nil] — plan 06 owns rewriting assertions to expect tuples",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-02-SUMMARY.md"
+      }
+    },
+    "e0c8a328": {
+      "summary": "TypedEAV scope enforcement .with_scope sets the ambient scope inside the block (spec/lib/typed_eav/scoping_spec.rb:16): assertion-shape mismatch: expected \"t1\", got [\"t1\", nil] — pre-existing plan-...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement .with_scope sets the ambient scope inside the block. File: spec/lib/typed_eav/scoping_spec.rb:16. Error: assertion-shape mismatch: expected \"t1\", got [\"t1\", nil] — pre-existing plan-02 leftover, plan 06 owns rewriting assertions to expect tuples. Seen 1 time(s). Source: 01-05-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:16"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement .with_scope sets the ambient scope inside the block",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:16",
+        "error": "assertion-shape mismatch: expected \"t1\", got [\"t1\", nil] — pre-existing plan-02 leftover, plan 06 owns rewriting assertions to expect tuples",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-05-SUMMARY.md"
+      }
+    },
+    "080f1d3e": {
+      "summary": "TypedEAV scope enforcement acts_as_tenant bridge (default resolver) reads ActsAsTenant.current_tenant when ActsAsTenant is defined (spec/lib/typed_eav/scoping_spec.rb:91): assertion-shape mismatch: expected \"99\", got [\"99\", nil] — plan 06 owns rewri...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement acts_as_tenant bridge (default resolver) reads ActsAsTenant.current_tenant when ActsAsTenant is defined. File: spec/lib/typed_eav/scoping_spec.rb:91. Error: assertion-shape mismatch: expected \"99\", got [\"99\", nil] — plan 06 owns rewriting assertions. Seen 1 time(s). Source: 01-02-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:91"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement acts_as_tenant bridge (default resolver) reads ActsAsTenant.current_tenant when ActsAsTenant is defined",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:91",
+        "error": "assertion-shape mismatch: expected \"99\", got [\"99\", nil] — plan 06 owns rewriting assertions",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-02-SUMMARY.md"
+      }
+    },
+    "28551c2b": {
+      "summary": "TypedEAV scope enforcement acts_as_tenant bridge (default resolver) reads ActsAsTenant.current_tenant when ActsAsTenant is defined (spec/lib/typed_eav/scoping_spec.rb:91): assertion-shape mismatch: expected \"99\", got [\"99\", nil] — pre-existing plan-...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement acts_as_tenant bridge (default resolver) reads ActsAsTenant.current_tenant when ActsAsTenant is defined. File: spec/lib/typed_eav/scoping_spec.rb:91. Error: assertion-shape mismatch: expected \"99\", got [\"99\", nil] — pre-existing plan-02 leftover. Seen 1 time(s). Source: 01-05-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:91"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement acts_as_tenant bridge (default resolver) reads ActsAsTenant.current_tenant when ActsAsTenant is defined",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:91",
+        "error": "assertion-shape mismatch: expected \"99\", got [\"99\", nil] — pre-existing plan-02 leftover",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-05-SUMMARY.md"
+      }
+    },
+    "17a2b25c": {
+      "summary": "TypedEAV scope enforcement fail-closed enforcement on scoped models … does NOT raise when the resolver returns a value (spec/lib/typed_eav/scoping_spec.rb:140): ArgumentError raised by current_scope because the spec stubs the resolver wit...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement fail-closed enforcement on scoped models … does NOT raise when the resolver returns a value. File: spec/lib/typed_eav/scoping_spec.rb:140. Error: ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar (line 142) — pre-existing plan-02 leftover. Seen 1 time(s). Source: 01-05-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:140"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement fail-closed enforcement on scoped models … does NOT raise when the resolver returns a value",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:140",
+        "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar (line 142) — pre-existing plan-02 leftover",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-05-SUMMARY.md"
+      }
+    },
+    "97ce774b": {
+      "summary": "TypedEAV scope enforcement fail-closed enforcement on scoped models … does NOT raise when the resolver returns a value (spec/lib/typed_eav/scoping_spec.rb:140): ArgumentError raised by current_scope because the spec stubs the resolver wit...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement fail-closed enforcement on scoped models … does NOT raise when the resolver returns a value. File: spec/lib/typed_eav/scoping_spec.rb:140. Error: ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar (line 142); plan 06 owns updating resolver stubs. Seen 1 time(s). Source: 01-02-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:140"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement fail-closed enforcement on scoped models … does NOT raise when the resolver returns a value",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:140",
+        "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar (line 142); plan 06 owns updating resolver stubs",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-02-SUMMARY.md"
+      }
+    },
+    "57a8504b": {
+      "summary": "TypedEAV scope enforcement resolver chain normalizes AR-record return values from the resolver (spec/lib/typed_eav/scoping_spec.rb:79): ArgumentError raised by current_scope because the spec stubs the resolver wit...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement resolver chain normalizes AR-record return values from the resolver. File: spec/lib/typed_eav/scoping_spec.rb:79. Error: ArgumentError raised by current_scope because the spec stubs the resolver with a bare AR record (not a tuple) — pre-existing plan-02 leftover. Seen 1 time(s). Source: 01-05-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:79"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement resolver chain normalizes AR-record return values from the resolver",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:79",
+        "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare AR record (not a tuple) — pre-existing plan-02 leftover",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-05-SUMMARY.md"
+      }
+    },
+    "5fd1f960": {
+      "summary": "TypedEAV scope enforcement resolver chain normalizes AR-record return values from the resolver (spec/lib/typed_eav/scoping_spec.rb:79): ArgumentError raised by current_scope because the spec stubs the resolver wit...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement resolver chain normalizes AR-record return values from the resolver. File: spec/lib/typed_eav/scoping_spec.rb:79. Error: ArgumentError raised by current_scope because the spec stubs the resolver with a bare AR record (not a tuple); plan 06 owns updating resolver stubs. Seen 1 time(s). Source: 01-02-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:79"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement resolver chain normalizes AR-record return values from the resolver",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:79",
+        "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare AR record (not a tuple); plan 06 owns updating resolver stubs",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-02-SUMMARY.md"
+      }
+    },
+    "dc72c200": {
+      "summary": "TypedEAV scope enforcement resolver chain uses the configured resolver when no block is active (spec/lib/typed_eav/scoping_spec.rb:67): ArgumentError raised by current_scope because the spec stubs the resolver wit...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement resolver chain uses the configured resolver when no block is active. File: spec/lib/typed_eav/scoping_spec.rb:67. Error: ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar; the Phase 1 strict contract requires a tuple — pre-existing plan-02 leftover. Seen 1 time(s). Source: 01-05-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:67"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement resolver chain uses the configured resolver when no block is active",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:67",
+        "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar; the Phase 1 strict contract requires a tuple — pre-existing plan-02 leftover",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-05-SUMMARY.md"
+      }
+    },
+    "ee0b612d": {
+      "summary": "TypedEAV scope enforcement resolver chain uses the configured resolver when no block is active (spec/lib/typed_eav/scoping_spec.rb:67): ArgumentError raised by current_scope because the spec stubs the resolver wit...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement resolver chain uses the configured resolver when no block is active. File: spec/lib/typed_eav/scoping_spec.rb:67. Error: ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar; the new Phase 1 strict contract requires a tuple — plan 06 owns updating resolver stubs. Seen 1 time(s). Source: 01-02-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:67"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement resolver chain uses the configured resolver when no block is active",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:67",
+        "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar; the new Phase 1 strict contract requires a tuple — plan 06 owns updating resolver stubs",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-02-SUMMARY.md"
+      }
+    },
+    "0462db36": {
+      "summary": "TypedEAV scope enforcement resolver chain with_scope wins over the configured resolver (spec/lib/typed_eav/scoping_spec.rb:72): assertion-shape mismatch: expected \"from_block\", got [\"from_block\", nil] — pl...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement resolver chain with_scope wins over the configured resolver. File: spec/lib/typed_eav/scoping_spec.rb:72. Error: assertion-shape mismatch: expected \"from_block\", got [\"from_block\", nil] — plan 06 owns rewriting assertions. Seen 1 time(s). Source: 01-02-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:72"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement resolver chain with_scope wins over the configured resolver",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:72",
+        "error": "assertion-shape mismatch: expected \"from_block\", got [\"from_block\", nil] — plan 06 owns rewriting assertions",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-02-SUMMARY.md"
+      }
+    },
+    "b1f0b97a": {
+      "summary": "TypedEAV scope enforcement resolver chain with_scope wins over the configured resolver (spec/lib/typed_eav/scoping_spec.rb:72): assertion-shape mismatch: expected \"from_block\", got [\"from_block\", nil] — pr...",
+      "context": "Known issue from phase 01. Test: TypedEAV scope enforcement resolver chain with_scope wins over the configured resolver. File: spec/lib/typed_eav/scoping_spec.rb:72. Error: assertion-shape mismatch: expected \"from_block\", got [\"from_block\", nil] — pre-existing plan-02 leftover. Seen 1 time(s). Source: 01-05-SUMMARY.md. Disposition: unresolved.",
+      "files": [
+        "spec/lib/typed_eav/scoping_spec.rb:72"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "TypedEAV scope enforcement resolver chain with_scope wins over the configured resolver",
+        "file": "spec/lib/typed_eav/scoping_spec.rb:72",
+        "error": "assertion-shape mismatch: expected \"from_block\", got [\"from_block\", nil] — pre-existing plan-02 leftover",
+        "source_kind": "registry",
+        "disposition": "unresolved",
+        "source_path": "01-05-SUMMARY.md"
+      }
+    },
+    "d04d129f": {
+      "summary": "rubocop (typed_eav.gemspec:22-26): Layout/HashAlignment: hash literal keys not aligned in metadata{} block (5 oc...",
+      "context": "Known issue from phase 01. Test: rubocop. File: typed_eav.gemspec:22-26. Error: Layout/HashAlignment: hash literal keys not aligned in metadata{} block (5 occurrences). Verified pre-existing at HEAD e5e78a4 before plan 01-07 started; no file in this plan touched typed_eav.gemspec.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "typed_eav.gemspec:22-26"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "rubocop",
+        "file": "typed_eav.gemspec:22-26",
+        "error": "Layout/HashAlignment: hash literal keys not aligned in metadata{} block (5 occurrences). Verified pre-existing at HEAD e5e78a4 before plan 01-07 started; no file in this plan touched typed_eav.gemspec.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
+    },
+    "99094394": {
+      "summary": "rubocop Layout/HashAlignment (5 offenses) (typed_eav.gemspec:22-26): 5 Layout/HashAlignment offenses in metadata{} block hash keys. Confirmed pre-...",
+      "context": "Known issue from phase 01. Test: rubocop Layout/HashAlignment (5 offenses). File: typed_eav.gemspec:22-26. Error: 5 Layout/HashAlignment offenses in metadata{} block hash keys. Confirmed pre-existing: bundle exec rubocop typed_eav.gemspec reports 5 offenses at lines 22-26. No file in this phase touched typed_eav.gemspec. Flagged for housekeeping per ROADMAP.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "typed_eav.gemspec:22-26"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "rubocop Layout/HashAlignment (5 offenses)",
+        "file": "typed_eav.gemspec:22-26",
+        "error": "5 Layout/HashAlignment offenses in metadata{} block hash keys. Confirmed pre-existing: bundle exec rubocop typed_eav.gemspec reports 5 offenses at lines 22-26. No file in this phase touched typed_eav.gemspec. Flagged for housekeeping per ROADMAP.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
+    },
+    "bf6b7384": {
+      "summary": "rubocop Layout/HashAlignment (offense 1) (typed_eav.gemspec:22): Layout/HashAlignment: Align the keys of a hash literal if they span more than...",
+      "context": "Known issue from phase 01. Test: rubocop Layout/HashAlignment (offense 1). File: typed_eav.gemspec:22. Error: Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "typed_eav.gemspec:22"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "rubocop Layout/HashAlignment (offense 1)",
+        "file": "typed_eav.gemspec:22",
+        "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
+    },
+    "a6a39615": {
+      "summary": "rubocop Layout/HashAlignment (offense 2) (typed_eav.gemspec:23): Layout/HashAlignment: Align the keys of a hash literal if they span more than...",
+      "context": "Known issue from phase 01. Test: rubocop Layout/HashAlignment (offense 2). File: typed_eav.gemspec:23. Error: Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "typed_eav.gemspec:23"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "rubocop Layout/HashAlignment (offense 2)",
+        "file": "typed_eav.gemspec:23",
+        "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
+    },
+    "98fd8203": {
+      "summary": "rubocop Layout/HashAlignment (offense 3) (typed_eav.gemspec:24): Layout/HashAlignment: Align the keys of a hash literal if they span more than...",
+      "context": "Known issue from phase 01. Test: rubocop Layout/HashAlignment (offense 3). File: typed_eav.gemspec:24. Error: Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "typed_eav.gemspec:24"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "rubocop Layout/HashAlignment (offense 3)",
+        "file": "typed_eav.gemspec:24",
+        "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
+    },
+    "56a33f0d": {
+      "summary": "rubocop Layout/HashAlignment (offense 4) (typed_eav.gemspec:25): Layout/HashAlignment: Align the keys of a hash literal if they span more than...",
+      "context": "Known issue from phase 01. Test: rubocop Layout/HashAlignment (offense 4). File: typed_eav.gemspec:25. Error: Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "typed_eav.gemspec:25"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "rubocop Layout/HashAlignment (offense 4)",
+        "file": "typed_eav.gemspec:25",
+        "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
+    },
+    "61b27064": {
+      "summary": "rubocop Layout/HashAlignment (offense 5) (typed_eav.gemspec:26): Layout/HashAlignment: Align the keys of a hash literal if they span more than...",
+      "context": "Known issue from phase 01. Test: rubocop Layout/HashAlignment (offense 5). File: typed_eav.gemspec:26. Error: Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "typed_eav.gemspec:26"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "01",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "test": "rubocop Layout/HashAlignment (offense 5)",
+        "file": "typed_eav.gemspec:26",
+        "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
+    }
+  }
+}

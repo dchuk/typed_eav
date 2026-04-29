@@ -1,0 +1,259 @@
+{
+  "schema_version": 1,
+  "phase": "01",
+  "issues": [
+    {
+      "test": "TypedEAV scope enforcement .with_scope accepts an AR-like object and normalizes to id.to_s",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:38",
+      "error": "assertion-shape mismatch: expected \"42\", got [\"42\", nil] — plan 06 owns rewriting assertions",
+      "first_seen_in": "01-02-SUMMARY.md",
+      "last_seen_in": "01-02-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement .with_scope accepts an AR-like object and normalizes to id.to_s",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:38",
+      "error": "assertion-shape mismatch: expected \"42\", got [\"42\", nil] — pre-existing plan-02 leftover",
+      "first_seen_in": "01-05-SUMMARY.md",
+      "last_seen_in": "01-05-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement .with_scope restores the prior scope after the block exits",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:22",
+      "error": "assertion-shape mismatch: expected \"inner\", got [\"inner\", nil] — plan 06 owns rewriting assertions",
+      "first_seen_in": "01-02-SUMMARY.md",
+      "last_seen_in": "01-02-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement .with_scope restores the prior scope after the block exits",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:22",
+      "error": "assertion-shape mismatch: expected \"inner\", got [\"inner\", nil] — pre-existing plan-02 leftover",
+      "first_seen_in": "01-05-SUMMARY.md",
+      "last_seen_in": "01-05-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement .with_scope sets the ambient scope inside the block",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:16",
+      "error": "assertion-shape mismatch: expected \"t1\", got [\"t1\", nil] — plan 06 owns rewriting assertions to expect tuples",
+      "first_seen_in": "01-02-SUMMARY.md",
+      "last_seen_in": "01-02-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement .with_scope sets the ambient scope inside the block",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:16",
+      "error": "assertion-shape mismatch: expected \"t1\", got [\"t1\", nil] — pre-existing plan-02 leftover, plan 06 owns rewriting assertions to expect tuples",
+      "first_seen_in": "01-05-SUMMARY.md",
+      "last_seen_in": "01-05-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement acts_as_tenant bridge (default resolver) reads ActsAsTenant.current_tenant when ActsAsTenant is defined",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:91",
+      "error": "assertion-shape mismatch: expected \"99\", got [\"99\", nil] — plan 06 owns rewriting assertions",
+      "first_seen_in": "01-02-SUMMARY.md",
+      "last_seen_in": "01-02-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement acts_as_tenant bridge (default resolver) reads ActsAsTenant.current_tenant when ActsAsTenant is defined",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:91",
+      "error": "assertion-shape mismatch: expected \"99\", got [\"99\", nil] — pre-existing plan-02 leftover",
+      "first_seen_in": "01-05-SUMMARY.md",
+      "last_seen_in": "01-05-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement fail-closed enforcement on scoped models … does NOT raise when the resolver returns a value",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:140",
+      "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar (line 142) — pre-existing plan-02 leftover",
+      "first_seen_in": "01-05-SUMMARY.md",
+      "last_seen_in": "01-05-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement fail-closed enforcement on scoped models … does NOT raise when the resolver returns a value",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:140",
+      "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar (line 142); plan 06 owns updating resolver stubs",
+      "first_seen_in": "01-02-SUMMARY.md",
+      "last_seen_in": "01-02-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement resolver chain normalizes AR-record return values from the resolver",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:79",
+      "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare AR record (not a tuple) — pre-existing plan-02 leftover",
+      "first_seen_in": "01-05-SUMMARY.md",
+      "last_seen_in": "01-05-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement resolver chain normalizes AR-record return values from the resolver",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:79",
+      "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare AR record (not a tuple); plan 06 owns updating resolver stubs",
+      "first_seen_in": "01-02-SUMMARY.md",
+      "last_seen_in": "01-02-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement resolver chain uses the configured resolver when no block is active",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:67",
+      "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar; the Phase 1 strict contract requires a tuple — pre-existing plan-02 leftover",
+      "first_seen_in": "01-05-SUMMARY.md",
+      "last_seen_in": "01-05-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement resolver chain uses the configured resolver when no block is active",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:67",
+      "error": "ArgumentError raised by current_scope because the spec stubs the resolver with a bare scalar; the new Phase 1 strict contract requires a tuple — plan 06 owns updating resolver stubs",
+      "first_seen_in": "01-02-SUMMARY.md",
+      "last_seen_in": "01-02-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement resolver chain with_scope wins over the configured resolver",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:72",
+      "error": "assertion-shape mismatch: expected \"from_block\", got [\"from_block\", nil] — plan 06 owns rewriting assertions",
+      "first_seen_in": "01-02-SUMMARY.md",
+      "last_seen_in": "01-02-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "TypedEAV scope enforcement resolver chain with_scope wins over the configured resolver",
+      "file": "spec/lib/typed_eav/scoping_spec.rb:72",
+      "error": "assertion-shape mismatch: expected \"from_block\", got [\"from_block\", nil] — pre-existing plan-02 leftover",
+      "first_seen_in": "01-05-SUMMARY.md",
+      "last_seen_in": "01-05-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "rubocop",
+      "file": "typed_eav.gemspec:22-26",
+      "error": "Layout/HashAlignment: hash literal keys not aligned in metadata{} block (5 occurrences). Verified pre-existing at HEAD e5e78a4 before plan 01-07 started; no file in this plan touched typed_eav.gemspec.",
+      "first_seen_in": "01-07-SUMMARY.md",
+      "last_seen_in": "01-07-SUMMARY.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "rubocop Layout/HashAlignment (5 offenses)",
+      "file": "typed_eav.gemspec:22-26",
+      "error": "5 Layout/HashAlignment offenses in metadata{} block hash keys. Confirmed pre-existing: bundle exec rubocop typed_eav.gemspec reports 5 offenses at lines 22-26. No file in this phase touched typed_eav.gemspec. Flagged for housekeeping per ROADMAP.",
+      "first_seen_in": "01-VERIFICATION.md",
+      "last_seen_in": "01-VERIFICATION.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "rubocop Layout/HashAlignment (offense 1)",
+      "file": "typed_eav.gemspec:22",
+      "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
+      "first_seen_in": "01-VERIFICATION.md",
+      "last_seen_in": "01-VERIFICATION.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "rubocop Layout/HashAlignment (offense 2)",
+      "file": "typed_eav.gemspec:23",
+      "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
+      "first_seen_in": "01-VERIFICATION.md",
+      "last_seen_in": "01-VERIFICATION.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "rubocop Layout/HashAlignment (offense 3)",
+      "file": "typed_eav.gemspec:24",
+      "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
+      "first_seen_in": "01-VERIFICATION.md",
+      "last_seen_in": "01-VERIFICATION.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "rubocop Layout/HashAlignment (offense 4)",
+      "file": "typed_eav.gemspec:25",
+      "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
+      "first_seen_in": "01-VERIFICATION.md",
+      "last_seen_in": "01-VERIFICATION.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "rubocop Layout/HashAlignment (offense 5)",
+      "file": "typed_eav.gemspec:26",
+      "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
+      "first_seen_in": "01-VERIFICATION.md",
+      "last_seen_in": "01-VERIFICATION.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    }
+  ]
+}
