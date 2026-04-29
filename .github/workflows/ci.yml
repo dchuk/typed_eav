@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: RuboCop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Run RuboCop
+        run: bundle exec rubocop --format github
+
+  test:
+    name: RSpec (Ruby ${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ["3.1", "3.2", "3.3", "3.4"]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      RAILS_ENV: test
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby ${{ matrix.ruby }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+
+      - name: Configure dummy app database
+        run: |
+          cat > spec/dummy/config/database.yml <<'YAML'
+          test:
+            adapter: postgresql
+            database: typed_eav_test
+            host: <%= ENV.fetch("PGHOST", "localhost") %>
+            username: <%= ENV.fetch("PGUSER", "postgres") %>
+            password: <%= ENV.fetch("PGPASSWORD", "") %>
+            encoding: unicode
+          YAML
+
+      - name: Create database and run migrations
+        run: |
+          bundle exec ruby -e '
+            require_relative "spec/dummy/config/environment"
+            config = ActiveRecord::Base.configurations.configs_for(env_name: "test").first
+            ActiveRecord::Tasks::DatabaseTasks.create(config)
+            ActiveRecord::Base.establish_connection(config)
+            paths = [
+              TypedEAV::Engine.root.join("db/migrate").to_s,
+              Rails.root.join("db/migrate").to_s,
+            ]
+            ActiveRecord::MigrationContext.new(paths).migrate
+          '
+
+      - name: Run RSpec
+        run: bundle exec rspec --format documentation
