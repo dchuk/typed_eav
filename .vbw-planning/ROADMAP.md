@@ -95,7 +95,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 
 | Phase | Done | Status | Date |
 |-------|------|--------|------|
-| 1 - Two-level scope partitioning | 0/0 | pending | — |
+| 1 - Two-level scope partitioning | 0/7 | planned | - |
 | 2 - Phase-1 pipeline completions | 0/0 | pending | — |
 | 3 - Event system | 0/0 | pending | — |
 | 4 - Versioning | 0/0 | pending | — |
