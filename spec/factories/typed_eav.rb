@@ -12,6 +12,17 @@ FactoryBot.define do
     price { 19.99 }
   end
 
+  # Two-level partitioned host: declares both `scope_method:` and
+  # `parent_scope_method:` (see spec/dummy/app/models/test_models.rb).
+  # `tenant_id` and `workspace_id` default to nil so a bare `create(:project)`
+  # produces a host with no scope axis active — tests opt in by passing the
+  # values explicitly. Mirrors the `:contact` factory's nil-default pattern.
+  factory :project do
+    sequence(:name) { |n| "Project #{n}" }
+    tenant_id { nil }
+    workspace_id { nil }
+  end
+
   # ── Field Definitions ──
 
   factory :text_field, class: "TypedEAV::Field::Text" do

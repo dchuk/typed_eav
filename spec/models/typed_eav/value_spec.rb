@@ -624,4 +624,36 @@ RSpec.describe TypedEAV::Value, type: :model do
       expect(described_class.new.value).to be_nil
     end
   end
+
+  # Phase 1: two-axis cross-scope guard. The Value-level
+  # `validate_field_scope_matches_entity` already rejects scope-axis
+  # mismatches; Phase 1 extended it to also reject parent_scope-axis
+  # mismatches. Mirrors the existing scope-axis "REVIEW: nested
+  # typed-value must not attach across scope" block in
+  # spec/regressions/known_bugs_spec.rb.
+  describe "REVIEW: nested typed-value must not attach across parent_scope", :unscoped do
+    let!(:full_triple_field) do
+      create(:integer_field, entity_type: "Project", scope: "t1", parent_scope: "w1")
+    end
+
+    it "rejects when entity is in a different parent_scope" do
+      project = Project.create!(name: "p", tenant_id: "t1", workspace_id: "w2")
+      value = described_class.new(entity: project, field: full_triple_field, value: 1)
+      expect(value).not_to be_valid
+      expect(value.errors.added?(:field, :invalid)).to be true
+    end
+
+    it "rejects when entity host has no parent_scope_method (Contact -> full-triple field)" do
+      contact = Contact.create!(name: "c", tenant_id: "t1")
+      value = described_class.new(entity: contact, field: full_triple_field, value: 1)
+      expect(value).not_to be_valid
+      expect(value.errors.added?(:field, :invalid)).to be true
+    end
+
+    it "accepts when both scope and parent_scope match" do
+      project = Project.create!(name: "p", tenant_id: "t1", workspace_id: "w1")
+      value = described_class.new(entity: project, field: full_triple_field, value: 1)
+      expect(value).to be_valid
+    end
+  end
 end

@@ -15,16 +15,16 @@ RSpec.describe "TypedEAV scope enforcement", :scoping do
   describe ".with_scope" do
     it "sets the ambient scope inside the block" do
       TypedEAV.with_scope("t1") do
-        expect(TypedEAV.current_scope).to eq("t1")
+        expect(TypedEAV.current_scope).to eq(["t1", nil])
       end
     end
 
     it "restores the prior scope after the block exits" do
       TypedEAV.with_scope("outer") do
         TypedEAV.with_scope("inner") do
-          expect(TypedEAV.current_scope).to eq("inner")
+          expect(TypedEAV.current_scope).to eq(["inner", nil])
         end
-        expect(TypedEAV.current_scope).to eq("outer")
+        expect(TypedEAV.current_scope).to eq(["outer", nil])
       end
     end
 
@@ -38,7 +38,43 @@ RSpec.describe "TypedEAV scope enforcement", :scoping do
     it "accepts an AR-like object and normalizes to id.to_s" do
       fake_record = Struct.new(:id).new(42)
       TypedEAV.with_scope(fake_record) do
-        expect(TypedEAV.current_scope).to eq("42")
+        expect(TypedEAV.current_scope).to eq(["42", nil])
+      end
+    end
+  end
+
+  describe ".with_scope (tuple form)" do
+    # Phase 1 added a tuple-form input shape for `with_scope`. The
+    # single-arg scalar form (`with_scope("t1")`) keeps its v0.1.x BC
+    # meaning — `[scope, nil]` — and the new tuple form lets callers set
+    # both partition keys at once.
+    it "accepts [scope, parent_scope] and exposes both via current_scope" do
+      TypedEAV.with_scope(%w[t1 w1]) do
+        expect(TypedEAV.current_scope).to eq(%w[t1 w1])
+      end
+    end
+
+    it "scalar form remains backwards-compatible (parent_scope=nil)" do
+      TypedEAV.with_scope("t1") do
+        expect(TypedEAV.current_scope).to eq(["t1", nil])
+      end
+    end
+
+    it "normalizes AR-record halves to id.to_s within a tuple" do
+      tenant = Struct.new(:id).new(7)
+      workspace = Struct.new(:id).new(11)
+      TypedEAV.with_scope([tenant, workspace]) do
+        expect(TypedEAV.current_scope).to eq(%w[7 11])
+      end
+    end
+
+    it "preserves the orphan-parent shape verbatim (validators run elsewhere)" do
+      # `normalize_scope` is permissive on the with_scope block surface —
+      # `[nil, "w1"]` is propagated unchanged. Orphan-parent rejection is
+      # the model validator's job (Field::Base#validate_parent_scope_invariant),
+      # not the resolver layer's.
+      TypedEAV.with_scope([nil, "w1"]) do
+        expect(TypedEAV.current_scope).to eq([nil, "w1"])
       end
     end
   end
@@ -52,7 +88,7 @@ RSpec.describe "TypedEAV scope enforcement", :scoping do
     end
 
     it "makes current_scope return nil even when a resolver would return a value" do
-      TypedEAV.config.scope_resolver = -> { "t1" }
+      TypedEAV.config.scope_resolver = -> { ["t1", nil] }
       TypedEAV.unscoped do
         expect(TypedEAV.current_scope).to be_nil
       end
@@ -65,21 +101,51 @@ RSpec.describe "TypedEAV scope enforcement", :scoping do
     end
 
     it "uses the configured resolver when no block is active" do
-      TypedEAV.config.scope_resolver = -> { "from_resolver" }
-      expect(TypedEAV.current_scope).to eq("from_resolver")
+      TypedEAV.config.scope_resolver = -> { ["from_resolver", nil] }
+      expect(TypedEAV.current_scope).to eq(["from_resolver", nil])
     end
 
     it "with_scope wins over the configured resolver" do
-      TypedEAV.config.scope_resolver = -> { "from_resolver" }
+      TypedEAV.config.scope_resolver = -> { ["from_resolver", nil] }
       TypedEAV.with_scope("from_block") do
-        expect(TypedEAV.current_scope).to eq("from_block")
+        expect(TypedEAV.current_scope).to eq(["from_block", nil])
       end
     end
 
-    it "normalizes AR-record return values from the resolver" do
+    it "normalizes AR-record return values from the resolver (per-slot coercion)" do
       fake_record = Struct.new(:id).new(7)
-      TypedEAV.config.scope_resolver = -> { fake_record }
-      expect(TypedEAV.current_scope).to eq("7")
+      TypedEAV.config.scope_resolver = -> { [fake_record, nil] }
+      expect(TypedEAV.current_scope).to eq(["7", nil])
+    end
+  end
+
+  describe "resolver-callable contract violation" do
+    # Phase 1 made `Config.scope_resolver` a strict-contract surface: it
+    # MUST return `nil` or a 2-element Array. The bare-scalar shape (the
+    # v0.1.x default) raises `ArgumentError` — no auto-coercion. The
+    # BC-shim alternative was rejected during Phase 1 design because
+    # silent coercion would hide a contract violation in user-supplied
+    # resolver code (see lib/typed_eav.rb#current_scope and
+    # 01-CONTEXT.md § "Resolver protocol shape").
+    it "raises ArgumentError when a configured resolver returns a bare scalar" do
+      TypedEAV.config.scope_resolver = -> { "t1" } # v0.1.x style
+      expect do
+        TypedEAV.current_scope
+      end.to raise_error(ArgumentError, /must return a 2-element \[scope, parent_scope\] Array/)
+    end
+
+    it "raises ArgumentError when a resolver returns a 1-element Array" do
+      TypedEAV.config.scope_resolver = -> { ["t1"] }
+      expect do
+        TypedEAV.current_scope
+      end.to raise_error(ArgumentError, /must return a 2-element/)
+    end
+
+    it "raises ArgumentError when a resolver returns a 3-element Array" do
+      TypedEAV.config.scope_resolver = -> { %w[t1 w1 extra] }
+      expect do
+        TypedEAV.current_scope
+      end.to raise_error(ArgumentError, /must return a 2-element/)
     end
   end
 
@@ -93,7 +159,9 @@ RSpec.describe "TypedEAV scope enforcement", :scoping do
       stub_const("ActsAsTenant", Module.new.tap do |m|
         m.define_singleton_method(:current_tenant) { fake_tenant }
       end)
-      expect(TypedEAV.current_scope).to eq("99")
+      # The DEFAULT_SCOPE_RESOLVER returns `[ActsAsTenant.current_tenant, nil]`
+      # — there is no parent_scope analog in the AAT gem.
+      expect(TypedEAV.current_scope).to eq(["99", nil])
     end
 
     it "returns nil when ActsAsTenant is not defined" do
@@ -137,8 +205,8 @@ RSpec.describe "TypedEAV scope enforcement", :scoping do
         end.not_to raise_error
       end
 
-      it "does NOT raise when the resolver returns a value" do
-        TypedEAV.config.scope_resolver = -> { "t1" }
+      it "does NOT raise when the resolver returns a tuple" do
+        TypedEAV.config.scope_resolver = -> { ["t1", nil] }
         expect do
           Contact.where_typed_eav({ name: "age", op: :eq, value: 30 })
         end.not_to raise_error
@@ -189,6 +257,33 @@ RSpec.describe "TypedEAV scope enforcement", :scoping do
         fields = Contact.typed_eav_definitions(scope: nil)
         expect(fields).to contain_exactly(global_field)
       end
+    end
+  end
+
+  describe "typed_eav_definitions parent_scope kwarg" do
+    # New Phase 1 surface: parent_scope: kwarg parallels scope: with the
+    # same UNSET / explicit / nil semantics. The for_entity scope expands
+    # both axes via `[val, nil].uniq`, so a (scope, parent_scope) match
+    # also picks up scope-only and pure-global rows.
+    let!(:full_triple) do
+      create(:integer_field, name: "x_full", entity_type: "Project", scope: "t1", parent_scope: "w1")
+    end
+    let!(:scope_only)  { create(:integer_field, name: "x_scoped", entity_type: "Project", scope: "t1") }
+    let!(:global)      { create(:integer_field, name: "x_global", entity_type: "Project") }
+
+    it "filters to (full triple + scope-only + global) for matching (scope, parent_scope)" do
+      fields = Project.typed_eav_definitions(scope: "t1", parent_scope: "w1")
+      expect(fields).to contain_exactly(full_triple, scope_only, global)
+    end
+
+    it "filters to (scope-only + global) when parent_scope is nil" do
+      fields = Project.typed_eav_definitions(scope: "t1", parent_scope: nil)
+      expect(fields).to contain_exactly(scope_only, global)
+    end
+
+    it "filters to (global only) when both axes are explicitly nil" do
+      fields = Project.typed_eav_definitions(scope: nil, parent_scope: nil)
+      expect(fields).to contain_exactly(global)
     end
   end
 
@@ -308,6 +403,33 @@ RSpec.describe "TypedEAV scope enforcement", :scoping do
     it "returns only global sections when scope is omitted" do
       result = TypedEAV::Section.for_entity("Contact")
       expect(result).to contain_exactly(global_section)
+    end
+  end
+
+  describe "Section#for_entity with parent_scope" do
+    # Symmetric to Field::Base.for_entity — the section partition mirror
+    # was added in Phase 1 to keep the Section/Field invariants aligned.
+    let!(:full)        { TypedEAV::Section.create!(name: "F", code: "f", entity_type: "Project", scope: "t1", parent_scope: "w1") }
+    let!(:scope_only)  { TypedEAV::Section.create!(name: "S", code: "s", entity_type: "Project", scope: "t1") }
+    let!(:global)      { TypedEAV::Section.create!(name: "G", code: "g", entity_type: "Project") }
+    let!(:other_scope) { TypedEAV::Section.create!(name: "O", code: "o", entity_type: "Project", scope: "t2", parent_scope: "w1") }
+
+    it "returns full-triple + scope-only + global for matching axes" do
+      result = TypedEAV::Section.for_entity("Project", scope: "t1", parent_scope: "w1")
+      expect(result).to include(full, scope_only, global)
+      expect(result).not_to include(other_scope)
+    end
+
+    it "returns scope-only + global when parent_scope omitted (kwarg defaults nil)" do
+      # `for_entity` defaults parent_scope to nil, which expands to
+      # `parent_scope IN (NULL)` — picks up only rows with parent_scope IS NULL.
+      result = TypedEAV::Section.for_entity("Project", scope: "t1")
+      expect(result).to include(scope_only, global)
+      expect(result).not_to include(full, other_scope)
+    end
+
+    it "returns only globals when both scope and parent_scope omitted" do
+      expect(TypedEAV::Section.for_entity("Project")).to contain_exactly(global)
     end
   end
 end

@@ -28,6 +28,49 @@ RSpec.describe TypedEAV::Field::Base, type: :model do
       different_scope = build(:text_field, name: "bio", entity_type: "Contact", scope: "tenant_1")
       expect(different_scope).to be_valid
     end
+
+    # Phase 1: uniqueness widened to (entity_type, scope, parent_scope) and
+    # the orphan-parent invariant rejects (parent_scope set, scope blank).
+    # The Field::Base validations contract:
+    #   - same name allowed across different parent_scope partitions
+    #   - duplicate within the same triple still rejected
+    #   - parent_scope.present? && scope.blank? always invalid
+    context "with parent_scope partitioning" do
+      it "allows a same-name field with a different parent_scope under the same scope" do
+        create(:integer_field, name: "x_pp1", entity_type: "Project", scope: "t1")
+        f = build(:integer_field, name: "x_pp1", entity_type: "Project", scope: "t1", parent_scope: "w1")
+        expect(f).to be_valid
+      end
+
+      it "rejects a duplicate within the same (entity_type, scope, parent_scope) tuple" do
+        create(:integer_field, name: "y_pp1", entity_type: "Project", scope: "t1", parent_scope: "w1")
+        dup = build(:integer_field, name: "y_pp1", entity_type: "Project", scope: "t1", parent_scope: "w1")
+        expect(dup).not_to be_valid
+        expect(dup.errors[:name]).to be_present
+      end
+
+      it "allows a same-name field across different parent_scope values" do
+        create(:integer_field, name: "z_pp1", entity_type: "Project", scope: "t1", parent_scope: "w1")
+        f = build(:integer_field, name: "z_pp1", entity_type: "Project", scope: "t1", parent_scope: "w2")
+        expect(f).to be_valid
+      end
+
+      it "rejects an orphan-parent (parent_scope set, scope nil)" do
+        f = build(:integer_field, name: "orphan_pp1", entity_type: "Project", scope: nil, parent_scope: "w1")
+        expect(f).not_to be_valid
+        expect(f.errors[:parent_scope]).to be_present
+      end
+
+      it "accepts (scope nil, parent_scope nil) — pure global" do
+        f = build(:integer_field, name: "global_pp1", entity_type: "Project", scope: nil, parent_scope: nil)
+        expect(f).to be_valid
+      end
+
+      it "accepts (scope set, parent_scope nil) — scope-only (existing shape)" do
+        f = build(:integer_field, name: "scoped_pp1", entity_type: "Project", scope: "t1", parent_scope: nil)
+        expect(f).to be_valid
+      end
+    end
   end
 
   describe "STI resolution" do
