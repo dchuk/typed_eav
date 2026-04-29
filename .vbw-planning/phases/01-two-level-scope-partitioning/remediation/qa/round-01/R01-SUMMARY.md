@@ -5,12 +5,14 @@ title: "QA remediation: plan-amendment for tracked deviations"
 type: remediation
 status: in-progress
 completed:
-tasks_completed: 1
+tasks_completed: 2
 tasks_total: 5
 commit_hashes:
   - a1c01e3
+  - 67dcdf1
 files_modified:
   - .vbw-planning/phases/01-two-level-scope-partitioning/01-01-PLAN.md
+  - .vbw-planning/phases/01-two-level-scope-partitioning/01-02-PLAN.md
   - .vbw-planning/phases/01-two-level-scope-partitioning/remediation/qa/round-01/R01-SUMMARY.md
 deviations: []
 known_issue_outcomes: []
