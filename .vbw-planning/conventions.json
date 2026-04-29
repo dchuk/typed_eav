@@ -1,0 +1,139 @@
+{
+  "conventions": [
+    {
+      "id": "CONV-001",
+      "rule": "Every Ruby file starts with `# frozen_string_literal: true` (excluded only for db/migrate/** and spec/dummy/**)",
+      "source": "auto-detected",
+      "category": "style",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-002",
+      "rule": "Use double-quoted strings; trailing commas in multiline literals/args/hashes; line length 120",
+      "source": "auto-detected",
+      "category": "style",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-003",
+      "rule": "STI field subclasses live one-per-file under app/models/typed_eav/field/ (do not reintroduce a single types.rb)",
+      "source": "auto-detected",
+      "category": "file-structure",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-004",
+      "rule": "Boolean/predicate methods end in `?` (e.g. array_field?, optionable?, unscoped?)",
+      "source": "auto-detected",
+      "category": "naming",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-005",
+      "rule": "Postgres index names use `idx_te_*` prefix to fit the 63-byte identifier limit",
+      "source": "auto-detected",
+      "category": "naming",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-006",
+      "rule": "AR table names are namespaced + snake_case + plural: typed_eav_fields, typed_eav_values, typed_eav_options, typed_eav_sections",
+      "source": "auto-detected",
+      "category": "naming",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-007",
+      "rule": "Inline rubocop disables must include a justification comment on the disable line; pair with a matching enable",
+      "source": "auto-detected",
+      "category": "style",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-008",
+      "rule": "Comments are rationale-first (`why`, not `what`) and often phrased as `Without this, ...`; tied to specific commits where helpful",
+      "source": "auto-detected",
+      "category": "style",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-009",
+      "rule": "User-facing exceptions list available options and tell the caller how to fix it (e.g. ArgumentError messages with `Available fields: ...`)",
+      "source": "auto-detected",
+      "category": "patterns",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-010",
+      "rule": "Internal sentinels declared `private_constant`; documented public sentinels (UNSET_SCOPE, ALL_SCOPES) intentionally are not",
+      "source": "auto-detected",
+      "category": "patterns",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-011",
+      "rule": "RSpec uses opt-in `:unscoped` / `:scoping` example metadata; default is no wrapping (earlier blanket wrapping masked scope-collision bugs)",
+      "source": "auto-detected",
+      "category": "testing",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-012",
+      "rule": "Registry is NOT reset between specs — preserves `has_typed_eav` class-load registrations so registration tests stay meaningful",
+      "source": "auto-detected",
+      "category": "testing",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-013",
+      "rule": "Regression specs live in spec/regressions/; pending tests describe desired (not-yet-fixed) behavior and auto-un-pend when fix lands",
+      "source": "auto-detected",
+      "category": "testing",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-014",
+      "rule": "Conventional Commits: `<type>(<scope>): <subject>` with present-tense imperative; `!` marks breaking changes",
+      "source": "auto-detected",
+      "category": "tooling",
+      "confidence": "high",
+      "detected_from": "CONVENTIONS.md",
+      "added": "2026-04-28"
+    },
+    {
+      "id": "CONV-015",
+      "rule": "Generators ship with explicit Thor `namespace` declarations (fix per commit ccb04b3); fail-closed admin auth hook returns `head :not_found`",
+      "source": "auto-detected",
+      "category": "patterns",
+      "confidence": "high",
+      "detected_from": "STACK.md, CONCERNS.md",
+      "added": "2026-04-28"
+    }
+  ]
+}
