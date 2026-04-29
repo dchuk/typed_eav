@@ -5,11 +5,12 @@ title: "QA remediation: plan-amendment for tracked deviations"
 type: remediation
 status: in-progress
 completed:
-tasks_completed: 3
+tasks_completed: 4
 tasks_total: 5
 commit_hashes:
   - a1c01e3
   - 67dcdf1
+  - PENDING
 files_modified:
   - .vbw-planning/phases/01-two-level-scope-partitioning/01-01-PLAN.md
   - .vbw-planning/phases/01-two-level-scope-partitioning/01-02-PLAN.md
@@ -17,6 +18,7 @@ files_modified:
   - .vbw-planning/phases/01-two-level-scope-partitioning/01-04-PLAN.md
   - .vbw-planning/phases/01-two-level-scope-partitioning/01-05-PLAN.md
   - .vbw-planning/phases/01-two-level-scope-partitioning/01-06-PLAN.md
+  - .vbw-planning/phases/01-two-level-scope-partitioning/01-07-PLAN.md
   - .vbw-planning/phases/01-two-level-scope-partitioning/remediation/qa/round-01/R01-SUMMARY.md
 deviations: []
 known_issue_outcomes: []
@@ -72,6 +74,25 @@ QA round 01 — appending "Plan amendment (R01)" rationale blocks to phase 01 PL
 - `.vbw-planning/phases/01-two-level-scope-partitioning/01-05-PLAN.md` -- amended: appended R01 amendment block documenting DEVIATION-01-05-A (single-commit consolidation, commit `c628372`) and DEVIATION-01-05-B (anticipated 8-failure carryover from 01-02 resolved by 01-06's commit `e5e78a4`).
 - `.vbw-planning/phases/01-two-level-scope-partitioning/01-06-PLAN.md` -- amended: appended R01 amendment block documenting DEVIATION-01-06-A (single-commit consolidation, commit `e5e78a4`) and DEVIATION-01-06-B (corrected task 3 assertion `contain_exactly(project_global)` with the any-explicit-disables-ambient `resolve_scope` rationale citing `lib/typed_eav/has_typed_eav.rb:340`).
 - `.vbw-planning/phases/01-two-level-scope-partitioning/remediation/qa/round-01/R01-SUMMARY.md` -- frontmatter advanced (`tasks_completed: 3`, four new PLAN.md paths added to `files_modified`); Task 3 narrative appended to body. Commit hash for this combined commit will be appended at round close per the established two-step recording pattern (Task 1+2 hashes were recorded in separate `chore(vbw)` commits, e.g., `2e5f76f`).
+
+### Known Issue Outcomes
+- None for this task; known issue outcomes are aggregated at round close.
+
+### Deviations
+- No deviations.
+
+## Task 4: Amend 01-07-PLAN.md with Gemfile.lock files_modified rationale and process-exception note
+
+### What Was Built
+- Appended `## Plan amendment (R01) — Gemfile.lock fallout + process-exception note` block to the end of `01-07-PLAN.md` (after the closing `</output>` tag), capturing two sub-amendments under one header.
+- DEVIATION-01-07-A (plan-amendment): Gemfile.lock added to canonical `files_modified` for the plan. Rationale: Bundler auto-rewrites `Gemfile.lock` to match `lib/typed_eav/version.rb` on the next `bundle exec` invocation; leaving the lock at 0.1.0 against a 0.2.0 version pin would produce a self-inconsistent repo where every subsequent bundler call dirties a tracked file. The plan's task 3 (manual VERSION bump) implicitly covers this — Gemfile.lock change is mechanical fallout from the version constant edit, not a scope expansion. Cited shipped commit `b8fbc91`. Updated canonical files_modified list to four files: README.md, CHANGELOG.md, lib/typed_eav/version.rb, Gemfile.lock.
+- DEVIATION-01-07-B (process-exception, informational only): 5 rubocop `Layout/HashAlignment` offenses in `typed_eav.gemspec:22-26` (the `metadata{}` block hash literal) recorded for completeness with explicit "no plan amendment" disposition. Rationale: pre-existing at HEAD `e5e78a4` before plan 01-07 started (verified by running `bundle exec rubocop typed_eav.gemspec` against the unmodified file at that revision); no file in any phase 01 plan touched `typed_eav.gemspec`; ROADMAP "Housekeeping" already flags these for separate cleanup along with the existing `typed_eav-0.1.0.gem` cleanup item. The offense lives in R01-PLAN.md's `fail_classifications` (as `process-exception`) and `known_issue_resolutions` (as `accepted-process-exception`); no `01-07-PLAN.md` content edit was warranted because the offenses are out-of-scope for this phase by construction.
+- File received only additions (no deletions); `git diff --stat` shows 7 lines added (1 blank line + 1 header + 2 paragraph blocks with surrounding blank lines). Original frontmatter, `<objective>`, `<context>`, `<tasks>`, `<verification>`, `<success_criteria>`, and `<output>` content unchanged.
+- `grep -l "Plan amendment (R01)"` now confirms all 7 phase-01 PLANs (01-01 through 01-07) carry the canonical amendment marker — task 5's final consistency pass will validate this.
+
+### Files Modified
+- `.vbw-planning/phases/01-two-level-scope-partitioning/01-07-PLAN.md` -- amended: appended R01 amendment block documenting DEVIATION-01-07-A (Gemfile.lock as expected files_modified, citing Bundler's mechanical lock-file rewrite on version constant change and shipped commit `b8fbc91`) and DEVIATION-01-07-B (informational process-exception note for 5 pre-existing rubocop offenses in `typed_eav.gemspec:22-26`, no plan content edit warranted because no phase 01 file touched the gemspec).
+- `.vbw-planning/phases/01-two-level-scope-partitioning/remediation/qa/round-01/R01-SUMMARY.md` -- frontmatter advanced (`tasks_completed: 4`, `01-07-PLAN.md` added to `files_modified`, third commit hash placeholder appended); Task 4 narrative appended to body. Commit hash for this task's `chore(vbw)` commit will be filled in after the commit lands.
 
 ### Known Issue Outcomes
 - None for this task; known issue outcomes are aggregated at round close.
