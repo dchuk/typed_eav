@@ -333,7 +333,12 @@ TypedEAV.configure do |c|
 end
 ```
 
-The resolver can return a raw value (`"t1"`, `42`) or an AR record — TypedEAV calls `.id.to_s` when the return value responds to `#id`.
+The resolver MUST return a 2-element Array `[scope, parent_scope]`. Each slot
+accepts a raw value (`"t1"`, `42`), an AR record (TypedEAV calls `.id.to_s`
+on anything that responds to `#id`), or `nil`. If you don't use parent_scope,
+return `[scope, nil]`. A bare scalar return raises `ArgumentError` at the
+next ambient query — see [Migrating from v0.1.x](#migrating-from-v01x) for
+the upgrade path.
 
 ### Block APIs
 
@@ -384,6 +389,87 @@ end
 If your app has existing typed-eav queries that don't yet pass scope, flip `require_scope` to `false` in the initializer. When no scope resolves, queries fall back to **global fields only** (definitions stored with `scope: nil`) instead of raising — they do **not** return all partitions' fields. Audit and fix callers, then flip back to `true`.
 
 To intentionally query across every partition (admin tools, migrations, cross-tenant audits), use the explicit escape hatch `TypedEAV.unscoped { ... }` rather than relying on `require_scope = false`.
+
+### Two-level scoping (`parent_scope`)
+
+When a single tenant axis isn't enough — say, `tenant_id` for the customer AND
+`workspace_id` for an in-tenant partition — declare both:
+
+```ruby
+class Project < ApplicationRecord
+  has_typed_eav scope_method: :tenant_id, parent_scope_method: :workspace_id
+end
+```
+
+Field (and section) definitions partition on the tuple `(entity_type, scope,
+parent_scope)`. A `Project` record reads field definitions in three precedence
+layers: a full-triple `(scope, parent_scope)` match wins, then `(scope, nil)`
+(tenant-wide), then `(nil, nil)` (truly global). The same precedence applies
+to the class-level query path.
+
+`parent_scope_method:` requires `scope_method:` — declaring it without a scope
+method raises at macro-expansion time (no host can have a parent partition
+without a scope partition).
+
+Both `with_scope` and the configured `scope_resolver` carry the tuple now:
+
+```ruby
+TypedEAV.with_scope(["t1", "w1"]) do
+  Project.where_typed_eav({ name: "status", value: "active" })
+end
+
+# Single-axis call still works (parent_scope = nil):
+TypedEAV.with_scope("t1") do
+  Contact.where_typed_eav({ name: "age", op: :gt, value: 21 })
+end
+
+# Custom resolver — MUST return [scope, parent_scope]:
+TypedEAV.configure do |c|
+  c.scope_resolver = -> { [Current.tenant&.id, Current.workspace&.id] }
+end
+```
+
+Per-query overrides accept `parent_scope:` alongside `scope:` on
+`where_typed_eav`, `with_field`, and `typed_eav_definitions`:
+
+```ruby
+Project.where_typed_eav(
+  { name: "priority", value: "high" },
+  scope: "t1",
+  parent_scope: "w1",
+)
+```
+
+When `acts_as_tenant` is loaded, the auto-detected `DEFAULT_SCOPE_RESOLVER`
+returns `[ActsAsTenant.current_tenant, nil]` — the parent_scope slot is `nil`
+because the tenant gem has no parent-scope analog. Configure your own resolver
+when you need both axes.
+
+### Migrating from v0.1.x
+
+The resolver-callable contract is a **breaking change**: any custom
+`Config.scope_resolver` lambda must now return `[scope, parent_scope]` (a
+2-element Array) instead of a bare scalar. A scalar return raises
+`ArgumentError` at the next ambient query so the failure is loud, not silent.
+If you don't use parent_scope, return `[scope, nil]`.
+
+Run `bin/rails typed_eav:install:migrations` to copy the new
+`AddParentScopeToTypedEavPartitions` migration into your app, then
+`bin/rails db:migrate`. The migration is safe on production: it adds a
+nullable `parent_scope` column (catalog-only, instantaneous) and uses
+`CREATE INDEX CONCURRENTLY` for all index changes, so existing rows aren't
+rewritten. Existing fields end up with `parent_scope = NULL` (the
+global-parent shape) and continue to work for every single-scope caller.
+
+See the [CHANGELOG](CHANGELOG.md) for the full upgrade checklist.
+
+### Orphan-parent invariant
+
+A `Field` or `Section` row with `parent_scope` set and `scope` blank is
+invalid — model-level validation rejects it on save. Reason: a "global field
+within one workspace" has no semantic resolution path; the row would never
+match any record's resolver. The paired partial unique indexes rely on this
+invariant.
 
 ### Name collisions across scopes
 
@@ -474,11 +560,14 @@ A few non-obvious contracts worth knowing about up front:
 - **`Json` parses string input**: a JSON string posted from a form is parsed; parse failures surface as `:invalid` rather than being stored as the literal string.
 - **`TextArray` does not support `:contains`**: it backs a jsonb column where SQL `LIKE` doesn't apply. Use `:any_eq` for "array contains element".
 - **Orphaned values are skipped**: if a field row is deleted while values remain, `typed_eav_value` and `typed_eav_hash` silently skip the orphans rather than raising.
-- **Cross-scope writes are rejected**: assigning a `Value` to a record whose `typed_eav_scope` doesn't match the field's `scope` adds a validation error on `:field`.
+- **Cross-scope writes are rejected**: assigning a `Value` to a record whose `typed_eav_scope` doesn't match the field's `scope` adds a validation error on `:field`. The same guard covers the `parent_scope` axis.
+- **Orphan-parent rows rejected**: a `Field` or `Section` row with `parent_scope` set but `scope` blank is invalid. The `Value`-side guard rejects cross-`(scope, parent_scope)` writes too.
 
 ## Database Support
 
 Requires PostgreSQL. The `text_pattern_ops` index on `string_value` and the jsonb `@>` containment operator are Postgres-specific. MySQL/SQLite support would require removing those index types and changing the array query operators.
+
+As of v0.2.0, the paired partial unique indexes cover the three-key partition tuple `(entity_type, scope, parent_scope)`. The orphan-parent invariant means the `WHERE scope IS NULL` partials don't include `parent_scope` — a global row always has `parent_scope` NULL too.
 
 ## Schema
 
