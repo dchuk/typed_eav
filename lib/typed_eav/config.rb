@@ -19,8 +19,31 @@ module TypedEAV
     # loaded so AAT users get zero-config behavior. Apps using any other
     # multi-tenancy primitive (Rails `Current` attributes, a subdomain
     # lookup, a thread-local, etc.) override via `TypedEAV.configure`.
+    #
+    # ## Return-value contract (Phase 1, breaking change from v0.1.x)
+    #
+    # Returns either `nil` (no resolver / opt-out) or a 2-element Array
+    # `[scope, parent_scope]`. The `acts_as_tenant` gem has no
+    # `parent_scope` analog, so the parent slot is unconditionally `nil`.
+    # When AAT is not loaded we return `nil` (the sentinel: no resolver
+    # consulted). When AAT is loaded but `current_tenant` is itself nil
+    # we return `[nil, nil]` (the sentinel: AAT consulted, no tenant) —
+    # intentionally NOT auto-collapsed to nil, to preserve the distinction
+    # between "no resolver" and "resolver returned nothing".
+    #
+    # ## Migration note for v0.1.x custom resolvers
+    #
+    # Custom resolver lambdas configured via `Config.scope_resolver = ->{ ... }`
+    # MUST be updated to return a 2-element Array `[scope, parent_scope]`
+    # (or `nil`). A bare-scalar return — the v0.1.x shape — raises
+    # `ArgumentError` from `TypedEAV.current_scope`. The shim alternative
+    # (auto-coerce scalar to `[scalar, nil]`) was rejected during Phase 1
+    # design; we want the breaking change to be loud, not silent. See the
+    # CHANGELOG and README migration section for the upgrade pattern.
     DEFAULT_SCOPE_RESOLVER = lambda {
-      ::ActsAsTenant.current_tenant if defined?(::ActsAsTenant)
+      next nil unless defined?(::ActsAsTenant)
+
+      [::ActsAsTenant.current_tenant, nil]
     }
 
     # Map of type names to their STI class names.
@@ -52,6 +75,23 @@ module TypedEAV
     # Callable returning the ambient scope (partition key) for class-level
     # queries. Invoked by `TypedEAV.current_scope` when no explicit
     # `scope:` kwarg is passed and no `with_scope` block is active.
+    #
+    # ## Resolver contract (strict — Phase 1 breaking change)
+    #
+    # The resolver MUST return either:
+    #   - `nil`                              — opt out / no scope to resolve
+    #   - `[scope, parent_scope]` 2-Array    — both elements may be `nil`
+    #
+    # Any other shape — most importantly a bare scalar (the v0.1.x shape) —
+    # raises `ArgumentError` in `TypedEAV.current_scope`. There is no
+    # auto-coercion. `parent_scope` non-nil + `scope` nil (orphan parent)
+    # is rejected by model-level validators (plans 03 / 04), NOT here —
+    # this layer is a contract surface, not a validation surface.
+    #
+    # Note: `TypedEAV.with_scope(value)` is a DIFFERENT surface — its block
+    # API is BC-permissive and accepts a scalar. The resolver-callable
+    # contract is strict; the `with_scope` block contract is not. Both
+    # surfaces, two contracts.
     config_accessor :scope_resolver, default: DEFAULT_SCOPE_RESOLVER
 
     # When true, class-level queries on a model that declared
