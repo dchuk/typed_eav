@@ -437,6 +437,44 @@
         "disposition": "accepted-process-exception",
         "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
       }
+    },
+    "5e26a718": {
+      "summary": "rubocop (typed_eav.gemspec:22-26): Layout/HashAlignment: 5 offenses in metadata literal (lines 22-26). Pre-exist...",
+      "context": "Known issue from phase 02. Test: rubocop. File: typed_eav.gemspec:22-26. Error: Layout/HashAlignment: 5 offenses in metadata literal (lines 22-26). Pre-existing on main branch; not in any plan files_modified for phase 02; documented as a known process-exception in STATE.md and acknowledged in 02-01-SUMMARY.md pre_existing_issues.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "typed_eav.gemspec:22-26"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "02",
+        "phase_dir": ".vbw-planning/phases/02-pipeline-completions",
+        "test": "rubocop",
+        "file": "typed_eav.gemspec:22-26",
+        "error": "Layout/HashAlignment: 5 offenses in metadata literal (lines 22-26). Pre-existing on main branch; not in any plan files_modified for phase 02; documented as a known process-exception in STATE.md and acknowledged in 02-01-SUMMARY.md pre_existing_issues.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
+    },
+    "1f3b23ed": {
+      "summary": "rubocop (typed_eav.gemspec:22-26): Layout/HashAlignment — 5 offenses in metadata literal (lines 22-26). Document...",
+      "context": "Known issue from phase 02. Test: rubocop. File: typed_eav.gemspec:22-26. Error: Layout/HashAlignment — 5 offenses in metadata literal (lines 22-26). Documented as a known process-exception in STATE.md; not in any plan files_modified for phase 02.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "typed_eav.gemspec:22-26"
+      ],
+      "added": "2026-04-29",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "02",
+        "phase_dir": ".vbw-planning/phases/02-pipeline-completions",
+        "test": "rubocop",
+        "file": "typed_eav.gemspec:22-26",
+        "error": "Layout/HashAlignment — 5 offenses in metadata literal (lines 22-26). Documented as a known process-exception in STATE.md; not in any plan files_modified for phase 02.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
     }
   }
 }

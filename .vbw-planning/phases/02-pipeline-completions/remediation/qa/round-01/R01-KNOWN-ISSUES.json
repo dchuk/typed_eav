@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "phase": "02",
+  "issues": [
+    {
+      "test": "rubocop",
+      "file": "typed_eav.gemspec:22-26",
+      "error": "Layout/HashAlignment — 5 offenses in metadata literal (lines 22-26). Documented as a known process-exception in STATE.md; not in any plan files_modified for phase 02.",
+      "first_seen_in": "02-VERIFICATION.md",
+      "last_seen_in": "02-VERIFICATION.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "rubocop",
+      "file": "typed_eav.gemspec:22-26",
+      "error": "Layout/HashAlignment: 5 offenses in metadata literal (lines 22-26). Pre-existing on main branch; not in any plan files_modified for phase 02; documented as a known process-exception in STATE.md and acknowledged in 02-01-SUMMARY.md pre_existing_issues.",
+      "first_seen_in": "02-VERIFICATION.md",
+      "last_seen_in": "02-VERIFICATION.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    }
+  ]
+}

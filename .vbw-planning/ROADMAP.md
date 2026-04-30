@@ -9,7 +9,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 ## Phases
 
 - [x] Phase 1: Two-level scope partitioning
-- [ ] Phase 2: Phase-1 pipeline completions
+- [x] Phase 2: Phase-1 pipeline completions
 - [ ] Phase 3: Event system
 - [ ] Phase 4: Versioning
 - [ ] Phase 5: Field type expansion
@@ -96,7 +96,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 | Phase | Done | Status | Date |
 |-------|------|--------|------|
 | 1 - Two-level scope partitioning | 7/7 | complete | 2026-04-29 |
-| 2 - Phase-1 pipeline completions | 0/4 | planned | - |
+| 2 - Phase-1 pipeline completions | 4/4 | complete | 2026-04-29 |
 | 3 - Event system | 0/0 | pending | — |
 | 4 - Versioning | 0/0 | pending | — |
 | 5 - Field type expansion | 0/0 | pending | — |

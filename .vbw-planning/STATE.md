@@ -4,10 +4,10 @@
 **Milestone:** Enhancement plan v1
 
 ## Current Phase
-Phase: 2 of 7 (Pipeline Completions)
-Plans: 0/4
-Progress: 0%
-Status: planned
+Phase: 3 of 7 (Event System)
+Plans: 4/4
+Progress: 100%
+Status: ready
 
 ## Phase Status
 - **Phase 1:** ✓ Complete (7 plans / 5 waves shipped, R01 remediation applied, UAT 3/3 pass)
@@ -37,6 +37,10 @@ _(All Phase 01 known issues resolved by R01 remediation: 16 scoping_spec entries
 - [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 3) (typed_eav.gemspec:24): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-29) (ref:98fd8203)
 - [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 4) (typed_eav.gemspec:25): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-29) (ref:56a33f0d)
 - [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 5) (typed_eav.gemspec:26): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-29) (ref:61b27064)
+
+- [KNOWN-ISSUE] rubocop (typed_eav.gemspec:22-26): Layout/HashAlignment: 5 offenses in metadata literal (lines 22-26). Pre-exist... — accepted as process-exception for this phase (phase 02, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-29) (ref:5e26a718)
+
+- [KNOWN-ISSUE] rubocop (typed_eav.gemspec:22-26): Layout/HashAlignment — 5 offenses in metadata literal (lines 22-26). Document... — accepted as process-exception for this phase (phase 02, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-29) (ref:1f3b23ed)
 
 ## Blockers
 None
