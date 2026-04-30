@@ -4,6 +4,11 @@ require "timeout"
 
 module TypedEAV
   module Field
+    # rubocop:disable Metrics/ClassLength -- Field::Base is the central STI parent: associations,
+    # validations, cascade dispatch, partition-aware ordering helpers, default-value handling,
+    # and the partition-aware backfill all live here together because they share the (entity_type,
+    # scope, parent_scope) partition contract. Splitting into concerns would scatter that contract
+    # and obscure the cross-cutting invariants the validators and helpers enforce together.
     class Base < ApplicationRecord
       self.table_name = "typed_eav_fields"
 
@@ -245,6 +250,75 @@ module TypedEAV
         # no-op
       end
 
+      # ── Backfill ──
+
+      # Backfills existing entities with this field's configured default value.
+      # Iterates entities of `entity_type` in batches of 1000 via
+      # `find_in_batches`, filtering each batch member by the field's
+      # (scope, parent_scope) partition. Each WHOLE batch runs inside one
+      # transaction so:
+      #  - a long-running backfill can be interrupted and resumed (each
+      #    completed batch is committed; the caller re-runs to pick up where
+      #    they stopped — the skip rule re-checks each batch member),
+      #  - per-batch transaction overhead is bounded: at 1M entities × 1000
+      #    per batch, this is ~1000 transactions, not 1M.
+      #
+      # Skip rule (per-record, applied INSIDE the batch loop): skip when the
+      # entity already has a non-nil typed value for this field. A Value row
+      # whose typed column is nil is still a candidate for backfill — the
+      # skip rule is "non-nil typed column," not "Value row exists" (matches
+      # CONTEXT.md).
+      #
+      # Partition match: when field.scope is non-nil, the entity must respond
+      # to typed_eav_scope and the value must match field.scope (as String).
+      # When field.parent_scope is non-nil, same check for typed_eav_parent_scope.
+      # When field.scope is nil (global field), no scope filter — iterate all
+      # entities of entity_type.
+      #
+      # Why find_in_batches (not find_each): we need the batch as a unit so
+      # the transaction boundary aligns with the batch boundary. find_each
+      # yields records one-at-a-time, which would either force per-record
+      # transactions (wrong — burns overhead, contradicts CONTEXT.md) or
+      # require us to buffer batches manually outside AR's batching logic.
+      #
+      # Why explicit `value: default_value` (not the UNSET_VALUE sentinel):
+      # backfill knows the default, so passing it explicitly bypasses the
+      # sentinel resolution path on Value#value=. Explicit `value: x`
+      # continues to store x in both pre-sentinel and post-sentinel code,
+      # which keeps backfill BC-safe regardless of plan ordering.
+      #
+      # Synchronous by default. For async dispatch, define your own job:
+      #
+      #   class BackfillJob < ApplicationJob
+      #     def perform(field_id) = TypedEAV::Field::Base.find(field_id).backfill_default!
+      #   end
+      #   BackfillJob.perform_later(field.id)
+      #
+      # (Documented inline as RDoc; not built-in to keep the gem dep-free.)
+      def backfill_default!
+        # Short-circuit: nothing to backfill if no default configured. We
+        # explicitly do NOT write nil rows — backfill is for propagating a
+        # configured default, not for materializing empty Value rows.
+        return if default_value.nil?
+
+        entity_class = entity_type.constantize
+        column = self.class.value_column
+
+        entity_class.find_in_batches(batch_size: 1000) do |batch|
+          # One transaction per batch (NOT per record). If the transaction
+          # raises mid-batch, the WHOLE batch rolls back and the exception
+          # surfaces; prior batches stay committed. Caller re-runs idempotently
+          # because the per-record skip rule re-checks each entity.
+          ActiveRecord::Base.transaction(requires_new: true) do
+            batch.each do |entity|
+              next unless partition_matches?(entity)
+
+              backfill_one(entity, column)
+            end
+          end
+        end
+      end
+
       # ── Per-type value validation (polymorphic dispatch from Value) ──
       #
       # Default no-op. Subclasses override to enforce their constraints
@@ -467,6 +541,68 @@ module TypedEAV
           record.update_columns(sort_order: desired) # rubocop:disable Rails/SkipsModelValidations -- intentional: this is partition normalization, not a user-facing edit; validations don't apply to sort_order shuffling.
         end
       end
+
+      # Partition-match check used by backfill_default!. Skips entities whose
+      # scope axis disagrees with the field's. The check is symmetric to the
+      # Value#validate_field_scope_matches_entity validator (which guards the
+      # write path) — backfill must not write Values that the validator would
+      # reject.
+      def partition_matches?(entity)
+        return false unless entity_partition_axis_matches?(entity, :scope)
+        return false unless entity_partition_axis_matches?(entity, :parent_scope)
+
+        true
+      end
+
+      # Per-axis matcher. `axis` is :scope or :parent_scope. When the field's
+      # value on that axis is blank (global on this axis), every entity
+      # matches. Otherwise the entity must respond to the corresponding
+      # `typed_eav_<axis>` reader (defined by has_typed_eav InstanceMethods),
+      # have a non-nil value there, and that value (stringified) must equal
+      # the field's value (stringified). Stringification mirrors the
+      # `&.to_s` normalization in InstanceMethods#typed_eav_scope /
+      # #typed_eav_parent_scope so a numeric tenant_id and a String "1"
+      # match correctly.
+      def entity_partition_axis_matches?(entity, axis)
+        field_axis_value = public_send(axis) # field.scope or field.parent_scope
+        return true if field_axis_value.blank? # global on this axis: any entity matches
+
+        reader_method = :"typed_eav_#{axis}"
+        return false unless entity.respond_to?(reader_method)
+
+        entity_value = entity.public_send(reader_method)
+        return false if entity_value.nil?
+
+        field_axis_value.to_s == entity_value.to_s
+      end
+
+      # Backfills a single entity. Existing-row detection uses
+      # WHERE field_id = id (not the AR `field:` association) so the lookup
+      # works even when the Value row was written before this Field instance
+      # was loaded. The Value-side uniqueness validator on (entity_type,
+      # entity_id, field_id) guarantees at most one row per (entity, field).
+      #
+      # Three states:
+      #  - no row → create with explicit `value: default_value`. Passing
+      #    `value:` explicitly bypasses the UNSET_VALUE sentinel path on
+      #    Value#initialize (backfill knows the default; no need to re-
+      #    resolve via the sentinel).
+      #  - row exists with nil typed column → update to default. This is the
+      #    case the skip rule deliberately allows backfill to fix (a Value
+      #    row created via explicit `value: nil` is still a backfill
+      #    candidate per CONTEXT.md).
+      #  - row exists with non-nil typed column → skip (idempotence).
+      def backfill_one(entity, column)
+        existing = TypedEAV::Value.where(entity: entity, field_id: id).first
+
+        if existing.nil?
+          TypedEAV::Value.create!(entity: entity, field: self, value: default_value)
+        elsif existing[column].nil?
+          existing.update!(value: default_value)
+        end
+        # else: row exists with non-nil typed column → skip (skip rule).
+      end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

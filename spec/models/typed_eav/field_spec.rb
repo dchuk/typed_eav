@@ -826,3 +826,187 @@ RSpec.describe "TypedEAV::Field::Base ordering helpers", type: :model do
     end
   end
 end
+
+# Phase 02: partition-aware default-value backfill. Forms the backward half
+# of the default-value pipeline (the forward half — UNSET_VALUE-driven
+# population on non-form Value creation — landed in plan 02-03). The two
+# halves are intentionally adjacent in scope (forward + backward of the
+# same pipeline) but are sequenced into different waves because they touch
+# different files and the backfill block depends on partition and ordering
+# infrastructure that lands in waves 1-2.
+#
+# Describe-by-string avoids RSpec/RepeatedExampleGroupDescription against
+# the earlier `RSpec.describe TypedEAV::Field::Base` blocks at the top of
+# this file.
+RSpec.describe "TypedEAV::Field::Base#backfill_default!", type: :model do
+  describe "no-op safety" do
+    it "is a no-op when no default is configured" do
+      field = create(:integer_field, name: "no_default", entity_type: "Contact")
+      create(:contact)
+      expect(field.default_value).to be_nil
+
+      expect { field.backfill_default! }.not_to change(TypedEAV::Value, :count)
+    end
+  end
+
+  describe "fill missing rows" do
+    it "creates a Value row with the default for each entity in the partition" do
+      field = create(:integer_field, name: "bf_fill", entity_type: "Contact",
+                                     default_value_meta: { "v" => 42 })
+      contacts = Array.new(3) { create(:contact) }
+
+      expect { field.backfill_default! }.to change { TypedEAV::Value.where(field_id: field.id).count }.from(0).to(3)
+
+      contacts.each do |contact|
+        value = TypedEAV::Value.find_by!(entity: contact, field_id: field.id)
+        expect(value.integer_value).to eq(42)
+      end
+    end
+  end
+
+  describe "skip rule for non-nil typed values" do
+    it "does not overwrite entities that already have a non-nil typed value" do
+      field = create(:integer_field, name: "bf_skip", entity_type: "Contact",
+                                     default_value_meta: { "v" => 42 })
+      contact_a, contact_b, contact_c = Array.new(3) { create(:contact) }
+
+      # Pre-existing non-nil row for contact_a — must NOT be overwritten.
+      TypedEAV::Value.create!(entity: contact_a, field: field, value: 99)
+
+      field.backfill_default!
+
+      expect(TypedEAV::Value.find_by!(entity: contact_a, field_id: field.id).integer_value).to eq(99)
+      expect(TypedEAV::Value.find_by!(entity: contact_b, field_id: field.id).integer_value).to eq(42)
+      expect(TypedEAV::Value.find_by!(entity: contact_c, field_id: field.id).integer_value).to eq(42)
+    end
+  end
+
+  describe "update existing nil typed values" do
+    it "updates Value rows whose typed column is nil to the default" do
+      field = create(:integer_field, name: "bf_nilupd", entity_type: "Contact",
+                                     default_value_meta: { "v" => 42 })
+      contact = create(:contact)
+
+      # Plan 02-03's UNSET_VALUE sentinel lets explicit `value: nil` create a
+      # row whose typed column is nil — exactly the candidate the skip rule
+      # deliberately allows backfill to fix.
+      TypedEAV::Value.create!(entity: contact, field: field, value: nil)
+      pre = TypedEAV::Value.find_by!(entity: contact, field_id: field.id)
+      expect(pre.integer_value).to be_nil
+
+      field.backfill_default!
+
+      expect(pre.reload.integer_value).to eq(42)
+    end
+  end
+
+  describe "idempotent re-run" do
+    it "produces no new Value rows and no changes to existing rows" do
+      field = create(:integer_field, name: "bf_idemp", entity_type: "Contact",
+                                     default_value_meta: { "v" => 42 })
+      Array.new(3) { create(:contact) }
+      field.backfill_default!
+
+      pre_snapshot = TypedEAV::Value.where(field_id: field.id).pluck(:id, :integer_value, :updated_at)
+
+      expect { field.backfill_default! }.not_to(change { TypedEAV::Value.where(field_id: field.id).count })
+
+      post_snapshot = TypedEAV::Value.where(field_id: field.id).pluck(:id, :integer_value, :updated_at)
+      expect(post_snapshot).to match_array(pre_snapshot)
+    end
+  end
+
+  describe "partition isolation by scope", :scoping do
+    it "creates Values only for entities in the matching scope" do
+      field = create(:integer_field, name: "bf_scope", entity_type: "Contact", scope: "t1",
+                                     default_value_meta: { "v" => 42 })
+      t1_contact = create(:contact, tenant_id: "t1")
+      t2_contact = create(:contact, tenant_id: "t2")
+
+      field.backfill_default!
+
+      expect(TypedEAV::Value.where(entity: t1_contact, field_id: field.id).pluck(:integer_value)).to eq([42])
+      expect(TypedEAV::Value.where(entity: t2_contact, field_id: field.id)).to be_empty
+    end
+  end
+
+  describe "partition isolation by parent_scope", :scoping do
+    it "creates Values only for entities matching both scope and parent_scope" do
+      field = create(:integer_field, name: "bf_pscope", entity_type: "Project", scope: "t1",
+                                     parent_scope: "p1", default_value_meta: { "v" => 42 })
+      match    = create(:project, tenant_id: "t1", workspace_id: "p1")
+      wrong_p  = create(:project, tenant_id: "t1", workspace_id: "p2")
+      no_p     = create(:project, tenant_id: "t1", workspace_id: nil)
+
+      field.backfill_default!
+
+      expect(TypedEAV::Value.where(entity: match, field_id: field.id).pluck(:integer_value)).to eq([42])
+      expect(TypedEAV::Value.where(entity: wrong_p, field_id: field.id)).to be_empty
+      expect(TypedEAV::Value.where(entity: no_p, field_id: field.id)).to be_empty
+    end
+  end
+
+  describe "global field iterates all entities", :scoping do
+    it "creates Values for every entity of entity_type when field.scope is nil" do
+      field = create(:integer_field, name: "bf_global", entity_type: "Contact", scope: nil,
+                                     default_value_meta: { "v" => 42 })
+      a = create(:contact, tenant_id: nil)
+      b = create(:contact, tenant_id: "t1")
+      c = create(:contact, tenant_id: "t2")
+
+      field.backfill_default!
+
+      [a, b, c].each do |contact|
+        expect(TypedEAV::Value.find_by!(entity: contact, field_id: field.id).integer_value).to eq(42)
+      end
+    end
+  end
+
+  describe "value_column lookup works for non-integer types" do
+    it "fills string_value for a Text field" do
+      field = create(:text_field, name: "bf_text", entity_type: "Contact",
+                                  default_value_meta: { "v" => "hello" })
+      contacts = Array.new(2) { create(:contact) }
+
+      field.backfill_default!
+
+      contacts.each do |contact|
+        value = TypedEAV::Value.find_by!(entity: contact, field_id: field.id)
+        expect(value.string_value).to eq("hello")
+      end
+    end
+  end
+
+  describe "per-batch transaction atomicity" do
+    # When a batch raises mid-iteration, the WHOLE batch rolls back atomically.
+    # All 5 entities fit in one batch (default batch_size 1000), so a raise on
+    # the 3rd entity must roll back ALL FIVE — proving the transaction wraps
+    # the batch, not the record. Re-running the un-stubbed backfill then
+    # commits all 5 — proving recoverability.
+    it "rolls back the whole batch on failure and recovers cleanly on re-run" do
+      field = create(:integer_field, name: "bf_atomic", entity_type: "Contact",
+                                     default_value_meta: { "v" => 42 })
+      Array.new(5) { create(:contact) }
+
+      call_count = 0
+      original_method = field.method(:backfill_one)
+      allow(field).to receive(:backfill_one) do |entity, column|
+        call_count += 1
+        raise "boom on third entity" if call_count == 3
+
+        original_method.call(entity, column)
+      end
+
+      expect { field.backfill_default! }.to raise_error(StandardError, /boom/)
+
+      # Whole batch rolled back: zero Value rows, even though two records had
+      # already been backfilled inside the same transaction before the raise.
+      expect(TypedEAV::Value.where(field_id: field.id).count).to eq(0)
+
+      # Recovery: un-stub and re-run — all five now backfilled.
+      RSpec::Mocks.space.proxy_for(field).reset
+      field.backfill_default!
+      expect(TypedEAV::Value.where(field_id: field.id).count).to eq(5)
+    end
+  end
+end
