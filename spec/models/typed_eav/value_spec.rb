@@ -660,4 +660,128 @@ RSpec.describe TypedEAV::Value, type: :model do
       expect(value).to be_valid
     end
   end
+
+  # Phase 02 Plan 02-03: UNSET_VALUE sentinel + default-population on the
+  # non-form Value creation path. The sentinel is the only mechanism that
+  # can distinguish "kwarg not given" from "given as explicit nil" — both
+  # produce the same nil typed column at storage, and the difference is
+  # only observable at construction time, hence the initialize override.
+  # Mirrors the UNSET_SCOPE / ALL_SCOPES sentinel pattern in
+  # lib/typed_eav/has_typed_eav.rb.
+  describe "UNSET_VALUE sentinel" do
+    let(:contact) { create(:contact) }
+
+    it "is a frozen, identifiable, public class-level constant" do
+      expect(described_class::UNSET_VALUE).to be_frozen
+      expect(described_class::UNSET_VALUE).to equal(described_class::UNSET_VALUE)
+      expect(described_class::UNSET_VALUE).not_to eq(Object.new)
+      # Not private_constant — mirrors UNSET_SCOPE / ALL_SCOPES contract.
+      expect(defined?(TypedEAV::Value::UNSET_VALUE)).to eq("constant")
+    end
+
+    context "with an Integer field that has a configured default" do
+      let(:field) { create(:integer_field, default_value_meta: { "v" => 42 }) }
+
+      it "populates default when create is called WITHOUT a value: kwarg" do
+        v = contact.typed_values.create(field: field)
+        expect(v).to be_persisted
+        expect(v.value).to eq(42)
+        expect(v.integer_value).to eq(42)
+      end
+
+      it "stores explicit nil and does NOT re-apply the default" do
+        v = contact.typed_values.create(field: field, value: nil)
+        expect(v).to be_persisted
+        expect(v.value).to be_nil
+        expect(v.integer_value).to be_nil
+      end
+
+      it "stores explicit value (existing behavior unchanged)" do
+        v = contact.typed_values.create(field: field, value: 99)
+        expect(v).to be_persisted
+        expect(v.value).to eq(99)
+      end
+
+      it "populates default via Value.new + save (no value: kwarg) too" do
+        v = described_class.new(entity: contact, field: field)
+        v.save!
+        expect(v.value).to eq(42)
+      end
+    end
+
+    context "with an Integer field that has NO configured default" do
+      let(:field) { create(:integer_field) }
+
+      it "stores nil when create is called without a value: kwarg" do
+        v = contact.typed_values.create(field: field)
+        expect(v).to be_persisted
+        expect(v.value).to be_nil
+        # BC: matches v0.1.0 behavior for fields with no default.
+      end
+    end
+
+    context "with a String (Text) field that has a configured default" do
+      let(:field) { create(:text_field, default_value_meta: { "v" => "hello" }) }
+
+      it "populates default across non-Integer types" do
+        v = contact.typed_values.create(field: field)
+        expect(v.value).to eq("hello")
+        expect(v.string_value).to eq("hello")
+      end
+
+      it "stores explicit nil even when a string default exists" do
+        v = contact.typed_values.create(field: field, value: nil)
+        expect(v.value).to be_nil
+      end
+    end
+
+    context "when going through the form path (typed_eav_attributes=) — sentinel must NOT engage" do
+      before { create(:integer_field, name: "score", default_value_meta: { "v" => 42 }) }
+
+      it "stores the form-supplied value, not the field default" do
+        # accepts_nested_attributes_for and typed_eav_attributes= both pass an
+        # explicit value: in their hash, so the sentinel branch is bypassed.
+        # Spec confirms the form path still wins over the configured default.
+        contact.typed_eav_attributes = [{ name: "score", value: 99 }]
+        contact.save!
+        contact.reload
+
+        score_value = contact.typed_values.joins(:field).find_by(typed_eav_fields: { name: "score" })
+        expect(score_value.value).to eq(99)
+      end
+
+      it "stores explicit nil from the form path (form path bypasses sentinel)" do
+        # Form path passes `value: nil` explicitly when a field is cleared in
+        # the UI; sentinel branch never sees the kwarg-missing case here.
+        contact.typed_eav_attributes = [{ name: "score", value: nil }]
+        contact.save!
+        contact.reload
+
+        score_value = contact.typed_values.joins(:field).find_by(typed_eav_fields: { name: "score" })
+        expect(score_value&.value).to be_nil
+      end
+    end
+
+    describe "late-field-assignment caveat (documented behavior)" do
+      let(:field) { create(:integer_field, default_value_meta: { "v" => 42 }) }
+
+      it "stashes the sentinel in @pending_value when field is unset at construct time" do
+        # Constructor with no field AND no value: kwarg → initialize substitutes
+        # UNSET_VALUE → value= sentinel branch sees no field → @pending_value
+        # holds the sentinel. Direct ivar peek to assert the contract.
+        v = described_class.new(entity: contact)
+        expect(v.instance_variable_get(:@pending_value)).to equal(described_class::UNSET_VALUE)
+      end
+
+      it "resolves to the field default when apply_pending_value runs after late field assignment" do
+        # Late field assignment is not the supported create path, but the
+        # sentinel-pending branch in apply_pending_value still resolves
+        # correctly when the caller manually triggers it.
+        v = described_class.new(entity: contact)
+        v.field = field
+        v.send(:apply_pending_value)
+        expect(v.value).to eq(42)
+      end
+    end
+  end
 end

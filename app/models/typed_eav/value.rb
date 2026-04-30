@@ -4,6 +4,22 @@ module TypedEAV
   class Value < ApplicationRecord
     self.table_name = "typed_eav_values"
 
+    # Sentinel for distinguishing "no value: kwarg given" from "value: nil
+    # given explicitly". Used by Value#initialize (substitutes UNSET_VALUE
+    # when the :value kwarg is missing) and Value#value= (treats the
+    # sentinel as the trigger to populate field.default_value):
+    #
+    #   typed_values.create(field: f)             # → triggers default population
+    #   typed_values.create(field: f, value: nil) # → stores nil (no default)
+    #   typed_values.create(field: f, value: 42)  # → stores 42
+    #
+    # Mirrors the UNSET_SCOPE / ALL_SCOPES public-sentinel pattern in
+    # lib/typed_eav/has_typed_eav.rb (intentionally NOT private_constant —
+    # advanced callers may want `val.equal?(TypedEAV::Value::UNSET_VALUE)`
+    # checks in their own code). The freeze prevents accidental mutation
+    # that would break `.equal?` identity for any caller holding a reference.
+    UNSET_VALUE = Object.new.freeze
+
     # ── Associations ──
 
     belongs_to :entity, polymorphic: true, inverse_of: :typed_values
@@ -47,7 +63,20 @@ module TypedEAV
     end
 
     def value=(val)
-      if field
+      if val.equal?(UNSET_VALUE)
+        # Sentinel branch: caller did NOT pass an explicit `value:` kwarg.
+        # Apply the field's configured default if field is already assigned;
+        # otherwise stash the sentinel in @pending_value to be resolved later
+        # by apply_pending_value (parallel to the explicit-value pending path
+        # below). Without this branch, `typed_values.create(field: f)` would
+        # silently leave the typed column nil even when the field declares a
+        # default — losing the configuration the caller already paid to set.
+        if field
+          apply_field_default
+        else
+          @pending_value = UNSET_VALUE
+        end
+      elsif field
         # Cast through the field type, then write to the native column.
         # Rails will further cast via the column type on save.
         casted, invalid = field.cast(val)
@@ -64,6 +93,34 @@ module TypedEAV
       field.class.value_column
     end
 
+    # Override AR's initialize so missing `:value` kwarg → UNSET_VALUE
+    # substitution. This is the only mechanism that lets us distinguish
+    # "no value given" from "value: nil given" (both leave the typed column
+    # nil; the difference can only be observed at construction time). The
+    # sentinel then flows through `value=` and (if field is unset) into
+    # `@pending_value`, where `apply_pending_value` resolves it to the
+    # field's configured default once field becomes available.
+    #
+    # `accepts_nested_attributes_for` paths and `set_typed_eav_value` always
+    # pass an explicit `value:` (never missing the key), so they bypass this
+    # substitution and continue to behave as before.
+    def initialize(attributes = nil, &)
+      if attributes.is_a?(Hash)
+        attrs = attributes.dup
+        attrs[:value] = UNSET_VALUE unless attrs.key?(:value) || attrs.key?("value")
+        super(attrs, &)
+      elsif defined?(ActionController::Parameters) && attributes.is_a?(ActionController::Parameters)
+        # Permitted params hash-like: convert to a plain hash for the key check,
+        # then re-pass. Same UNSET_VALUE substitution rule.
+        attrs = attributes.to_h
+        attrs[:value] = UNSET_VALUE unless attrs.key?(:value) || attrs.key?("value")
+        super(attrs, &)
+      else
+        # nil, scalar, or any other shape AR's initialize accepts unchanged.
+        super
+      end
+    end
+
     # ── Callbacks ──
 
     after_initialize :apply_pending_value
@@ -73,8 +130,29 @@ module TypedEAV
     def apply_pending_value
       return unless @pending_value && field
 
-      self.value = @pending_value
+      if @pending_value.equal?(UNSET_VALUE)
+        # Sentinel-pending branch: dispatch directly to apply_field_default.
+        # We deliberately do NOT route through `self.value =` here because
+        # value= would re-trigger the sentinel branch with field present,
+        # giving the same outcome but obscuring the dispatch — keeping the
+        # call explicit makes the parallel between value= and this branch
+        # easy to follow.
+        apply_field_default
+      else
+        self.value = @pending_value
+      end
       @pending_value = nil
+    end
+
+    # Writes field.default_value (already cast or nil) directly to the typed
+    # column. Does NOT route through value= because field.default_value is
+    # already cast via cast(default_value_meta["v"]).first — re-casting
+    # would be redundant. Field-side validate_default_value (field/base.rb)
+    # catches invalid raw defaults at field save time, so what we read here
+    # is always either a castable value or nil.
+    def apply_field_default
+      default = field.default_value
+      self[value_column] = default
     end
 
     def validate_value
