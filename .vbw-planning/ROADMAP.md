@@ -29,7 +29,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 - All `spec/regressions/review_round_*_scope*` and `spec/lib/typed_eav/scoping_spec.rb` pass with new parent-scope coverage.
 
 ### Phase 2: Phase-1 pipeline completions
-**Goal:** Complete three "infrastructure already exists" items (display ordering, default values, cascade behavior) without adding new columns or breaking the v0.1.0 API.
+**Goal:** Complete three "infrastructure already exists" items (display ordering, default values, cascade behavior). Schema changes are additive only (cascade policy adds a `field_dependent` column and changes the values FK to `ON DELETE SET NULL`); v0.1.0 API surface and default behavior are preserved.
 **Deps:** Phase 1 (partition-tuple changes apply to ordering and default-value helpers).
 **Reqs:** REQ-07
 **Success:**

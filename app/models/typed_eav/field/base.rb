@@ -16,11 +16,15 @@ module TypedEAV
                  optional: true,
                  inverse_of: :fields
 
+      # No `dependent: :destroy` here: cascade behavior is now driven by the
+      # `field_dependent` column and dispatched in the `before_destroy`
+      # callback below. Keeping `dependent: :destroy` would double-fire for
+      # the "destroy" policy and short-circuit the `:nullify` /
+      # `:restrict_with_error` policies entirely.
       has_many :values,
                class_name: "TypedEAV::Value",
                foreign_key: :field_id,
-               inverse_of: :field,
-               dependent: :destroy
+               inverse_of: :field
 
       has_many :field_options,
                class_name: "TypedEAV::Option",
@@ -39,6 +43,27 @@ module TypedEAV
       validate :validate_default_value
       validate :validate_type_allowed_for_entity
       validate :validate_parent_scope_invariant
+
+      # Cascade policy for Value rows when this Field is destroyed. Stored as
+      # a string (not enum) so future policies don't require an additive enum
+      # remap. Default "destroy" matches v0.1.0 behavior — see Phase 02
+      # CONTEXT §"Cascade behavior wiring + schema delivery".
+      validates :field_dependent, inclusion: {
+        in: %w[destroy nullify restrict_with_error],
+        message: "must be one of: destroy, nullify, restrict_with_error",
+      }
+
+      # ── Callbacks ──
+
+      # Dispatch on `field_dependent`. Runs BEFORE the field row is deleted so
+      # the "destroy" policy can clean up Value rows while the FK still points
+      # somewhere valid. With the FK on ON DELETE SET NULL (post-Phase-02
+      # migration), the AR-level `destroy_all` is the canonical mechanism for
+      # "destroy" — without it, the FK would NULL the rows out instead and
+      # leave orphans behind. The "nullify" branch is intentionally a no-op:
+      # the FK does the work. The "restrict_with_error" branch adds an error
+      # and `throw(:abort)`s, mirroring AR's `dependent: :restrict_with_error`.
+      before_destroy :dispatch_field_dependent
 
       # ── Scopes ──
 
@@ -274,6 +299,38 @@ module TypedEAV
         return if scope.present?
 
         errors.add(:parent_scope, "cannot be set when scope is blank")
+      end
+
+      # before_destroy hook. Reads the `field_dependent` policy column and
+      # acts before the field row is deleted (and before the FK ON DELETE SET
+      # NULL fires). The three branches are exhaustive because the
+      # `field_dependent` inclusion validator narrows to exactly these
+      # values; an unrecognized value would have failed save earlier and
+      # cannot reach destroy.
+      def dispatch_field_dependent
+        case field_dependent
+        when "destroy"
+          # Explicit `destroy_all`: with ON DELETE SET NULL on the FK, the
+          # database would otherwise NULL field_id out instead of deleting
+          # the rows. AR callbacks run inside the destroy transaction, so
+          # this is atomic with the field row deletion.
+          values.destroy_all
+        when "nullify"
+          # No-op: the FK ON DELETE SET NULL nulls field_id automatically.
+          # Read-path orphan guards in `InstanceMethods#typed_eav_value` and
+          # `#typed_eav_hash` silently skip these rows — the documented
+          # fail-soft path (see PATTERNS.md §"Defend the read path").
+        when "restrict_with_error"
+          return unless values.exists?
+
+          # Errors tell you how to fix it (CONVENTIONS.md): list the two
+          # recovery paths — change the policy or remove the values first.
+          errors.add(
+            :base,
+            "Cannot delete field that has values. Use field_dependent: :nullify or destroy values first.",
+          )
+          throw(:abort)
+        end
       end
     end
   end

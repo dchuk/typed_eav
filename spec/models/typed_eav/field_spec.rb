@@ -538,3 +538,36 @@ RSpec.describe TypedEAV::ColumnMapping do
     expect { klass.value_column }.to raise_error(NotImplementedError)
   end
 end
+
+# Phase 02: cascade-policy validator. Inclusion narrows `field_dependent` to
+# the closed set the dispatch hook understands; default "destroy" matches
+# v0.1.0 behavior so omitting the kwarg never surprises a v0.1.0 caller.
+# Cascade *behavior* (the dispatch itself) is covered in
+# spec/lib/typed_eav/field_cascade_spec.rb — this block only asserts the
+# validation contract.
+#
+# String description on the describe is intentional: the file already has
+# an earlier `RSpec.describe TypedEAV::Field::Base` block (line 5). The
+# string disambiguates them per RSpec/RepeatedExampleGroupDescription
+# without forcing a wholesale restructure of the existing 540 lines.
+RSpec.describe TypedEAV::Field::Base, "#field_dependent", type: :model do
+  describe "field_dependent validation" do
+    it "is valid for each of the three allowed values" do
+      %w[destroy nullify restrict_with_error].each do |policy|
+        f = build(:text_field, field_dependent: policy)
+        expect(f).to be_valid, "expected #{policy} to be valid (errors: #{f.errors.full_messages})"
+      end
+    end
+
+    it "is invalid for an unknown string" do
+      f = build(:text_field, field_dependent: "bogus")
+      expect(f).not_to be_valid
+      expect(f.errors[:field_dependent].join).to match(/destroy.*nullify.*restrict_with_error/)
+    end
+
+    it "defaults to 'destroy' from the DB when omitted" do
+      f = create(:text_field, name: "default_fd")
+      expect(f.field_dependent).to eq("destroy")
+    end
+  end
+end

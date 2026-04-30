@@ -5,7 +5,11 @@ require "spec_helper"
 RSpec.describe TypedEAV::Value, type: :model do
   describe "associations" do
     it { is_expected.to belong_to(:entity) }
-    it { is_expected.to belong_to(:field) }
+    # `:field` is optional as of Phase 02 cascade work — orphaned Value rows
+    # (`field_id IS NULL`) are expected when `field_dependent: :nullify` is
+    # used. Read-path guards silently skip orphans; write-path validators
+    # `return unless field` so optional does not weaken integrity.
+    it { is_expected.to belong_to(:field).optional }
   end
 
   describe "value storage in typed columns" do

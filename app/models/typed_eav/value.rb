@@ -7,9 +7,20 @@ module TypedEAV
     # ── Associations ──
 
     belongs_to :entity, polymorphic: true, inverse_of: :typed_values
+
+    # `field` is optional because the Phase 02 cascade migration changed the
+    # FK to ON DELETE SET NULL — orphaned Value rows (`field_id IS NULL`)
+    # are an expected outcome when `field_dependent: :nullify` is used.
+    # Read-path guards in `InstanceMethods#typed_eav_value` and
+    # `#typed_eav_hash` silently skip them; the write-path validators below
+    # (`validate_value`, `validate_entity_matches_field`,
+    # `validate_field_scope_matches_entity`) all `return unless field`
+    # already, so optional belongs_to does not weaken any write-path
+    # invariant — see RESEARCH §Area 3 orphan-safety audit.
     belongs_to :field,
                class_name: "TypedEAV::Field::Base",
-               inverse_of: :values
+               inverse_of: :values,
+               optional: true
 
     # ── Validations ──
 
