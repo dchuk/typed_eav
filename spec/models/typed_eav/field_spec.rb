@@ -571,3 +571,258 @@ RSpec.describe TypedEAV::Field::Base, "#field_dependent", type: :model do
     end
   end
 end
+
+# Phase 02: partition-aware ordering helpers (move_higher / move_lower /
+# move_to_top / move_to_bottom / insert_at). These tests are the
+# authoritative algorithm spec — Section's mirror spec is lighter because
+# the implementations are byte-equivalent (inline-duplicated per Phase 01
+# precedent).
+#
+# Describe-by-string (rather than `RSpec.describe TypedEAV::Field::Base, …`)
+# avoids RSpec/RepeatedExampleGroupDescription against the earlier
+# class-level describe blocks at the top of this file, and it sidesteps
+# RSpec/DescribeMethod which expects a `#instance_method` or
+# `.class_method` second argument when a class is passed.
+RSpec.describe "TypedEAV::Field::Base ordering helpers", type: :model do
+  # Helper to build a stable partition of N text fields with explicit
+  # sort_order 1..N under a unique entity_type so each example sees an
+  # isolated partition (Contact entity_type is shared with many other
+  # specs in this file, and registry-based validations would otherwise
+  # interfere).
+  def make_partition(entity_type:, scope: nil, parent_scope: nil, count: 3, prefix: "ord")
+    Array.new(count) do |i|
+      create(
+        :text_field,
+        name: "#{prefix}_#{i + 1}",
+        entity_type: entity_type,
+        scope: scope,
+        parent_scope: parent_scope,
+        sort_order: i + 1,
+      )
+    end
+  end
+
+  def partition_orders(entity_type:, scope: nil, parent_scope: nil)
+    TypedEAV::Field::Base
+      .for_entity(entity_type, scope: scope, parent_scope: parent_scope)
+      .order(:sort_order, :name)
+      .pluck(:name, :sort_order)
+  end
+
+  describe "#move_higher" do
+    it "swaps the middle item with the one above" do
+      f1, f2, f3 = make_partition(entity_type: "OrdHigher1", count: 3)
+
+      f2.move_higher
+
+      expect(partition_orders(entity_type: "OrdHigher1")).to eq(
+        [["ord_2", 1], ["ord_1", 2], ["ord_3", 3]],
+      )
+      expect([f1, f2, f3].map { |r| r.reload.sort_order }).to eq([2, 1, 3])
+    end
+
+    it "is a no-op at the top boundary" do
+      f1, _f2, _f3 = make_partition(entity_type: "OrdHigher2", count: 3)
+      original = partition_orders(entity_type: "OrdHigher2")
+
+      f1.move_higher
+
+      expect(partition_orders(entity_type: "OrdHigher2")).to eq(original)
+    end
+  end
+
+  describe "#move_lower" do
+    it "swaps the middle item with the one below" do
+      _f1, f2, _f3 = make_partition(entity_type: "OrdLower1", count: 3)
+
+      f2.move_lower
+
+      expect(partition_orders(entity_type: "OrdLower1")).to eq(
+        [["ord_1", 1], ["ord_3", 2], ["ord_2", 3]],
+      )
+    end
+
+    it "is a no-op at the bottom boundary" do
+      _f1, _f2, f3 = make_partition(entity_type: "OrdLower2", count: 3)
+      original = partition_orders(entity_type: "OrdLower2")
+
+      f3.move_lower
+
+      expect(partition_orders(entity_type: "OrdLower2")).to eq(original)
+    end
+  end
+
+  describe "#move_to_top" do
+    it "moves the bottom item to position 1 and normalizes the rest" do
+      _f1, _f2, f3 = make_partition(entity_type: "OrdTop1", count: 3)
+
+      f3.move_to_top
+
+      expect(partition_orders(entity_type: "OrdTop1")).to eq(
+        [["ord_3", 1], ["ord_1", 2], ["ord_2", 3]],
+      )
+    end
+  end
+
+  describe "#move_to_bottom" do
+    it "moves the top item to the last position and normalizes the rest" do
+      f1, _f2, _f3 = make_partition(entity_type: "OrdBottom1", count: 3)
+
+      f1.move_to_bottom
+
+      expect(partition_orders(entity_type: "OrdBottom1")).to eq(
+        [["ord_2", 1], ["ord_3", 2], ["ord_1", 3]],
+      )
+    end
+  end
+
+  describe "#insert_at" do
+    it "clamps n=0 (and any non-positive value) to position 1" do
+      _f1, _f2, f3 = make_partition(entity_type: "OrdInsert1", count: 3)
+
+      f3.insert_at(0)
+
+      expect(partition_orders(entity_type: "OrdInsert1").first).to eq(["ord_3", 1])
+    end
+
+    it "clamps n above the partition size to the last position" do
+      f1, _f2, _f3 = make_partition(entity_type: "OrdInsert2", count: 3)
+
+      f1.insert_at(999)
+
+      expect(partition_orders(entity_type: "OrdInsert2").last).to eq(["ord_1", 3])
+    end
+
+    it "places the record at the requested 1-based position" do
+      _f1, _f2, _f3, _f4, f5 = make_partition(entity_type: "OrdInsert3", count: 5)
+
+      f5.insert_at(2)
+
+      expect(partition_orders(entity_type: "OrdInsert3")).to eq(
+        [["ord_1", 1], ["ord_5", 2], ["ord_2", 3], ["ord_3", 4], ["ord_4", 5]],
+      )
+    end
+  end
+
+  describe "partition isolation" do
+    it "does not affect a different scope partition" do
+      t1_fields = make_partition(entity_type: "OrdIsoScope", scope: "t1", count: 3, prefix: "t1")
+      t2_fields = make_partition(entity_type: "OrdIsoScope", scope: "t2", count: 3, prefix: "t2")
+      t2_before = t2_fields.map { |f| [f.name, f.sort_order] }
+
+      t1_fields.first.move_to_bottom
+
+      expect(partition_orders(entity_type: "OrdIsoScope", scope: "t2")).to eq(t2_before)
+    end
+
+    it "does not affect a different parent_scope partition" do
+      w1_fields = make_partition(
+        entity_type: "OrdIsoParent",
+        scope: "t1",
+        parent_scope: "w1",
+        count: 3,
+        prefix: "w1",
+      )
+      w2_fields = make_partition(
+        entity_type: "OrdIsoParent",
+        scope: "t1",
+        parent_scope: "w2",
+        count: 3,
+        prefix: "w2",
+      )
+      w2_before = w2_fields.map { |f| [f.name, f.sort_order] }
+
+      w1_fields.first.move_to_bottom
+
+      expect(partition_orders(entity_type: "OrdIsoParent", scope: "t1", parent_scope: "w2")).to eq(w2_before)
+    end
+  end
+
+  describe "nil sort_order normalization" do
+    it "places nil-sort_order rows after positioned rows and assigns 1..N" do
+      f1 = create(:text_field, name: "nil_a", entity_type: "OrdNilNorm", sort_order: nil)
+      f2 = create(:text_field, name: "nil_b", entity_type: "OrdNilNorm", sort_order: nil)
+      f3 = create(:text_field, name: "nil_c", entity_type: "OrdNilNorm", sort_order: nil)
+
+      # Any move helper triggers normalization of the partition.
+      f1.move_higher
+
+      orders = TypedEAV::Field::Base
+               .for_entity("OrdNilNorm")
+               .pluck(:sort_order)
+               .sort
+      expect(orders).to eq([1, 2, 3])
+      [f1, f2, f3].each { |f| expect(f.reload.sort_order).to be_between(1, 3) }
+    end
+  end
+
+  describe "SQL emission" do
+    it "issues a partition-level SELECT ... FOR UPDATE on typed_eav_fields" do
+      f1, _f2, _f3 = make_partition(entity_type: "OrdSqlEmit", count: 3)
+
+      queries = []
+      callback = ->(_, _, _, _, payload) { queries << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        f1.move_to_bottom
+      end
+
+      lock_query = queries.find { |q| q.include?("typed_eav_fields") && q.match?(/FOR UPDATE/i) }
+      expect(lock_query).not_to be_nil,
+                                "expected a SELECT ... FOR UPDATE on typed_eav_fields, got: #{queries.inspect}"
+    end
+  end
+
+  # Partition-level concurrency: load-bearing race-safety test. With the
+  # canonical partition-level FOR UPDATE lock acquired in :id order, two
+  # threads moving DIFFERENT records in the SAME partition serialize on
+  # the lock acquisition and produce a consistent, normalized result.
+  # If the implementation regressed to per-record `with_lock`, both threads
+  # would pass their per-row locks and race on normalization — this test
+  # would then fail with duplicated or missing sort_order values.
+  #
+  # `use_transactional_tests = false` is required: each thread checks out
+  # its own AR connection from the pool, and connections cannot see a
+  # parent connection's open transaction. Without this, the threads would
+  # see an empty `typed_eav_fields` table and the moves would be no-ops.
+  context "with concurrent moves on the same partition", :concurrency do
+    self.use_transactional_tests = false
+
+    after do
+      TypedEAV::Field::Base.where(entity_type: "OrdConcur").delete_all
+    end
+
+    it "two threads moving different records yield a normalized partition with no lost or duplicated rows" do
+      fields = Array.new(5) do |i|
+        create(
+          :text_field,
+          name: "concur_#{i + 1}",
+          entity_type: "OrdConcur",
+          scope: "t1",
+          sort_order: i + 1,
+        )
+      end
+      original_ids = fields.map(&:id).sort
+
+      threads = []
+      threads << Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          fields.first.move_to_bottom
+        end
+      end
+      threads << Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          fields.last.move_to_top
+        end
+      end
+      threads.each(&:join)
+
+      final = TypedEAV::Field::Base.for_entity("OrdConcur", scope: "t1").pluck(:id, :sort_order)
+
+      # All rows still present (no row lost during the race)
+      expect(final.map(&:first).sort).to eq(original_ids)
+
+      # Sort orders are exactly 1..5, no duplicates, no nils
+      expect(final.map(&:last).sort).to eq([1, 2, 3, 4, 5])
+    end
+  end
+end

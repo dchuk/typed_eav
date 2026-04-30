@@ -95,6 +95,97 @@ module TypedEAV
       scope :sorted, -> { order(sort_order: :asc, name: :asc) }
       scope :required_fields, -> { where(required: true) }
 
+      # ── Display ordering ──
+      #
+      # Partition-aware ordering helpers, keyed by (entity_type, scope,
+      # parent_scope). Names mirror acts_as_list for muscle memory; the
+      # implementation is in-house per CONVENTIONS.md "one hard dep, soft-detect
+      # everything else" — adopting acts_as_list as a runtime dep would force
+      # every consumer to pull it in.
+      #
+      # Race semantics: each operation runs inside an AR transaction and
+      # acquires a partition-level row lock via
+      # `for_entity(...).order(:id).lock("FOR UPDATE")`. This issues
+      # SELECT ... FOR UPDATE on every member of the partition (including
+      # self) in deterministic ID order — concurrent reorders within the same
+      # partition serialize on the lock acquisition, and the deterministic
+      # order prevents deadlocks across threads. Cross-partition operations
+      # never block each other because they lock disjoint row sets.
+      #
+      # Why a partition-level lock (not with_lock on self): two threads
+      # moving DIFFERENT records within the SAME partition would both pass a
+      # per-record lock on self and race on the sibling list / normalization.
+      # The partition-level FOR UPDATE is the only correct serialization
+      # boundary.
+      #
+      # Sort-order semantics: every operation normalizes the partition's
+      # sort_order column to consecutive integers 1..N (no gaps) on completion.
+      # Records with sort_order: nil are positioned after all positioned rows
+      # during normalization (Postgres NULLS LAST).
+      #
+      # Boundary moves are no-ops, not errors. move_higher on the top item
+      # returns without raising; move_lower on the bottom item likewise.
+
+      def move_higher
+        reorder_within_partition do |siblings|
+          idx = siblings.index { |r| r.id == id }
+          next siblings if idx.nil? || idx.zero? # already at top, or not in partition
+
+          siblings[idx], siblings[idx - 1] = siblings[idx - 1], siblings[idx]
+          siblings
+        end
+      end
+
+      def move_lower
+        reorder_within_partition do |siblings|
+          idx = siblings.index { |r| r.id == id }
+          next siblings if idx.nil? || idx == siblings.size - 1 # already at bottom
+
+          siblings[idx], siblings[idx + 1] = siblings[idx + 1], siblings[idx]
+          siblings
+        end
+      end
+
+      def move_to_top
+        reorder_within_partition do |siblings|
+          idx = siblings.index { |r| r.id == id }
+          next siblings if idx.nil? || idx.zero?
+
+          moving = siblings.delete_at(idx)
+          siblings.unshift(moving)
+          siblings
+        end
+      end
+
+      def move_to_bottom
+        reorder_within_partition do |siblings|
+          idx = siblings.index { |r| r.id == id }
+          next siblings if idx.nil? || idx == siblings.size - 1
+
+          moving = siblings.delete_at(idx)
+          siblings.push(moving)
+          siblings
+        end
+      end
+
+      # Insert at 1-based position. Clamps position to [1, partition_count]:
+      # insert_at(0) and any non-positive value behaves as move_to_top;
+      # insert_at(999) on a 5-item partition behaves as move_to_bottom.
+      # Mirrors acts_as_list's clamp behavior.
+      def insert_at(position)
+        reorder_within_partition do |siblings|
+          idx = siblings.index { |r| r.id == id }
+          next siblings if idx.nil?
+
+          target = position.clamp(1, siblings.size) - 1
+          next siblings if idx == target
+
+          moving = siblings.delete_at(idx)
+          siblings.insert(target, moving)
+          siblings
+        end
+      end
+
       # ── Default value handling ──
       # Stored in default_value_meta as {"v": <raw_value>} so the jsonb
       # column can hold any type's default without an extra typed column.
@@ -330,6 +421,50 @@ module TypedEAV
             "Cannot delete field that has values. Use field_dependent: :nullify or destroy values first.",
           )
           throw(:abort)
+        end
+      end
+
+      # Wraps a block in: (1) an AR transaction, (2) a partition-level row
+      # lock acquired via `for_entity(...).order(:id).lock("FOR UPDATE")`,
+      # (3) re-ordering of the locked array by sort_order ASC NULLS LAST then
+      # name ASC (the canonical display order), (4) the caller's mutation of
+      # the resulting siblings array, (5) normalization back to 1..N.
+      #
+      # The :id ordering of the lock acquisition is load-bearing — without it,
+      # two threads acquiring locks on the same partition could deadlock on
+      # different acquisition orders. Postgres documents `FOR UPDATE` ordering
+      # as the canonical deadlock-avoidance technique.
+      #
+      # Yielding the siblings array (already locked) to the caller lets each
+      # move helper express its mutation declaratively while sharing the
+      # locking + normalization scaffold.
+      def reorder_within_partition
+        self.class.transaction do
+          locked = self.class
+                       .for_entity(entity_type, scope: scope, parent_scope: parent_scope)
+                       .order(:id)
+                       .lock("FOR UPDATE")
+                       .to_a
+
+          # Sort the locked snapshot into display order (the lock was acquired
+          # in :id order for deadlock safety; we reorder in memory for the
+          # mutation step).
+          siblings = locked.sort_by { |r| [r.sort_order.nil? ? 1 : 0, r.sort_order || 0, r.name.to_s] }
+
+          siblings = yield(siblings)
+          normalize_partition_sort_order(siblings)
+        end
+      end
+
+      # Normalizes the partition to consecutive integers 1..N. Issues one
+      # UPDATE per row whose sort_order changed (the in-memory comparison
+      # avoids no-op writes). Runs inside the caller's transaction.
+      def normalize_partition_sort_order(siblings)
+        siblings.each_with_index do |record, index|
+          desired = index + 1
+          next if record.sort_order == desired
+
+          record.update_columns(sort_order: desired) # rubocop:disable Rails/SkipsModelValidations -- intentional: this is partition normalization, not a user-facing edit; validations don't apply to sort_order shuffling.
         end
       end
     end
