@@ -315,7 +315,7 @@
       "source": "known-issue",
       "known_issue_signature": {
         "phase": "01",
-        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning/",
         "test": "rubocop",
         "file": "typed_eav.gemspec:22-26",
         "error": "Layout/HashAlignment: hash literal keys not aligned in metadata{} block (5 occurrences). Verified pre-existing at HEAD e5e78a4 before plan 01-07 started; no file in this plan touched typed_eav.gemspec.",
@@ -334,7 +334,7 @@
       "source": "known-issue",
       "known_issue_signature": {
         "phase": "01",
-        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning/",
         "test": "rubocop Layout/HashAlignment (5 offenses)",
         "file": "typed_eav.gemspec:22-26",
         "error": "5 Layout/HashAlignment offenses in metadata{} block hash keys. Confirmed pre-existing: bundle exec rubocop typed_eav.gemspec reports 5 offenses at lines 22-26. No file in this phase touched typed_eav.gemspec. Flagged for housekeeping per ROADMAP.",
@@ -353,7 +353,7 @@
       "source": "known-issue",
       "known_issue_signature": {
         "phase": "01",
-        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning/",
         "test": "rubocop Layout/HashAlignment (offense 1)",
         "file": "typed_eav.gemspec:22",
         "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
@@ -372,7 +372,7 @@
       "source": "known-issue",
       "known_issue_signature": {
         "phase": "01",
-        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning/",
         "test": "rubocop Layout/HashAlignment (offense 2)",
         "file": "typed_eav.gemspec:23",
         "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
@@ -391,7 +391,7 @@
       "source": "known-issue",
       "known_issue_signature": {
         "phase": "01",
-        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning/",
         "test": "rubocop Layout/HashAlignment (offense 3)",
         "file": "typed_eav.gemspec:24",
         "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
@@ -410,7 +410,7 @@
       "source": "known-issue",
       "known_issue_signature": {
         "phase": "01",
-        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning/",
         "test": "rubocop Layout/HashAlignment (offense 4)",
         "file": "typed_eav.gemspec:25",
         "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",
@@ -429,7 +429,7 @@
       "source": "known-issue",
       "known_issue_signature": {
         "phase": "01",
-        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning",
+        "phase_dir": ".vbw-planning/phases/01-two-level-scope-partitioning/",
         "test": "rubocop Layout/HashAlignment (offense 5)",
         "file": "typed_eav.gemspec:26",
         "error": "Layout/HashAlignment: Align the keys of a hash literal if they span more than one line. Pre-existing at HEAD e5e78a4 before plan 01-07; no phase file touched typed_eav.gemspec.",

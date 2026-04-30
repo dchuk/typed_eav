@@ -27,6 +27,34 @@
       "area": "unscoped-semantics",
       "phase": "01",
       "date": "2026-04-28"
+    },
+    {
+      "question": "Display ordering — should the move helpers be backed by acts_as_list or an in-house module?",
+      "answer": "In-house partition-aware module on Field::Base and Section, keyed by (entity_type, scope, parent_scope). Wraps each move in with_lock for race safety, normalizes sort_order to consecutive integers (no gaps), and treats boundary moves as no-ops. Helper surface (move_higher / move_lower / move_to_top / move_to_bottom / insert_at) matches acts_as_list muscle memory but the implementation is local. Rationale: keeps the documented 'one hard dep, soft-detect everything else' codebase contract from PATTERNS.md; ~150 LoC of in-house code beats taking a runtime dep that every consumer would inherit.",
+      "area": "ordering-impl",
+      "phase": "02",
+      "date": "2026-04-29"
+    },
+    {
+      "question": "Default values — how to distinguish 'no value supplied' from 'explicit nil' in Value#value=?",
+      "answer": "UNSET_VALUE = Object.new.freeze as a private constant on TypedEAV::Value. typed_values.create(field: f) defaults to UNSET_VALUE → triggers field.default_value population. typed_values.create(field: f, value: nil) passes explicit nil → stores nil, no default re-application. Mirrors UNSET_SCOPE / ALL_SCOPES from PATTERNS.md §'Sentinel objects for distinguishing kwarg states.' Form paths (typed_values_attributes= and typed_eav_attributes=) always submit explicit values, so they bypass the sentinel — defaults only fire on the non-form construction path, matching the ROADMAP success criterion.",
+      "area": "default-value-sentinel",
+      "phase": "02",
+      "date": "2026-04-29"
+    },
+    {
+      "question": "Field#backfill_default! — execution model (batching, transactions, sync/async)?",
+      "answer": "find_each(batch_size: 1000) with transaction do … end per batch, synchronous by default. Skip rule is 'records with non-nil typed value for this field' (re-checked per batch, so reruns are idempotent). Per-batch transactions hold row locks only for the batch duration — safe on live tables with millions of rows. Recoverable on mid-run failure. No built-in Active Job dispatch; README documents the recipe for users who want async wrapping. Iteration scope respects (entity_type, scope, parent_scope) via the Phase 1 for_entity helper.",
+      "area": "backfill-execution",
+      "phase": "02",
+      "date": "2026-04-29"
+    },
+    {
+      "question": "Cascade behavior — where does field_dependent live, and how is the schema migration delivered?",
+      "answer": "Single in-phase migration. (1) Add field_dependent string column on typed_eav_fields, null: false, default: 'destroy'; allowed values 'destroy' / 'nullify' / 'restrict_with_error' (string for forward-compat, not enum). (2) Change typed_eav_values.field_id from NOT NULL to nullable. (3) Drop and recreate FK from ON DELETE CASCADE to ON DELETE SET NULL. Greenfield gets the migration automatically; existing v0.1.0 deployments run bin/rails generate typed_eav:install to copy and apply it. :destroy is the default and reproduces v0.1.0 behavior exactly. :nullify relies on the existing read-path orphan guard (v.field nil → skip), already documented in CONCERNS.md as intentional fail-soft. :restrict_with_error implemented via before_destroy that queries values.exists? and, if true, calls errors.add(:base, …) + throw(:abort) — mirrors AR's dependent: :restrict_with_error.",
+      "area": "cascade-wiring",
+      "phase": "02",
+      "date": "2026-04-29"
     }
   ],
   "inferred": [
@@ -41,6 +69,36 @@
       "text": "spec/regressions/review_round_2_scope_leak_spec.rb and review_round_3_collision_spec.rb gain parallel coverage for the parent_scope axis (atomic-bypass semantic preserved).",
       "priority": "Must-have",
       "source": "Phase 1 discussion: unscoped-semantics"
+    },
+    {
+      "id": "REQ-07",
+      "text": "Field::Base and Section gain in-house partition-aware list helpers (move_higher / move_lower / move_to_top / move_to_bottom / insert_at) keyed by (entity_type, scope, parent_scope), with with_lock-based race safety and sort_order normalization to consecutive integers within partition. Boundary moves are no-ops. No new runtime dependency.",
+      "priority": "Must-have",
+      "source": "Phase 2 discussion: ordering-impl"
+    },
+    {
+      "id": "REQ-07",
+      "text": "TypedEAV::Value defines a private UNSET_VALUE sentinel. typed_values.create(field: f) populates from field.default_value when value is unset; explicit nil short-circuits default population.",
+      "priority": "Must-have",
+      "source": "Phase 2 discussion: default-value-sentinel"
+    },
+    {
+      "id": "REQ-07",
+      "text": "Field#backfill_default! iterates target entities via find_each(batch_size: 1000) with per-batch transactions, synchronous by default, idempotent on rerun, partition-aware via Phase 1's for_entity helper. Skip rule operates on 'non-nil typed column,' not 'Value row exists.'",
+      "priority": "Must-have",
+      "source": "Phase 2 discussion: backfill-execution"
+    },
+    {
+      "id": "REQ-07",
+      "text": "New migration adds field_dependent string column on typed_eav_fields (null: false, default: 'destroy'), makes typed_eav_values.field_id nullable, and changes the FK from ON DELETE CASCADE to ON DELETE SET NULL. :destroy / :nullify / :restrict_with_error are the three allowed values, validated on Field::Base. :restrict_with_error mirrors AR semantics via before_destroy + errors.add(:base, ...) + throw(:abort).",
+      "priority": "Must-have",
+      "source": "Phase 2 discussion: cascade-wiring"
+    },
+    {
+      "id": "REQ-07",
+      "text": "Phase 02 ROADMAP goal language ('without adding new columns') is refined to 'additive schema changes only, defaults preserve v0.1.0 behavior, API surface remains backwards-compatible' to accommodate the field_dependent column and FK semantic change.",
+      "priority": "Must-have",
+      "source": "Phase 2 discussion: scope-refinement"
     }
   ],
   "deferred": [
@@ -53,6 +111,26 @@
       "idea": "Auto-coerce non-array returns from custom resolvers as [value, nil] (BC-shim alternative). Explicitly rejected in favor of the hard-break path; documented to prevent future reintroduction without a deliberate reversal.",
       "mentioned_during": "Phase 1 discussion: resolver-protocol",
       "date": "2026-04-28"
+    },
+    {
+      "idea": "Active Job auto-dispatch for Field#backfill_default! (defined?(::ActiveJob) soft-detect). Rejected for Phase 02 — adds complexity for an explicitly-invoked method; users can wrap in their own job. Revisit if multiple consumers report needing async backfill out of the box.",
+      "mentioned_during": "Phase 2 discussion: backfill-execution",
+      "date": "2026-04-29"
+    },
+    {
+      "idea": "acts_as_list as a soft-detected ordering backend (use it if defined, fall back to in-house). Rejected as double-maintenance with no real win. Do not reintroduce without a deliberate reversal.",
+      "mentioned_during": "Phase 2 discussion: ordering-impl",
+      "date": "2026-04-29"
+    },
+    {
+      "idea": "Configurable per-app default for field_dependent (e.g., Config.default_field_dependent = :nullify). Out of scope for Phase 02 — schema-level default 'destroy' is enforced. Add later only if a real consumer asks.",
+      "mentioned_during": "Phase 2 discussion: cascade-wiring",
+      "date": "2026-04-29"
+    },
+    {
+      "idea": "Cascade behavior on Section destroy. Phase 02 covers Field destroy only; Section cascade may surface in a later phase.",
+      "mentioned_during": "Phase 2 discussion: cascade-wiring",
+      "date": "2026-04-29"
     }
   ]
 }
