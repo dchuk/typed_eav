@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "active_support/configurable"
-
 module TypedEAV
   # Registry of entity types (host ActiveRecord models) that have opted
   # into typed fields via `has_typed_eav`. Tracks optional field-type
@@ -10,12 +8,20 @@ module TypedEAV
   # Populated automatically when a host model calls `has_typed_eav`;
   # read by Field::Base#validate_type_allowed_for_entity to enforce
   # restrictions on field creation.
+  #
+  # Implementation note: see Config for why the class-level accessor is
+  # hand-rolled rather than provided by ActiveSupport::Configurable.
   class Registry
-    include ActiveSupport::Configurable
-
-    config_accessor(:entities) { {} }
-
     class << self
+      # Mutable registry of entity_type => {types: [...]} entries. Lazy-init
+      # so first access seeds an empty Hash; reset! clears in place so the
+      # same Hash object is preserved across resets (callers that captured
+      # a reference don't end up with a stale snapshot).
+      def entities
+        @entities ||= {}
+      end
+      attr_writer :entities
+
       # Register an entity type with optional type restrictions.
       def register(entity_type, types: nil)
         entities[entity_type] = { types: types }

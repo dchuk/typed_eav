@@ -38,10 +38,8 @@ _(No outstanding known issues. typed_eav.gemspec Layout/HashAlignment offenses r
 - [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 4) (typed_eav.gemspec:25): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:56a33f0d)
 - [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 5) (typed_eav.gemspec:26): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:61b27064)
 
-- [KNOWN-ISSUE] ActiveSupport::Configurable deprecation warning (lib/typed_eav/config.rb): DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replac... — accepted as process-exception for this phase (phase 03, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-05-01) (ref:85f3c182)
-- [KNOWN-ISSUE] ActiveSupport::Configurable deprecation warning (lib/typed_eav/config.rb): DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replac... — accepted as process-exception for this phase (phase 03, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-05-01) (ref:8bc69309)
+<!-- ActiveSupport::Configurable deprecation entries (3 near-duplicates from phase 03 round-01 promotion) resolved 2026-05-01 — Config and Registry migrated off ActiveSupport::Configurable to hand-rolled class-level accessors. Suite stays green at 547/547; no Rails 8.2 deprecation. -->
 
-- [KNOWN-ISSUE] ActiveSupport::Configurable deprecation warning (lib/typed_eav/config.rb): DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replac... — accepted as process-exception for this phase (phase 03, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-05-01) (ref:601803a3)
 
 ## Blockers
 None

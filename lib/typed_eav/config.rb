@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "active_support/configurable"
-
 module TypedEAV
   # Gem-level configuration for field type registration.
   #
@@ -12,9 +10,17 @@ module TypedEAV
   # Accessible from anywhere via `TypedEAV.config` (which returns this
   # class; class-level `field_types` / `register_field_type` / `field_class_for`
   # / `type_names` methods are defined below).
+  #
+  # Implementation note: class-level accessors are hand-rolled (plain class
+  # instance variables behind reader/writer methods) rather than provided by
+  # ActiveSupport::Configurable. Configurable was deprecated without
+  # replacement in Rails 8.1 and will be removed in Rails 8.2; rolling our
+  # own keeps the public API stable across the migration. The `defined?(@var)`
+  # idiom on the readers preserves the "never set vs explicitly nil"
+  # distinction that callers rely on (e.g., spec_helper's snapshot/restore
+  # hook explicitly assigns `nil` and expects the reader to return `nil`,
+  # not silently fall through to a default).
   class Config
-    include ActiveSupport::Configurable
-
     # Default ambient-scope resolver. Auto-detects `acts_as_tenant` when
     # loaded so AAT users get zero-config behavior. Apps using any other
     # multi-tenancy primitive (Rails `Current` attributes, a subdomain
@@ -68,73 +74,82 @@ module TypedEAV
       json: "TypedEAV::Field::Json",
     }.freeze
 
-    # Mutable registry of type_name => class_name pairs. Seeded from
-    # BUILTIN_FIELD_TYPES on first access; extended via register_field_type.
-    config_accessor(:field_types) { BUILTIN_FIELD_TYPES.dup }
-
-    # Callable returning the ambient scope (partition key) for class-level
-    # queries. Invoked by `TypedEAV.current_scope` when no explicit
-    # `scope:` kwarg is passed and no `with_scope` block is active.
-    #
-    # ## Resolver contract (strict — Phase 1 breaking change)
-    #
-    # The resolver MUST return either:
-    #   - `nil`                              — opt out / no scope to resolve
-    #   - `[scope, parent_scope]` 2-Array    — both elements may be `nil`
-    #
-    # Any other shape — most importantly a bare scalar (the v0.1.x shape) —
-    # raises `ArgumentError` in `TypedEAV.current_scope`. There is no
-    # auto-coercion. `parent_scope` non-nil + `scope` nil (orphan parent)
-    # is rejected by model-level validators (plans 03 / 04), NOT here —
-    # this layer is a contract surface, not a validation surface.
-    #
-    # Note: `TypedEAV.with_scope(value)` is a DIFFERENT surface — its block
-    # API is BC-permissive and accepts a scalar. The resolver-callable
-    # contract is strict; the `with_scope` block contract is not. Both
-    # surfaces, two contracts.
-    config_accessor :scope_resolver, default: DEFAULT_SCOPE_RESOLVER
-
-    # When true, class-level queries on a model that declared
-    # `has_typed_eav scope_method: ...` raise `TypedEAV::ScopeRequired`
-    # if no scope can be resolved (explicit arg, active `with_scope` block,
-    # or configured resolver all returned nil). Bypass per-call via
-    # `TypedEAV.unscoped { ... }`.
-    config_accessor :require_scope, default: true
-
-    # Public single-proc slot for value-change events.
-    # Signature: ->(value, change_type, context) { ... }
-    # - value:        TypedEAV::Value (the just-committed row)
-    # - change_type:  :create | :update | :destroy
-    # - context:      Hash (TypedEAV.current_context — frozen)
-    #
-    # Errors raised inside this proc are rescued by EventDispatcher and
-    # logged via Rails.logger.error — they do NOT propagate to the
-    # user's save call (the row is already committed). Internal subscribers
-    # (Phase 04 versioning, Phase 07 matview) fire BEFORE this proc and
-    # their errors DO propagate. See 03-CONTEXT.md §User-callback error policy.
-    #
-    # Reassignment after gem initialization does NOT disable internal
-    # subscribers — those live on EventDispatcher.value_change_internals,
-    # not here.
-    config_accessor :on_value_change, default: nil
-
-    # Public single-proc slot for field-change events.
-    # Signature: ->(field, change_type) { ... }
-    # - field:        TypedEAV::Field::Base (or subclass)
-    # - change_type:  :create | :update | :destroy | :rename
-    #
-    # Note: TWO args, no context — asymmetric vs on_value_change by design.
-    # Field changes are CRUD-on-config (admin operations on field
-    # definitions), not per-entity user actions, so thread context is
-    # less relevant. The asymmetry is locked at 03-CONTEXT.md §Phase Boundary.
-    #
-    # :rename fires when `name` is among Field#saved_changes, even
-    # combined with other attr changes (sort_order, options, etc.) —
-    # Phase 07 matview needs the rename signal to regenerate column names
-    # even when the rename was bundled with other edits.
-    config_accessor :on_field_change, default: nil
-
     class << self
+      # Mutable registry of type_name => class_name pairs. Seeded from
+      # BUILTIN_FIELD_TYPES on first access; extended via register_field_type.
+      def field_types
+        @field_types ||= BUILTIN_FIELD_TYPES.dup
+      end
+      attr_writer :field_types # rubocop:disable Style/AccessorGrouping
+
+      # Callable returning the ambient scope (partition key) for class-level
+      # queries. Invoked by `TypedEAV.current_scope` when no explicit
+      # `scope:` kwarg is passed and no `with_scope` block is active.
+      #
+      # ## Resolver contract (strict — Phase 1 breaking change)
+      #
+      # The resolver MUST return either:
+      #   - `nil`                              — opt out / no scope to resolve
+      #   - `[scope, parent_scope]` 2-Array    — both elements may be `nil`
+      #
+      # Any other shape — most importantly a bare scalar (the v0.1.x shape) —
+      # raises `ArgumentError` in `TypedEAV.current_scope`. There is no
+      # auto-coercion. `parent_scope` non-nil + `scope` nil (orphan parent)
+      # is rejected by model-level validators (plans 03 / 04), NOT here —
+      # this layer is a contract surface, not a validation surface.
+      #
+      # Note: `TypedEAV.with_scope(value)` is a DIFFERENT surface — its block
+      # API is BC-permissive and accepts a scalar. The resolver-callable
+      # contract is strict; the `with_scope` block contract is not. Both
+      # surfaces, two contracts.
+      def scope_resolver
+        defined?(@scope_resolver) ? @scope_resolver : DEFAULT_SCOPE_RESOLVER
+      end
+      attr_writer :scope_resolver # rubocop:disable Style/AccessorGrouping
+
+      # When true, class-level queries on a model that declared
+      # `has_typed_eav scope_method: ...` raise `TypedEAV::ScopeRequired`
+      # if no scope can be resolved (explicit arg, active `with_scope` block,
+      # or configured resolver all returned nil). Bypass per-call via
+      # `TypedEAV.unscoped { ... }`.
+      def require_scope
+        defined?(@require_scope) ? @require_scope : true
+      end
+      attr_writer :require_scope # rubocop:disable Style/AccessorGrouping
+
+      # Public single-proc slot for value-change events.
+      # Signature: ->(value, change_type, context) { ... }
+      # - value:        TypedEAV::Value (the just-committed row)
+      # - change_type:  :create | :update | :destroy
+      # - context:      Hash (TypedEAV.current_context — frozen)
+      #
+      # Errors raised inside this proc are rescued by EventDispatcher and
+      # logged via Rails.logger.error — they do NOT propagate to the
+      # user's save call (the row is already committed). Internal subscribers
+      # (Phase 04 versioning, Phase 07 matview) fire BEFORE this proc and
+      # their errors DO propagate. See 03-CONTEXT.md §User-callback error policy.
+      #
+      # Reassignment after gem initialization does NOT disable internal
+      # subscribers — those live on EventDispatcher.value_change_internals,
+      # not here.
+      attr_accessor :on_value_change
+
+      # Public single-proc slot for field-change events.
+      # Signature: ->(field, change_type) { ... }
+      # - field:        TypedEAV::Field::Base (or subclass)
+      # - change_type:  :create | :update | :destroy | :rename
+      #
+      # Note: TWO args, no context — asymmetric vs on_value_change by design.
+      # Field changes are CRUD-on-config (admin operations on field
+      # definitions), not per-entity user actions, so thread context is
+      # less relevant. The asymmetry is locked at 03-CONTEXT.md §Phase Boundary.
+      #
+      # :rename fires when `name` is among Field#saved_changes, even
+      # combined with other attr changes (sort_order, options, etc.) —
+      # Phase 07 matview needs the rename signal to regenerate column names
+      # even when the rename was bundled with other edits.
+      attr_accessor :on_field_change
+
       # Register a custom field type.
       def register_field_type(name, class_name)
         field_types[name.to_sym] = class_name
