@@ -21,9 +21,19 @@ module TypedEAV
   # scope can be resolved at query time and `config.require_scope` is truthy.
   class ScopeRequired < StandardError; end
 
-  THREAD_SCOPE_STACK = :typed_eav_scope_stack
-  THREAD_UNSCOPED    = :typed_eav_unscoped
-  private_constant :THREAD_SCOPE_STACK, :THREAD_UNSCOPED
+  THREAD_SCOPE_STACK   = :typed_eav_scope_stack
+  THREAD_UNSCOPED      = :typed_eav_unscoped
+  THREAD_CONTEXT_STACK = :typed_eav_context_stack
+  private_constant :THREAD_SCOPE_STACK, :THREAD_UNSCOPED, :THREAD_CONTEXT_STACK
+
+  # Shared frozen Hash returned by `current_context` when no `with_context`
+  # block is active. Using a single shared instance avoids allocating a new
+  # Hash on every empty-context dispatch (the hot path inside
+  # `EventDispatcher.dispatch_value_change` when no with_context block is
+  # active). Per locked decision (03-CONTEXT.md, pre-Lead resolution):
+  # always-frozen, never bare {}.
+  EMPTY_FROZEN_CONTEXT = {}.freeze
+  private_constant :EMPTY_FROZEN_CONTEXT
 
   class << self
     def config
@@ -143,6 +153,48 @@ module TypedEAV
     # True when inside an `unscoped { }` block.
     def unscoped?
       !!Thread.current[THREAD_UNSCOPED]
+    end
+
+    # Run the block with `kwargs` merged into the ambient event context,
+    # restoring the prior stack on exit (exception-safe). Nests cleanly with
+    # shallow per-key merge — outer keys remain visible inside nested blocks
+    # unless overridden by name; deep-merge of nested Hash values is NOT
+    # promised.
+    #
+    # The pre-merged hash is FROZEN before being pushed so callbacks invoked
+    # downstream (`Config.on_value_change` user proc, internal subscribers)
+    # cannot mutate context for the current or outer blocks. Without freeze,
+    # a callback that did `ctx[:added] = true` would corrupt the stack for
+    # every wrapping block on the same thread.
+    #
+    # ## Why **kwargs and not positional Hash
+    #
+    # `def with_context(**kwargs)` enforces the keyword-syntax call form.
+    # Per Ruby 3.0+ kwargs/Hash separation, `TypedEAV.with_context({ foo: 1 })`
+    # raises ArgumentError ("wrong number of arguments") — the only accepted
+    # form is `TypedEAV.with_context(foo: 1)`. Without **kwargs, callers
+    # could push arbitrary Hash shapes (including nested Arrays or non-symbol
+    # keys) that wouldn't merge cleanly across nesting and wouldn't match
+    # the documented context shape that hooks read.
+    #
+    # See `with_scope` (above) for the parallel ensure-pop pattern. Mirrors
+    # `with_scope`'s shape exactly except for: (a) **kwargs vs positional
+    # value, (b) merge-into-outer-on-push vs replace-on-push.
+    def with_context(**kwargs)
+      stack  = (Thread.current[THREAD_CONTEXT_STACK] ||= [])
+      merged = (stack.last || EMPTY_FROZEN_CONTEXT).merge(kwargs).freeze
+      stack.push(merged)
+      yield
+    ensure
+      stack&.pop
+    end
+
+    # Returns the current thread's top-of-stack context Hash, or a shared
+    # frozen empty Hash when no `with_context` block is active. The return
+    # value is ALWAYS frozen — callers can rely on read-only semantics
+    # regardless of whether a block is active. NEVER returns nil.
+    def current_context
+      Thread.current[THREAD_CONTEXT_STACK]&.last || EMPTY_FROZEN_CONTEXT
     end
 
     # BC-permissive normalizer for `with_scope` block input and explicit
