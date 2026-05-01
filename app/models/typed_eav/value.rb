@@ -125,6 +125,22 @@ module TypedEAV
 
     after_initialize :apply_pending_value
 
+    # Phase 03 event dispatch. THREE explicit `after_commit ..., on: :X`
+    # declarations rather than the after_create_commit/after_update_commit/
+    # after_destroy_commit alias trio: Rails 8.1 has a documented alias
+    # collision where reusing the same method name across the alias forms
+    # causes only the LAST registration to win (each alias points at
+    # `after_commit` internally and the second declaration overwrites the
+    # first). The explicit `on:` form sidesteps the bug entirely.
+    #
+    # Each callback forwards to a private `_dispatch_value_change_*` method
+    # that delegates to TypedEAV::EventDispatcher. Models stay thin — all
+    # dispatch policy (internal-vs-user proc ordering, error rescue, context
+    # injection) lives in EventDispatcher and is unit-testable without AR.
+    after_commit :_dispatch_value_change_create,  on: :create
+    after_commit :_dispatch_value_change_update,  on: :update
+    after_commit :_dispatch_value_change_destroy, on: :destroy
+
     private
 
     def apply_pending_value
@@ -262,5 +278,42 @@ module TypedEAV
       errors.add(:field, :invalid)
     end
     # rubocop:enable Metrics/AbcSize
+
+    # ── Phase 03 event dispatch ──
+    #
+    # All three forwarders short-circuit when `field.nil?` (orphan Value:
+    # field_id NULLed by the Phase 02 ON DELETE SET NULL FK when a Field
+    # with field_dependent: :nullify was destroyed). The event contract
+    # is `(value, change_type, context)` and consumers expect
+    # `value.field` to be readable; an orphan would confuse Phase 04
+    # versioning and Phase 07 matview consumers, so we drop the event
+    # at the model boundary rather than push the nil-guard downstream.
+    #
+    # Update filter: only fire :update when `saved_change_to_attribute?(
+    # field.class.value_column)` is true. A Value row's only meaningful
+    # change for downstream consumers is the typed column for its field;
+    # field_id repointing or other bookkeeping shifts are out-of-spec for
+    # the event contract. Without this filter, Phase 04 versioning would
+    # pile up no-op version rows (every audit-trail commit) and Phase 07
+    # matview would refresh on bookkeeping-only writes.
+
+    def _dispatch_value_change_create
+      return unless field
+
+      TypedEAV::EventDispatcher.dispatch_value_change(self, :create)
+    end
+
+    def _dispatch_value_change_update
+      return unless field
+      return unless saved_change_to_attribute?(field.class.value_column)
+
+      TypedEAV::EventDispatcher.dispatch_value_change(self, :update)
+    end
+
+    def _dispatch_value_change_destroy
+      return unless field
+
+      TypedEAV::EventDispatcher.dispatch_value_change(self, :destroy)
+    end
   end
 end
