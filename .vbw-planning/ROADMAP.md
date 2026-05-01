@@ -97,7 +97,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 |-------|------|--------|------|
 | 1 - Two-level scope partitioning | 7/7 | complete | 2026-04-29 |
 | 2 - Phase-1 pipeline completions | 4/4 | complete | 2026-04-29 |
-| 3 - Event system | 0/0 | pending | — |
+| 3 - Event system | 0/2 | planned | - |
 | 4 - Versioning | 0/0 | pending | — |
 | 5 - Field type expansion | 0/0 | pending | — |
 | 6 - Bulk operations & import/export | 0/0 | pending | — |
