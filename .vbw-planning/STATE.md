@@ -4,15 +4,15 @@
 **Milestone:** Enhancement plan v1
 
 ## Current Phase
-Phase: 3 of 7 (Event System)
-Plans: 0/2
+Phase: 4 of 7 (Versioning)
+Plans: 0/0 (not yet planned)
 Progress: 0%
-Status: active
+Status: pending
 
 ## Phase Status
 - **Phase 1:** ✓ Complete (7 plans / 5 waves shipped, R01 remediation applied, UAT 3/3 pass)
-- **Phase 2:** Planned (4 plans / 2 waves; 02-CONTEXT.md and 02-RESEARCH.md captured)
-- **Phase 3:** Pending
+- **Phase 2:** ✓ Complete (4 plans shipped, R01 remediation applied, UAT pass)
+- **Phase 3:** ✓ Complete (2 plans shipped, R01 plan-amendment applied, UAT 2/2 pass)
 - **Phase 4:** Pending
 - **Phase 5:** Pending
 - **Phase 6:** Pending
@@ -37,6 +37,11 @@ _(No outstanding known issues. typed_eav.gemspec Layout/HashAlignment offenses r
 - [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 3) (typed_eav.gemspec:24): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:98fd8203)
 - [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 4) (typed_eav.gemspec:25): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:56a33f0d)
 - [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 5) (typed_eav.gemspec:26): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:61b27064)
+
+- [KNOWN-ISSUE] ActiveSupport::Configurable deprecation warning (lib/typed_eav/config.rb): DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replac... — accepted as process-exception for this phase (phase 03, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-05-01) (ref:85f3c182)
+- [KNOWN-ISSUE] ActiveSupport::Configurable deprecation warning (lib/typed_eav/config.rb): DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replac... — accepted as process-exception for this phase (phase 03, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-05-01) (ref:8bc69309)
+
+- [KNOWN-ISSUE] ActiveSupport::Configurable deprecation warning (lib/typed_eav/config.rb): DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replac... — accepted as process-exception for this phase (phase 03, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-05-01) (ref:601803a3)
 
 ## Blockers
 None

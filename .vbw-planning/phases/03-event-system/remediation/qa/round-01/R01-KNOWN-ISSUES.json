@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "phase": "03",
+  "issues": [
+    {
+      "test": "ActiveSupport::Configurable deprecation warning",
+      "file": "lib/typed_eav/config.rb",
+      "error": "DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2. Pre-existing: Config included ActiveSupport::Configurable before phase 03; phase 03 only added new config_accessor calls atop existing infrastructure. Carried forward from known-issues.json",
+      "first_seen_in": "03-VERIFICATION.md",
+      "last_seen_in": "03-VERIFICATION.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "ActiveSupport::Configurable deprecation warning",
+      "file": "lib/typed_eav/config.rb",
+      "error": "DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2. Pre-existing: Config included ActiveSupport::Configurable before plan 03-01; plan only added new config_accessor calls atop existing infrastructure.",
+      "first_seen_in": "03-VERIFICATION-wave1.md",
+      "last_seen_in": "03-VERIFICATION-wave1.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    },
+    {
+      "test": "ActiveSupport::Configurable deprecation warning",
+      "file": "lib/typed_eav/config.rb",
+      "error": "DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2. Pre-existing: Config used ActiveSupport::Configurable before phase 03; plans only added new config_accessor calls atop existing infrastructure.",
+      "first_seen_in": "03-VERIFICATION.md",
+      "last_seen_in": "03-VERIFICATION.md",
+      "first_seen_round": 0,
+      "last_seen_round": 0,
+      "times_seen": 1,
+      "source_kind": "registry"
+    }
+  ]
+}

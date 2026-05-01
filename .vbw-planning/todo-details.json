@@ -475,6 +475,63 @@
         "disposition": "accepted-process-exception",
         "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
       }
+    },
+    "85f3c182": {
+      "summary": "ActiveSupport::Configurable deprecation warning (lib/typed_eav/config.rb): DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replac...",
+      "context": "Known issue from phase 03. Test: ActiveSupport::Configurable deprecation warning. File: lib/typed_eav/config.rb. Error: DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2. Pre-existing: Config included ActiveSupport::Configurable before phase 03; phase 03 only added new config_accessor calls atop existing infrastructure. Carried forward from known-issues.json. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "lib/typed_eav/config.rb"
+      ],
+      "added": "2026-05-01",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "03",
+        "phase_dir": ".vbw-planning/phases/03-event-system",
+        "test": "ActiveSupport::Configurable deprecation warning",
+        "file": "lib/typed_eav/config.rb",
+        "error": "DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2. Pre-existing: Config included ActiveSupport::Configurable before phase 03; phase 03 only added new config_accessor calls atop existing infrastructure. Carried forward from known-issues.json",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
+    },
+    "8bc69309": {
+      "summary": "ActiveSupport::Configurable deprecation warning (lib/typed_eav/config.rb): DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replac...",
+      "context": "Known issue from phase 03. Test: ActiveSupport::Configurable deprecation warning. File: lib/typed_eav/config.rb. Error: DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2. Pre-existing: Config included ActiveSupport::Configurable before plan 03-01; plan only added new config_accessor calls atop existing infrastructure.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "lib/typed_eav/config.rb"
+      ],
+      "added": "2026-05-01",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "03",
+        "phase_dir": ".vbw-planning/phases/03-event-system",
+        "test": "ActiveSupport::Configurable deprecation warning",
+        "file": "lib/typed_eav/config.rb",
+        "error": "DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2. Pre-existing: Config included ActiveSupport::Configurable before plan 03-01; plan only added new config_accessor calls atop existing infrastructure.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
+    },
+    "601803a3": {
+      "summary": "ActiveSupport::Configurable deprecation warning (lib/typed_eav/config.rb): DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replac...",
+      "context": "Known issue from phase 03. Test: ActiveSupport::Configurable deprecation warning. File: lib/typed_eav/config.rb. Error: DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2. Pre-existing: Config used ActiveSupport::Configurable before phase 03; plans only added new config_accessor calls atop existing infrastructure.. Seen 1 time(s). Source: remediation/qa/round-01/R01-SUMMARY.md. Disposition: accepted-process-exception.",
+      "files": [
+        "lib/typed_eav/config.rb"
+      ],
+      "added": "2026-05-01",
+      "source": "known-issue",
+      "known_issue_signature": {
+        "phase": "03",
+        "phase_dir": ".vbw-planning/phases/03-event-system",
+        "test": "ActiveSupport::Configurable deprecation warning",
+        "file": "lib/typed_eav/config.rb",
+        "error": "DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2. Pre-existing: Config used ActiveSupport::Configurable before phase 03; plans only added new config_accessor calls atop existing infrastructure.",
+        "source_kind": "accepted-process-exception",
+        "disposition": "accepted-process-exception",
+        "source_path": "remediation/qa/round-01/R01-SUMMARY.md"
+      }
     }
   }
 }
