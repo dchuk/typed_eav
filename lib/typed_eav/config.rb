@@ -101,6 +101,39 @@ module TypedEAV
     # `TypedEAV.unscoped { ... }`.
     config_accessor :require_scope, default: true
 
+    # Public single-proc slot for value-change events.
+    # Signature: ->(value, change_type, context) { ... }
+    # - value:        TypedEAV::Value (the just-committed row)
+    # - change_type:  :create | :update | :destroy
+    # - context:      Hash (TypedEAV.current_context — frozen)
+    #
+    # Errors raised inside this proc are rescued by EventDispatcher and
+    # logged via Rails.logger.error — they do NOT propagate to the
+    # user's save call (the row is already committed). Internal subscribers
+    # (Phase 04 versioning, Phase 07 matview) fire BEFORE this proc and
+    # their errors DO propagate. See 03-CONTEXT.md §User-callback error policy.
+    #
+    # Reassignment after gem initialization does NOT disable internal
+    # subscribers — those live on EventDispatcher.value_change_internals,
+    # not here.
+    config_accessor :on_value_change, default: nil
+
+    # Public single-proc slot for field-change events.
+    # Signature: ->(field, change_type) { ... }
+    # - field:        TypedEAV::Field::Base (or subclass)
+    # - change_type:  :create | :update | :destroy | :rename
+    #
+    # Note: TWO args, no context — asymmetric vs on_value_change by design.
+    # Field changes are CRUD-on-config (admin operations on field
+    # definitions), not per-entity user actions, so thread context is
+    # less relevant. The asymmetry is locked at 03-CONTEXT.md §Phase Boundary.
+    #
+    # :rename fires when `name` is among Field#saved_changes, even
+    # combined with other attr changes (sort_order, options, etc.) —
+    # Phase 07 matview needs the rename signal to regenerate column names
+    # even when the rename was bundled with other edits.
+    config_accessor :on_field_change, default: nil
+
     class << self
       # Register a custom field type.
       def register_field_type(name, class_name)
@@ -125,6 +158,15 @@ module TypedEAV
         self.field_types = BUILTIN_FIELD_TYPES.dup
         self.scope_resolver = DEFAULT_SCOPE_RESOLVER
         self.require_scope = true
+        # Test isolation: scoping_spec/field_spec/etc. call Config.reset! in
+        # `after` hooks — this ensures user procs set in earlier tests don't
+        # leak across examples. Internal subscribers
+        # (EventDispatcher.value_change_internals/field_change_internals) are
+        # deliberately NOT reset here — they're populated at engine load by
+        # Phase 04+ and must persist across Config.reset!. Test teardown
+        # that needs to clear EVERYTHING calls EventDispatcher.reset! too.
+        self.on_value_change = nil
+        self.on_field_change = nil
       end
     end
   end
