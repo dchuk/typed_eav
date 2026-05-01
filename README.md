@@ -562,6 +562,144 @@ A few non-obvious contracts worth knowing about up front:
 - **Orphaned values are skipped**: if a field row is deleted while values remain, `typed_eav_value` and `typed_eav_hash` silently skip the orphans rather than raising.
 - **Cross-scope writes are rejected**: assigning a `Value` to a record whose `typed_eav_scope` doesn't match the field's `scope` adds a validation error on `:field`. The same guard covers the `parent_scope` axis.
 - **Orphan-parent rows rejected**: a `Field` or `Section` row with `parent_scope` set but `scope` blank is invalid. The `Value`-side guard rejects cross-`(scope, parent_scope)` writes too.
+- **Event hooks fire from `after_commit`**: the `on_value_change` and `on_field_change` callbacks fire after the database write is durable; their exceptions never break a save. See §"Event hooks" for the full contract.
+
+## Event hooks
+
+`typed_eav` fires `after_commit` events for value and field changes. Use them
+for audit logs, search-index synchronization, cache invalidation, or any
+out-of-band reaction that must wait until the database write is durable.
+
+### Public callback slots
+
+```ruby
+TypedEAV.configure do |c|
+  c.on_value_change = ->(value, change_type, context) {
+    # change_type ∈ [:create, :update, :destroy]
+    # context is a frozen Hash (see `with_context` below) — read-only
+  }
+
+  c.on_field_change = ->(field, change_type) {
+    # change_type ∈ [:create, :update, :destroy, :rename]
+    # NOTE: no context arg — field changes are CRUD-on-config, not
+    # per-entity user actions
+  }
+end
+```
+
+The `:rename` change_type fires whenever the field's `name` column changed
+in the just-committed save, even when bundled with other attribute changes
+(options, sort_order, default_value, etc.). The detection is intentionally
+escalating — Phase 7's materialized index needs to regenerate column DDL on
+every rename.
+
+`:update` on Value fires only when the typed value column changed. Saving
+a Value record without modifying its typed column (e.g., touching only
+bookkeeping columns) is a no-op for event dispatch.
+
+`field_dependent: :nullify` cascades produce **no** Value `:destroy`
+events. The FK `ON DELETE SET NULL` runs at the database level and
+bypasses AR callbacks. Only the Field `:destroy` event fires. Use
+`field_dependent: :destroy` if your consumer needs per-Value events on
+field deletion.
+
+### Thread-local context with `with_context`
+
+```ruby
+TypedEAV.with_context(request_id: request.uuid, actor_id: current_user.id) do
+  contact.update!(typed_eav: { phone: "555-1234" })
+  # on_value_change receives { request_id: "...", actor_id: 42 } as context
+end
+```
+
+`with_context` is a thread-local stack with shallow per-key merge:
+
+```ruby
+TypedEAV.with_context(request_id: "abc") do
+  TypedEAV.with_context(source: :bulk) do
+    # current context: { request_id: "abc", source: :bulk }
+  end
+  # current context: { request_id: "abc" }
+end
+# current context: {}
+```
+
+The current-context hash is frozen — callbacks cannot mutate it. Outer
+context is restored on exit even if the inner block raises.
+
+`TypedEAV.current_context` returns the current frozen Hash (or a shared
+frozen `{}` when no `with_context` block is active). It's safe to call
+from any code path; it never returns nil.
+
+### Error policy
+
+User callbacks (`Config.on_value_change`, `Config.on_field_change`) are
+rescued — exceptions are logged via `Rails.logger.error` and **do not
+propagate** to the user's save call. The save row is already committed
+when `after_commit` fires; re-raising would surface a misleading
+"save failed" error.
+
+This is the deliberate split with first-party features. Internal
+subscribers used by `typed_eav` itself (Phase 4 versioning, Phase 7
+materialized index) follow a different rule: their exceptions
+**propagate**. Versioning corruption must be loud.
+
+### Ordering guarantee
+
+When multiple subscribers are registered, they fire in this order:
+
+1. First-party internal subscribers (versioning, matview, etc.), in
+   registration order. Errors propagate.
+2. The user proc on `Config.on_value_change` / `Config.on_field_change`,
+   last. Errors are rescued and logged.
+
+Reassigning `Config.on_value_change` after gem initialization does **not**
+disable internal subscribers — they live on a separate dispatcher list
+and survive `Config.reset!`.
+
+### Test isolation
+
+Test files that exercise event hooks should opt in to the `:event_callbacks`
+metadata:
+
+```ruby
+RSpec.describe "my feature", :event_callbacks do
+  it "fires the hook" do
+    captured = []
+    TypedEAV::Config.on_value_change = ->(v, t, _ctx) { captured << [v.id, t] }
+    contact.update!(typed_eav: { phone: "555-1234" })
+    expect(captured).to include([be_a(Integer), :update])
+  end
+end
+```
+
+The `:event_callbacks` around hook in `spec/spec_helper.rb` snapshots and
+restores Config user procs and the internal-subscriber lists around each
+example, so test mutations don't leak across examples and engine-load
+registrations from later phases stay intact.
+
+Integration specs that create real AR records and need `after_commit` to
+fire durably should additionally opt in to `:real_commits`:
+
+```ruby
+RSpec.describe "my model", :event_callbacks, :real_commits do
+  # ...
+end
+```
+
+`:real_commits` disables transactional fixtures for the example and
+manually deletes typed_eav rows in FK order after.
+
+### Reset semantics
+
+| Method | What it resets |
+|---|---|
+| `TypedEAV::Config.reset!` | User procs (`on_value_change`, `on_field_change`) plus `field_types`, `scope_resolver`, `require_scope`. Does **not** clear internal subscribers. |
+| `TypedEAV::EventDispatcher.reset!` | Internal subscribers only. Does **not** touch Config. |
+
+Production code rarely calls either — they exist for test isolation and
+for the rare case where a host app wants to fully unwire the gem in a
+specific request lifecycle.
 
 ## Database Support
 
