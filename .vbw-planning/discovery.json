@@ -55,6 +55,34 @@
       "area": "cascade-wiring",
       "phase": "02",
       "date": "2026-04-29"
+    },
+    {
+      "question": "Callback registration shape — how do user `on_value_change` and Phase 04/07 internal hooks coexist?",
+      "answer": "Public single proc per slot (Config.on_value_change, Config.on_field_change) backed by ActiveSupport::Configurable, plus a private internal-subscribers array that fires FIRST. User proc fires LAST. Phase 4 versioning + Phase 7 index DDL register on the internal list via a private register_internal_value_change / register_internal_field_change API. Matches ROADMAP literally; reassigning Config.on_value_change cannot silently disable Phase 4/7 features. Rejected: ActiveSupport::Notifications (changes ROADMAP-locked public shape, instrument Hash payloads don't fit positional (value, change_type, context) signature) and pure single proc with no internal list (forces users to chain Phase 4 versioning into their own proc).",
+      "area": "callback-registration",
+      "phase": "03",
+      "date": "2026-04-30"
+    },
+    {
+      "question": "`:update` firing semantics — fire on every after_commit or only when typed value column changed?",
+      "answer": "Filter to saved_change_to_attribute?(field.class.value_column). Only fire :update when the typed column for the field's value_column actually changed. apply_pending_value (after_initialize) does not dirty the row, so this filter composes with the existing lifecycle. Avoids no-op version rows in Phase 4 and spurious matview refreshes in Phase 7. :create fires after first commit regardless; :destroy fires after destroy commit regardless. entity_id repointing is out-of-spec for Value and not fired.",
+      "area": "update-semantics",
+      "phase": "03",
+      "date": "2026-04-30"
+    },
+    {
+      "question": "Error policy when a hook raises — pass-through, always-rescue, or split policy?",
+      "answer": "Split policy. Internal subscribers (Phase 4 versioning, Phase 7 index DDL regen) propagate exceptions — no rescue, failure is loud. User proc (Config.on_value_change, Config.on_field_change) wrapped in rescue StandardError; exception logged via Rails.logger.error with hook name + value/field id + change_type; does NOT propagate. Mirrors the codebase's fail-closed-defaults pattern: integrity feature loud, observability glue safe. No fallback Config.on_callback_error hook in this phase — deferred.",
+      "area": "error-policy",
+      "phase": "03",
+      "date": "2026-04-30"
+    },
+    {
+      "question": "`on_field_change` change_type set — does :rename exist as a distinct symbol, and when does it fire?",
+      "answer": "[:create, :update, :destroy, :rename]. :rename fires whenever `name` is among Field#saved_changes, even when name changed alongside other attrs (options, default_value_meta, sort_order, field_dependent) in the same save. Branching: created? → :create; destroyed? → :destroy; else if saved_change_to_attribute?(:name) → :rename; else :update. Rationale: Phase 7 needs DDL distinguishability — :rename triggers ALTER TABLE / matview regen, :update does not. False-positive cost is a redundant async DDL regen; false-negative cost is a corrupted matview where SQL column name doesn't match field name. Pick the safer side.",
+      "area": "field-event-types",
+      "phase": "03",
+      "date": "2026-04-30"
     }
   ],
   "inferred": [
@@ -99,6 +127,36 @@
       "text": "Phase 02 ROADMAP goal language ('without adding new columns') is refined to 'additive schema changes only, defaults preserve v0.1.0 behavior, API surface remains backwards-compatible' to accommodate the field_dependent column and FK semantic change.",
       "priority": "Must-have",
       "source": "Phase 2 discussion: scope-refinement"
+    },
+    {
+      "id": "REQ-01",
+      "text": "Config.on_value_change and Config.on_field_change are public single-proc slots backed by ActiveSupport::Configurable. A private TypedEAV::EventDispatcher (or equivalent) module exposes register_internal_value_change / register_internal_field_change for first-party features (Phase 4 versioning, Phase 7 index DDL regen). Internal subscribers fire FIRST in registration order; user proc fires LAST. Reassigning Config.on_value_change cannot disable internal subscribers.",
+      "priority": "Must-have",
+      "source": "Phase 3 discussion: callback-registration"
+    },
+    {
+      "id": "REQ-01",
+      "text": "Value `after_commit` dispatcher fires on_value_change with change_type :create on first commit, :destroy on destroy commit, and :update only when saved_change_to_attribute?(field.class.value_column) is true. No-op updates (no value-column change in saved_changes) do not fire :update.",
+      "priority": "Must-have",
+      "source": "Phase 3 discussion: update-semantics"
+    },
+    {
+      "id": "REQ-01",
+      "text": "Internal subscribers propagate exceptions raised inside their callable. User proc (Config.on_value_change, Config.on_field_change) is wrapped in rescue StandardError; raised exceptions are logged via Rails.logger.error with hook name + record id + change_type and do NOT propagate. No fallback Config.on_callback_error hook in this phase.",
+      "priority": "Must-have",
+      "source": "Phase 3 discussion: error-policy"
+    },
+    {
+      "id": "REQ-01",
+      "text": "Field `after_commit` dispatcher fires on_field_change with change_type from the set [:create, :update, :destroy, :rename]. Branch: created? → :create; destroyed? → :destroy; else saved_change_to_attribute?(:name) → :rename (even when other attrs also changed in the same save); else → :update. Phase 7 matview DDL regen subscribes to :rename specifically.",
+      "priority": "Must-have",
+      "source": "Phase 3 discussion: field-event-types"
+    },
+    {
+      "id": "REQ-01",
+      "text": "TypedEAV.with_context(**kwargs) { } pushes a frozen pre-merged Hash onto a thread-local stack (`merged = stack.last&.merge(new) || new`); pops in `ensure`. Reading current context returns stack.last || {}. Shallow per-key merge across nesting; deep-merge of nested Hash values is NOT promised. Default empty context is {}. Mirrors with_scope's ensure-pop exception safety.",
+      "priority": "Must-have",
+      "source": "Phase 3 discussion: with-context-semantics (Claude's discretion)"
     }
   ],
   "deferred": [
@@ -131,6 +189,26 @@
       "idea": "Cascade behavior on Section destroy. Phase 02 covers Field destroy only; Section cascade may surface in a later phase.",
       "mentioned_during": "Phase 2 discussion: cascade-wiring",
       "date": "2026-04-29"
+    },
+    {
+      "idea": "Config.use_active_support_notifications = true opt-in to also broadcast hook events via ActiveSupport::Notifications alongside the proc API. Revisit if multiple consumers want pub/sub semantics for observability tooling (Datadog, OpenTelemetry, etc.). Out of scope for Phase 03 — proc API is the canonical surface.",
+      "mentioned_during": "Phase 3 discussion: callback-registration",
+      "date": "2026-04-30"
+    },
+    {
+      "idea": "Deep-merge semantics for nested with_context (Hash#deep_merge). Rejected in favor of shallow merge for predictability. Revisit if a real use case for hierarchical context (e.g., nested operation tags) emerges.",
+      "mentioned_during": "Phase 3 discussion: with-context-semantics",
+      "date": "2026-04-30"
+    },
+    {
+      "idea": "Config.on_callback_error = ->(err, hook_name, record) { ... } for structured error routing (Sentry, custom logger, etc.). Phase 3 uses Rails.logger.error directly; defer until a consumer reports needing structured routing.",
+      "mentioned_during": "Phase 3 discussion: error-policy",
+      "date": "2026-04-30"
+    },
+    {
+      "idea": "Config.value_change_filter opt-out to fire :update on every after_commit instead of only when the typed column changed. Out of scope for Phase 03 — the filter is a correctness invariant for Phase 4 versioning + Phase 7 matview, not an observability preference.",
+      "mentioned_during": "Phase 3 discussion: update-semantics",
+      "date": "2026-04-30"
     }
   ]
 }

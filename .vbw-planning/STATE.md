@@ -30,6 +30,14 @@ Status: ready
 ## Todos
 _(No outstanding known issues. typed_eav.gemspec Layout/HashAlignment offenses resolved 2026-04-30 — see commit history.)_
 
+- [KNOWN-ISSUE] rubocop (typed_eav.gemspec:22-26): Layout/HashAlignment: hash literal keys not aligned in metadata{} block (5 oc... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:d04d129f)
+- [KNOWN-ISSUE] rubocop Layout/HashAlignment (5 offenses) (typed_eav.gemspec:22-26): 5 Layout/HashAlignment offenses in metadata{} block hash keys. Confirmed pre-... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:99094394)
+- [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 1) (typed_eav.gemspec:22): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:bf6b7384)
+- [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 2) (typed_eav.gemspec:23): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:a6a39615)
+- [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 3) (typed_eav.gemspec:24): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:98fd8203)
+- [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 4) (typed_eav.gemspec:25): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:56a33f0d)
+- [KNOWN-ISSUE] rubocop Layout/HashAlignment (offense 5) (typed_eav.gemspec:26): Layout/HashAlignment: Align the keys of a hash literal if they span more than... — accepted as process-exception for this phase (phase 01, seen 1x) (see remediation/qa/round-01/R01-SUMMARY.md) (added 2026-04-30) (ref:61b27064)
+
 ## Blockers
 None
 
