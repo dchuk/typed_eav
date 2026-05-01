@@ -70,6 +70,30 @@ module TypedEAV
       # and `throw(:abort)`s, mirroring AR's `dependent: :restrict_with_error`.
       before_destroy :dispatch_field_dependent
 
+      # Phase 03 event dispatch. SINGLE callback (no `on:` filter) that
+      # branches across the four change_types in `_dispatch_field_change`.
+      # Three reasons for one-callback-with-branch over the three-callback-
+      # with-on:-filter form used on Value:
+      #
+      #   1. :rename is a sub-case of :update (it requires
+      #      `saved_change_to_attribute?(:name)` which is only meaningful
+      #      in the update lifecycle). Splitting :rename and :update across
+      #      two declarations duplicates the branch logic.
+      #   2. :create / :destroy / :update / :rename are mutually exclusive
+      #      per save — `created? && destroyed?` cannot both be true — so
+      #      a single if/elsif chain expresses the contract directly.
+      #   3. STI: this declaration on Field::Base fires for every subclass
+      #      instance (Text, Integer, Select, MultiSelect, IntegerArray,
+      #      etc.). One callback covers them all without per-subclass
+      #      duplication.
+      #
+      # Note: this is NOT the alias-collision form — `after_commit :method`
+      # (no `on:`) is one callback, one method, no aliasing. The Rails 8.1
+      # alias-collision bug only bites when the convenience alias forms
+      # (after_create_commit / after_update_commit / after_destroy_commit)
+      # are reused with the same method name.
+      after_commit :_dispatch_field_change
+
       # ── Scopes ──
 
       # Partition lookup across the three-key tuple `(entity_type, scope,
@@ -601,6 +625,59 @@ module TypedEAV
           existing.update!(value: default_value)
         end
         # else: row exists with non-nil typed column → skip (skip rule).
+      end
+
+      # ── Phase 03 event dispatch ──
+      #
+      # Branches the four change_types via lifecycle predicates in the order
+      # locked by 03-CONTEXT.md §"`on_field_change` change_type set" → "Mechanism":
+      #
+      #   previously_new_record? → :create
+      #   destroyed?             → :destroy
+      #   saved_change_to_attribute?(:name) → :rename
+      #   else                   → :update
+      #
+      # The four predicates are mutually exclusive per save
+      # (`previously_new_record?` and `destroyed?` cannot both be true;
+      # rename/update only reachable when neither create nor destroy fired),
+      # so the ordering is behaviorally equivalent to any other ordering —
+      # but matching CONTEXT.md verbatim keeps the code grep-able against
+      # the locked decision and avoids the next reader wondering whether
+      # the order was intentional or accidental.
+      #
+      # `previously_new_record?` is the documented Rails AR predicate that
+      # answers "was this row newly inserted in the just-committed save?"
+      # (true after a successful create-commit, false after update/destroy).
+      # The plan referenced `created?` as a "Rails 6.1+ alias" but that
+      # alias does NOT exist on ActiveRecord records on the pinned
+      # activerecord 8.1.3 (NoMethodError verified via dummy app probe in
+      # plan 03-02 P02 — see SUMMARY deviations). `id_previously_changed?`
+      # works incidentally (PK goes nil→assigned during INSERT) but is
+      # less intent-revealing. `previously_new_record?` is the correct
+      # documented form for this lifecycle-state question.
+      #
+      # Rename detection is structural: any save where the :name column changed
+      # counts as a rename, even if combined with other attribute changes
+      # (sort_order, options, default_value, field_dependent). This false-
+      # positive bias is intentional — Phase 07's matview must regenerate
+      # column DDL on rename; missing a rename combined with other edits would
+      # corrupt the matview's column-name → field-name map.
+      #
+      # `:name` is the only attribute name we hardcode in this callback, and
+      # it's structural (the locked rename-detection mechanism per 03-CONTEXT.md),
+      # not a data access — we don't read the value of `name`, only that it
+      # changed.
+      def _dispatch_field_change
+        change_type = if previously_new_record?
+                        :create
+                      elsif destroyed?
+                        :destroy
+                      elsif saved_change_to_attribute?(:name)
+                        :rename
+                      else
+                        :update
+                      end
+        TypedEAV::EventDispatcher.dispatch_field_change(self, change_type)
       end
     end
     # rubocop:enable Metrics/ClassLength
