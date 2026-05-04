@@ -83,6 +83,34 @@
       "area": "field-event-types",
       "phase": "03",
       "date": "2026-04-30"
+    },
+    {
+      "question": "Versioning opt-in granularity — gem-global flag, per-entity, or per-Field?",
+      "answer": "Master switch + per-entity. TypedEAV.config.versioning is a kill-switch (default false → Phase 4 internal subscriber not registered at engine boot, zero overhead). When true, the subscriber registers but only writes a version row when value.entity_type belongs to a host that opted in (`has_typed_eav versioned: true` or `include TypedEAV::Versioned`, recorded on the existing Registry entry). Decouples the master switch from the per-host decision. Rejected: gem-global on/off only (forces all-or-nothing — Phase 5 will introduce field types apps may want versioned only on specific hosts). Rejected: per-Field column on typed_eav_fields (granularity most apps don't need; requires migration for everyone).",
+      "area": "opt-in-granularity",
+      "phase": "04",
+      "date": "2026-05-04"
+    },
+    {
+      "question": "Version row jsonb shape for before_value / after_value — column-named, scalar wrapper, or full-row snapshot?",
+      "answer": "Column-named jsonb: {\"<column_name>\": <casted value>}. One key for current 17 single-cell field types; two keys for Phase 5 Currency ({\"decimal_value\": 99.99, \"string_value\": \"USD\"}). Subscriber reads field.class.value_columns (a list, defaulting to [value_column] for single-cell types). Forward-compatible with Phase 5 Currency at zero schema cost; queryable via jsonb operators. Empty {} means \"no recorded value\"; {\"<column>\": null} means \"recorded NULL\". Rejected: flat scalar {\"v\": <value>} (Currency forces a one-off branch and loses native column-key queryability). Rejected: full-row snapshot of all 7 typed columns (~6 redundant nulls per row, storage waste at scale).",
+      "area": "version-row-shape",
+      "phase": "04",
+      "date": "2026-05-04"
+    },
+    {
+      "question": "Value#revert_to(version) semantics — fires hooks (append-only) or raw write?",
+      "answer": "Append-only, fires hooks. revert_to writes the targeted version's before_value back via self.value = … (or per-column self[col] = … for multi-cell types like Currency) and save!. The existing after_commit :_dispatch_value_change_update chain fires; EventDispatcher routes through Versioning's internal subscriber (slot 0); a NEW version row is written where after_value matches the targeted version's before_value. User Config.on_value_change also fires — revert is a normal :update. Matches PaperTrail / Audited conventions. Caller can use with_context(reverted_from_version_id: v.id) { value.revert_to(v) } to record intent on the new version row; Versioning does NOT inject this automatically. Rejected: silent revert via update_columns (skips callbacks → no version row → audit gap). Rejected: hybrid Versioning.silent { value.revert_to(v) } API (parallel execution path, complexity for marginal gain).",
+      "area": "revert-semantics",
+      "phase": "04",
+      "date": "2026-05-04"
+    },
+    {
+      "question": "Config.actor_resolver returning nil — allow nil changed_by, reject the write, or fall back to a sentinel?",
+      "answer": "Allow nil. typed_eav_value_versions.changed_by is nullable. System writes (migrations, jobs, console, any path where actor_resolver returns nil) get changed_by: nil — symmetric with how scope_resolver returning nil yields no scope. Apps that need 'every write must have an actor' enforce it in their own actor_resolver lambda (e.g., raise unless Current.user) or via a downstream validation on the version row. Reasoning vs scope: scope is fail-closed because tenant isolation is catastrophic when missing; actor is degraded audit (recoverable, sometimes legitimate — system writes are real). Forcing actor present is an app-policy choice, not a gem-policy choice; strict-mode would reject every console save, migration backfill, and job without with_context(actor: ...) — hostile defaults. Rejected: raise TypedEAV::ActorRequired. Rejected: configurable sentinel actor (Config.system_actor) — kicks the policy decision down the road.",
+      "area": "actor-resolver-nil",
+      "phase": "04",
+      "date": "2026-05-04"
     }
   ],
   "inferred": [
@@ -157,6 +185,30 @@
       "text": "TypedEAV.with_context(**kwargs) { } pushes a frozen pre-merged Hash onto a thread-local stack (`merged = stack.last&.merge(new) || new`); pops in `ensure`. Reading current context returns stack.last || {}. Shallow per-key merge across nesting; deep-merge of nested Hash values is NOT promised. Default empty context is {}. Mirrors with_scope's ensure-pop exception safety.",
       "priority": "Must-have",
       "source": "Phase 3 discussion: with-context-semantics (Claude's discretion)"
+    },
+    {
+      "id": "REQ-02",
+      "text": "TypedEAV.config.versioning is a master kill-switch (default false). When false, no Phase 4 internal subscriber is registered with EventDispatcher.register_internal_value_change at engine boot — zero overhead for non-versioning apps. When true, the subscriber registers but only writes a version row when value.entity_type belongs to a host model that opted in via has_typed_eav versioned: true (or include TypedEAV::Versioned). Per-host opt-in is recorded on the existing Registry entry; non-opted entity types pay a Registry lookup per write and nothing more.",
+      "priority": "Must-have",
+      "source": "Phase 4 discussion: opt-in-granularity"
+    },
+    {
+      "id": "REQ-02",
+      "text": "typed_eav_value_versions.before_value and .after_value are jsonb hashes keyed by typed-column name: {\"<column_name>\": <casted value>}. Versioning subscriber snapshots only the columns returned by field.class.value_columns (a list; defaults to [value_column] for single-cell types; Phase 5 Currency overrides to [:decimal_value, :string_value]). Empty {} means 'no recorded value'; {\"<column>\": null} means 'recorded NULL'. No full-row snapshot, no scalar wrapping.",
+      "priority": "Must-have",
+      "source": "Phase 4 discussion: version-row-shape"
+    },
+    {
+      "id": "REQ-02",
+      "text": "Value#revert_to(version) is append-only and fires hooks. It writes the targeted version's before_value columns back via self.value = … (or per-column self[col] = … for multi-cell types) and save!. The existing Value after_commit :_dispatch_value_change_update chain fires; a new version row is written; Config.on_value_change user proc also fires. revert_to does NOT auto-inject a reverted_from_version_id field on the new version row's context — callers wrap the call in TypedEAV.with_context(reverted_from_version_id: v.id) { ... } if they want that recorded.",
+      "priority": "Must-have",
+      "source": "Phase 4 discussion: revert-semantics"
+    },
+    {
+      "id": "REQ-02",
+      "text": "Config.actor_resolver mirrors Config.scope_resolver shape but with permissive nil semantics: a nil return is allowed and yields a version row with changed_by: nil. typed_eav_value_versions.changed_by is nullable. There is no TypedEAV::ActorRequired exception, no Config.system_actor sentinel fallback, and no Config.require_actor strict-mode in Phase 4. Apps that need stricter policy enforce it in their own actor_resolver lambda or via a downstream validation on the version row.",
+      "priority": "Must-have",
+      "source": "Phase 4 discussion: actor-resolver-nil"
     }
   ],
   "deferred": [
@@ -209,6 +261,46 @@
       "idea": "Config.value_change_filter opt-out to fire :update on every after_commit instead of only when the typed column changed. Out of scope for Phase 03 — the filter is a correctness invariant for Phase 4 versioning + Phase 7 matview, not an observability preference.",
       "mentioned_during": "Phase 3 discussion: update-semantics",
       "date": "2026-04-30"
+    },
+    {
+      "idea": "Snapshot-storage extension pattern (alternative to event-log default for high-volume apps). Roadmap explicitly mentions it as documented but out of scope for this phase. Document the extension shape in README; do not implement.",
+      "mentioned_during": "Phase 4 discussion: phase-boundary",
+      "date": "2026-05-04"
+    },
+    {
+      "idea": "Branching/merging across version chains. Explicitly out of scope per roadmap; do not reintroduce without a deliberate reversal.",
+      "mentioned_during": "Phase 4 discussion: phase-boundary",
+      "date": "2026-05-04"
+    },
+    {
+      "idea": "Versioning.silent { … } API for opt-out callbacks during specific writes. Rejected for revert_to (would create a parallel execution path); could resurface for bulk-import scenarios in Phase 6. Revisit only if Phase 6 surfaces a real requirement.",
+      "mentioned_during": "Phase 4 discussion: revert-semantics",
+      "date": "2026-05-04"
+    },
+    {
+      "idea": "Strict-mode actor resolution (Config.require_actor = true) raising TypedEAV::ActorRequired on nil. Out of scope for Phase 4 — apps enforce strictness in their own resolver. Revisit only if a regulated-industry consumer reports needing it built-in.",
+      "mentioned_during": "Phase 4 discussion: actor-resolver-nil",
+      "date": "2026-05-04"
+    },
+    {
+      "idea": "Config.system_actor sentinel fallback when actor_resolver returns nil. Rejected — kicks the policy decision down the road. Apps that need a non-nil default set it in their own resolver lambda.",
+      "mentioned_during": "Phase 4 discussion: actor-resolver-nil",
+      "date": "2026-05-04"
+    },
+    {
+      "idea": "Per-Field versioning toggle (typed_eav_fields.versioned:boolean). Rejected for Phase 4 — granularity most apps don't need; requires migration for everyone. Revisit only if a real consumer reports needing per-field selectivity within an opted-in entity.",
+      "mentioned_during": "Phase 4 discussion: opt-in-granularity",
+      "date": "2026-05-04"
+    },
+    {
+      "idea": "jsonb GIN indexes on typed_eav_value_versions.before_value / after_value for content queries. Out of scope for Phase 4. Add later only if a real querying use case surfaces.",
+      "mentioned_during": "Phase 4 discussion: open-questions",
+      "date": "2026-05-04"
+    },
+    {
+      "idea": "Auto-injection of reverted_from_version_id on the new version row's context during Value#revert_to. Phase 4 leaves this to the caller via TypedEAV.with_context(reverted_from_version_id: v.id) { ... }. Revisit if the manual pattern proves error-prone.",
+      "mentioned_during": "Phase 4 discussion: revert-semantics",
+      "date": "2026-05-04"
     }
   ]
 }
