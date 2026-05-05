@@ -5,18 +5,18 @@
 
 ## Current Phase
 Phase: 4 of 7 (Versioning)
-Plans: 0/0 (not yet planned)
+Plans: 0/3
 Progress: 0%
-Status: pending
+Status: Planned
 
 ## Phase Status
-- **Phase 1:** ✓ Complete (7 plans / 5 waves shipped, R01 remediation applied, UAT 3/3 pass)
-- **Phase 2:** ✓ Complete (4 plans shipped, R01 remediation applied, UAT pass)
-- **Phase 3:** ✓ Complete (2 plans shipped, R01 plan-amendment applied, UAT 2/2 pass)
-- **Phase 4:** Pending
-- **Phase 5:** Pending
-- **Phase 6:** Pending
-- **Phase 7:** Pending
+- **Phase 1 (Two Level Scope Partitioning):** Complete
+- **Phase 2 (Pipeline Completions):** Complete
+- **Phase 3 (Event System):** Complete
+- **Phase 4 (Versioning):** Planned
+- **Phase 5 (Field Type Expansion):** Pending
+- **Phase 6 (Bulk Operations):** Pending
+- **Phase 7 (Read Optimization):** Pending
 
 ## Key Decisions
 | Decision | Date | Rationale |
@@ -52,3 +52,5 @@ None
 - 2026-04-29: Phase 01 UAT 3/3 pass (docs quality, migration guide, validation behavior section)
 - 2026-04-29: Discussed phase 02 (architect mode) — 4 binding decisions captured in 02-CONTEXT.md
 - 2026-04-29: Planned phase 02 — 4 plans across 2 waves (commit pending)
+- 2026-05-04: Discussed phase 04 (architect mode) — 4 binding decisions captured in 04-CONTEXT.md (opt-in granularity, jsonb shape, revert_to semantics, actor_resolver nil semantics)
+- 2026-05-05: Planned phase 04 (versioning) — 3 plans across 3 waves (linear chain; file conflicts on value.rb and lib/typed_eav.rb force sequencing). 14 tasks total. Open items resolved: changed_by=string, three indexes shipped, FK ON DELETE SET NULL on value_id+field_id, generator unchanged (idempotent re-runs), value_columns plural fix bundled in plan 04-02.
