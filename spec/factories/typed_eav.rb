@@ -162,6 +162,16 @@ FactoryBot.define do
     entity_type { "Contact" }
   end
 
+  # Phase 5 plan 04: Reference field type. FK stored in integer_value;
+  # default target_entity_type points at "Contact" (the dummy app's
+  # primary scoped model). target_scope is unset by default — tests
+  # configure it when exercising Gating Decision 2 paths.
+  factory :reference_field, class: "TypedEAV::Field::Reference" do
+    sequence(:name) { |n| "reference_field_#{n}" }
+    entity_type { "Contact" }
+    options { { target_entity_type: "Contact" } }
+  end
+
   # ── Values ──
 
   factory :typed_value, class: "TypedEAV::Value" do

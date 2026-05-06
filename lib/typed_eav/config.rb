@@ -66,6 +66,7 @@ module TypedEAV
       select: "TypedEAV::Field::Select",
       multi_select: "TypedEAV::Field::MultiSelect",
       percentage: "TypedEAV::Field::Percentage",
+      reference: "TypedEAV::Field::Reference",
       integer_array: "TypedEAV::Field::IntegerArray",
       decimal_array: "TypedEAV::Field::DecimalArray",
       text_array: "TypedEAV::Field::TextArray",
