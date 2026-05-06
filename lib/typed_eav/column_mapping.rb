@@ -44,6 +44,29 @@ module TypedEAV
         @value_column = column_name.to_sym
       end
 
+      # All typed columns this field type stores its value across. Defaults to
+      # `[value_column]` for single-cell types — every built-in field type as
+      # of Phase 04 returns a one-element Array via this default. Phase 05
+      # Currency overrides this to return `[:decimal_value, :string_value]`
+      # (two-cell type: amount + currency code).
+      #
+      # Phase 04 versioning's snapshot logic iterates `value_columns` to build
+      # the jsonb {col_name => value} hash. Phase 04 also fixes the
+      # `Value#_dispatch_value_change_update` filter to use `value_columns.any?`
+      # instead of the singular `value_column` — forward-compatible with
+      # multi-cell types so a Currency change on the second cell alone still
+      # fires the :update event (Scout §3 / Discrepancy D3).
+      #
+      # The default delegates to `value_column` (the singular), so subclasses
+      # that haven't declared `value_column :col_name` raise the same
+      # NotImplementedError they always did when `value_columns` is invoked.
+      # This matches the existing contract — `value_column`'s raise is the
+      # "subclass must declare its column" enforcement; `value_columns`
+      # inherits that enforcement transparently.
+      def value_columns
+        [value_column]
+      end
+
       # All operators this field type supports for querying.
       # Subclasses can override to restrict or extend.
       def supported_operators
