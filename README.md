@@ -563,6 +563,7 @@ A few non-obvious contracts worth knowing about up front:
 - **Cross-scope writes are rejected**: assigning a `Value` to a record whose `typed_eav_scope` doesn't match the field's `scope` adds a validation error on `:field`. The same guard covers the `parent_scope` axis.
 - **Orphan-parent rows rejected**: a `Field` or `Section` row with `parent_scope` set but `scope` blank is invalid. The `Value`-side guard rejects cross-`(scope, parent_scope)` writes too.
 - **Event hooks fire from `after_commit`**: the `on_value_change` and `on_field_change` callbacks fire after the database write is durable; their exceptions never break a save. See §"Event hooks" for the full contract.
+- **Versioning is opt-in**: When enabled (`TypedEAV.config.versioning = true` on the gem; `versioned: true` per host), every `:create` / `:update` / `:destroy` event on a Value writes an append-only audit row in `typed_eav_value_versions`. See §"Versioning" for the full contract.
 
 ## Event hooks
 
@@ -700,6 +701,282 @@ manually deletes typed_eav rows in FK order after.
 Production code rarely calls either — they exist for test isolation and
 for the rare case where a host app wants to fully unwire the gem in a
 specific request lifecycle.
+
+## Versioning
+
+`typed_eav` ships an opt-in append-only audit log for changes to typed
+values. When enabled, each `:create` / `:update` / `:destroy` event on
+a Value writes a row to `typed_eav_value_versions` capturing the
+before-state, after-state, actor, context, and timestamp.
+
+Default off. Apps that don't enable it pay zero overhead — the Phase 04
+internal subscriber is not registered with `EventDispatcher.value_change_internals`
+at all when `Config.versioning = false`. Zero callable in the dispatcher
+chain, zero per-write method dispatch, zero per-write config read.
+
+### Enabling versioning
+
+Two steps:
+
+```ruby
+# 1. Set the gem-level master switch in an initializer.
+#    config/initializers/typed_eav.rb
+TypedEAV.configure do |c|
+  c.versioning = true
+  c.actor_resolver = -> { Current.user }   # optional; nil is permissive
+end
+
+# 2. Opt the host model in. Either via the kwarg form:
+class Contact < ApplicationRecord
+  has_typed_eav scope_method: :tenant_id, versioned: true
+end
+
+# Or via the concern (equivalent — pick whichever fits your conventions):
+class Contact < ApplicationRecord
+  has_typed_eav scope_method: :tenant_id
+  include TypedEAV::Versioned
+end
+```
+
+The two opt-in forms produce identical Registry state. The kwarg form is
+preferred for new code; the concern form fits codebases with established
+mixin-based feature wiring.
+
+### Querying history
+
+```ruby
+contact.typed_eav_attributes = [{ name: "age", value: 41 }]
+contact.save!
+contact.typed_eav_attributes = [{ name: "age", value: 42 }]
+contact.save!
+
+value = contact.typed_values.find_by(field: age_field)
+value.history          # most-recent-first relation
+# => [<ValueVersion change_type: "update" before: {"integer_value" => 41} after: {"integer_value" => 42}>,
+#     <ValueVersion change_type: "create" before: {} after: {"integer_value" => 41}>]
+
+value.history.first.changed_by   # => "42" (User#42 — coerced to id.to_s)
+value.history.first.context      # => { "request_id" => "abc-123" } if with_context was active
+```
+
+`value.history` is a chainable relation. Filter, paginate, pluck:
+
+```ruby
+value.history.where(change_type: "update").pluck(:changed_at, :changed_by)
+value.history.limit(5).each { |v| ... }
+```
+
+### Querying full audit history (including destroy events)
+
+`Value#history` returns versions where `value_id` matches the live Value
+record. After the live Value is destroyed, the FK `ON DELETE SET NULL`
+nullifies `value_id` on the existing version rows, and the new `:destroy`
+version is also written with `value_id: nil` (the parent
+`typed_eav_values` row is gone by `after_commit on: :destroy` time —
+writing a non-nil `value_id` would FK-fail at INSERT). So `Value#history`
+cannot surface destroy versions, and after Value destruction it can no
+longer be called at all.
+
+To query the FULL audit history for a given (entity, field), including
+destroy events and post-destruction lookup, use the entity-scoped query
+directly:
+
+```ruby
+TypedEAV::ValueVersion
+  .where(entity_type: contact.class.name, entity_id: contact.id, field_id: age_field.id)
+  .order(changed_at: :desc, id: :desc)
+# => [<ValueVersion change_type: "destroy" before: {"integer_value" => 42} after: {} value_id: nil>,
+#     <ValueVersion change_type: "update"  before: {"integer_value" => 41} after: {"integer_value" => 42} value_id: nil>,
+#     <ValueVersion change_type: "create"  before: {} after: {"integer_value" => 41} value_id: nil>]
+```
+
+This pattern is the canonical way to surface "what happened to this
+field on this entity" across the full lifecycle, including post-destroy.
+The `entity_type` + `entity_id` columns remain the durable identity even
+after the parent Value row is gone, and `field_id` survives because
+destroying a Value does not destroy its Field.
+
+For broader audit views — "show all version history across all fields
+for a given entity" (e.g., admin entity-history pages, compliance
+exports) — drop the `field_id` filter:
+
+```ruby
+TypedEAV::ValueVersion
+  .where(entity_type: contact.class.name, entity_id: contact.id)
+  .order(changed_at: :desc, id: :desc)
+# => all version rows for every typed field on this contact, most-recent-first.
+# Includes :create, :update, and :destroy events across every field the
+# entity has ever had a typed value for.
+```
+
+The field-scoped query (with `field_id:`) is the common case for
+"history of a single field"; the entity-scoped query (without `field_id:`)
+is the broad-audit case for "all version history across all fields for
+this entity".
+
+### Version row jsonb shape
+
+`before_value` and `after_value` are jsonb hashes keyed by typed-column
+name:
+
+| Field type | Snapshot shape (single key) |
+|---|---|
+| `text`, `email`, `url`, `color` | `{"string_value": "..."}` |
+| `long_text` | `{"text_value": "..."}` |
+| `integer` | `{"integer_value": 42}` |
+| `decimal` | `{"decimal_value": "10.5"}` |
+| `boolean` | `{"boolean_value": true}` |
+| `date` | `{"date_value": "2026-05-05"}` |
+| `date_time` | `{"datetime_value": "2026-05-05T12:00:00Z"}` |
+| `select` | `{"string_value": "..."}` |
+| `multi_select`, `*_array`, `json` | `{"json_value": [...]}` |
+
+Multi-cell field types (Phase 5 Currency, when it lands) produce
+two-key snapshots: `{"decimal_value": "99.99", "string_value": "USD"}`.
+The version row's snapshot iterates `Field.value_columns` (plural), so
+new field types get the right shape automatically.
+
+`{}` (empty hash) and `{"<col>": null}` are distinct semantics:
+
+- `{}` means **no recorded value** — typical of `before_value` on a
+  `:create` event, or `after_value` on a `:destroy` event.
+- `{"<col>": null}` means **recorded nil** — the user explicitly
+  cleared the cell.
+
+### Reverting
+
+```ruby
+target = value.history.find_by(change_type: "update")
+value.revert_to(target)
+# value's typed columns now match target.before_value.
+# A NEW version row is written capturing the revert (append-only).
+```
+
+`revert_to` writes the targeted version's `before_value` columns back
+via `self[col] = …` and `save!`. The existing `after_commit` chain
+fires; the versioning subscriber writes a NEW version row whose
+`after_value` reflects the targeted version's `before_value`. The
+audit log is append-only — every revert is itself versioned.
+
+To record the intent of the revert, wrap the call in `with_context`:
+
+```ruby
+TypedEAV.with_context(reverted_from_version_id: target.id, actor: current_user) do
+  value.revert_to(target)
+end
+# The new version row's `context` column captures both keys.
+```
+
+`revert_to` raises `ArgumentError` in three documented conditions, checked in order:
+
+- when `version.value_id` is nil (the source Value was destroyed — destroy
+  versions have `value_id: nil` per the locked subscriber contract; you
+  can't restore a destroyed AR record by `save!`);
+- when the version's `before_value` is empty (the version represents a
+  `:create` event with no before-state to revert to);
+- when the version belongs to a different Value (`value_id` mismatch).
+
+In practice only `:update` versions are revertable. To restore a
+destroyed entity's typed values, create a new `TypedEAV::Value` record
+manually using `version.before_value` as the seed state.
+
+### Hook ordering guarantee
+
+Versioning is registered as an internal subscriber on
+`TypedEAV::EventDispatcher`. It runs **first** (slot 0) for every Value
+event. Your `Config.on_value_change` user proc fires **last**, after
+the version row is persisted:
+
+```
+Value#save! → after_commit → EventDispatcher.dispatch_value_change:
+  1. TypedEAV::Versioning::Subscriber.call  # writes version row
+  2. ... any other internal subscribers (Phase 7 matview, etc.) ...
+  3. Config.on_value_change user proc        # sees the persisted version
+```
+
+Internal subscriber errors propagate (versioning corruption is loud).
+User proc errors are rescued and logged via `Rails.logger.error` —
+the save itself already committed.
+
+### Actor resolution
+
+`Config.actor_resolver` mirrors `Config.scope_resolver`'s callable shape
+but returns whatever the app chooses (an AR record, a string, an integer,
+nil). The subscriber coerces non-nil returns via `id.to_s` (for AR
+records) or `to_s` (for scalars) before storing in the `changed_by`
+column (string, nullable).
+
+`nil` is the documented permissive sentinel: system writes, migrations,
+console-without-actor, and background jobs without a `with_context(actor:
+...)` wrap all flow through with `changed_by: nil`. This is intentional —
+forcing every Versioned write to have an actor would reject every console
+save and every migration backfill, which is hostile-by-default for a gem.
+
+Apps that need stricter enforcement do it inside the resolver:
+
+```ruby
+c.actor_resolver = -> { Current.user || raise(MyApp::ActorRequired) }
+```
+
+`Config.reset!` (documented in §"Event hooks") also resets `Config.versioning`
+to `false` and `Config.actor_resolver` to `nil`.
+
+### What versioning does not do
+
+- **No branching/merging across version chains.** Phase 4 ships event-log
+  shape only. Roadmap explicitly defers branching to a future design.
+- **No snapshot storage by default.** `typed_eav_value_versions` is an
+  event log — one row per change, not a full-row snapshot. For
+  high-volume apps that want snapshot storage, extend `ValueVersion` in
+  your own code (the gem keeps the event-log shape canonical so future
+  upgrades don't break your extension).
+- **No automatic `reverted_from_version_id` injection.** Use
+  `with_context` to record revert intent; the gem captures whatever
+  context the caller set.
+- **No per-Field versioning toggle.** Opt-in is per-entity (host model)
+  in Phase 4. Per-field granularity may land later if a real need
+  surfaces.
+- **No GIN indexes on `before_value` / `after_value` content.** Apps
+  that need to query inside the snapshot jsonb add their own indexes.
+  Phase 4 ships only the temporal indexes (`changed_at DESC` keyed on
+  `value_id`, `(entity_type, entity_id)`, and `field_id`).
+
+### Test isolation
+
+Specs that exercise versioning should opt into the `:event_callbacks`
+and `:real_commits` metadata flags (see §"Event hooks" — same pattern):
+
+```ruby
+RSpec.describe "my versioning behavior", :event_callbacks, :real_commits do
+  before do
+    TypedEAV.registry.register("Contact", versioned: true)
+    TypedEAV::Config.versioning = true
+    # CRITICAL: the :event_callbacks hook clears
+    # EventDispatcher.value_change_internals at example entry, so the
+    # engine-boot-registered subscriber is gone for the duration of
+    # the example. Re-register explicitly inside the before block.
+    # The hook's ensure block restores the snapshot — no leak.
+    TypedEAV::EventDispatcher.register_internal_value_change(
+      TypedEAV::Versioning::Subscriber.method(:call),
+    )
+  end
+  after { TypedEAV.registry.register("Contact", versioned: false) }
+
+  it "writes a version row" do
+    # ...
+  end
+end
+```
+
+The `:event_callbacks` around hook in `spec/spec_helper.rb` snapshot/
+restores `Config.versioning`, `Config.actor_resolver`, and the
+EventDispatcher subscriber lists around each example, so your changes
+don't leak to subsequent tests. The snapshot/restore CLEARS the
+internals list at example entry — that's why the re-registration
+above is required for any spec that needs the subscriber to fire. The
+`:real_commits` hook disables transactional fixtures (so `after_commit`
+fires durably) and cleans up `TypedEAV::ValueVersion` rows in
+FK-respecting order between examples.
 
 ## Database Support
 
