@@ -85,6 +85,15 @@ module TypedEAV
       #   types:               - restrict which field types are allowed (array of symbols)
       #                          e.g. [:text, :integer, :boolean]
       #                          default: all types
+      #   versioned:           - Phase 04 opt-in: when true, mutations to typed values on
+      #                          this entity type are recorded in typed_eav_value_versions.
+      #                          Requires `TypedEAV.config.versioning = true` (the gem-
+      #                          level master switch — default false). Apps that want
+      #                          versioning per-entity rather than globally toggle this
+      #                          alongside the master switch in their initializer.
+      #                          Alternative API: `include TypedEAV::Versioned` AFTER
+      #                          `has_typed_eav` does the same thing (see
+      #                          lib/typed_eav/versioned.rb).
       #
       # Configuration error: `parent_scope_method:` without `scope_method:` raises
       # `ArgumentError` at class load time. This closes the silent dead-letter mode
@@ -93,7 +102,7 @@ module TypedEAV
       # branch and silently discarding the parent_scope intent.
       #
       # Public DSL macro modeled on `acts_as_*`; renaming would break callers.
-      def has_typed_eav(scope_method: nil, parent_scope_method: nil, types: nil) # rubocop:disable Naming/PredicatePrefix
+      def has_typed_eav(scope_method: nil, parent_scope_method: nil, types: nil, versioned: false) # rubocop:disable Naming/PredicatePrefix
         # Macro-time configuration guard. Failing fast at class-load time is strictly
         # better than at query time because the misconfiguration is static (a
         # property of the macro call, not of the request). Closes the silent
@@ -132,7 +141,7 @@ module TypedEAV
         accepts_nested_attributes_for :typed_values, allow_destroy: true
 
         # Register with the global registry
-        TypedEAV.registry.register(name, types: types)
+        TypedEAV.registry.register(name, types: types, versioned: versioned)
       end
     end
 

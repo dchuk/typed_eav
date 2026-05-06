@@ -22,9 +22,24 @@ module TypedEAV
       end
       attr_writer :entities
 
-      # Register an entity type with optional type restrictions.
-      def register(entity_type, types: nil)
-        entities[entity_type] = { types: types }
+      # Register an entity type with optional type restrictions and optional
+      # versioning opt-in.
+      #
+      # `versioned:` is the per-entity Phase 04 opt-in flag. When true, AND
+      # `Config.versioning = true` at engine load (gem-level master switch),
+      # the Phase 04 subscriber writes a TypedEAV::ValueVersion row per
+      # Value mutation on this entity_type. Default false — apps not using
+      # versioning pay zero cost (one Hash#dig per write at most when
+      # `Config.versioning = true`, nothing when off).
+      #
+      # Backward compat: existing callers `register(name, types: types)`
+      # continue to work — the new kwarg defaults to false. The entry hash
+      # shape changes from `{ types: types }` to `{ types: types, versioned:
+      # versioned }`, but consumers (Registry.allowed_types_for,
+      # Registry.type_allowed?) only read the `:types` key, so they're
+      # unaffected.
+      def register(entity_type, types: nil, versioned: false)
+        entities[entity_type] = { types: types, versioned: versioned }
       end
 
       # All registered entity type names.
@@ -47,6 +62,24 @@ module TypedEAV
 
         type_name = field_type_class.name.demodulize.underscore.to_sym
         allowed.include?(type_name)
+      end
+
+      # Whether the entity type opted into Phase 04 versioning.
+      #
+      # Returns the stored boolean for opted-in entities; false for
+      # unregistered entities (defensive — callers might query before
+      # `has_typed_eav` runs in a particular load order). The Phase 04
+      # subscriber calls this on every Value write when `Config.versioning =
+      # true` — performance is one Hash#dig per write, negligible.
+      #
+      # `entities.dig(entity_type, :versioned)` returns nil when
+      # `entities[entity_type]` is missing (no register call) OR when the
+      # entry is `{ types: ..., versioned: nil }` (impossible by current
+      # register contract — kwarg default is false). The `|| false`
+      # normalizes to a strict boolean so callers can `if versioned?(...)`
+      # without three-way logic.
+      def versioned?(entity_type)
+        entities.dig(entity_type, :versioned) || false
       end
 
       # Clear all registrations (test isolation).
