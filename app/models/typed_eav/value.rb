@@ -135,6 +135,110 @@ module TypedEAV
       versions.order(changed_at: :desc, id: :desc)
     end
 
+    # Revert this Value's typed columns to the state recorded in
+    # `version.before_value`, then save!. The save fires the existing
+    # `after_commit :_dispatch_value_change_update` chain; EventDispatcher
+    # routes through TypedEAV::Versioning::Subscriber (slot 0); a NEW
+    # version row is written where after_value reflects the targeted
+    # version's before_value.
+    #
+    # This is the locked CONTEXT contract (04-CONTEXT.md §`Value#revert_to`
+    # semantics): revert is itself versioned. Append-only audit trail
+    # preserved. Matches PaperTrail / Audited industry conventions.
+    #
+    # ## What revert_to does NOT do
+    #
+    # - Does NOT use `update_columns` to skip callbacks. That would write
+    #   the columns silently and produce NO new version row — the audit
+    #   log would lose the revert event entirely. The locked CONTEXT
+    #   decision is explicit about this.
+    # - Does NOT inject a synthetic `reverted_from_version_id` into the
+    #   new version row's context. If the caller wants to record the
+    #   intent, they wrap the call in `TypedEAV.with_context(
+    #   reverted_from_version_id: v.id) { value.revert_to(v) }`. The
+    #   subscriber captures the active context as-is.
+    # - Does NOT fire if the targeted version's source Value was destroyed
+    #   (`version.value_id` is nil per plan 04-02's destroy-event handling).
+    #   Raises ArgumentError. Cannot save! a destroyed AR record back into
+    #   existence — caller must create a new Value manually using
+    #   `version.before_value` as the seed state.
+    # - Does NOT fire if the targeted version is a :create (before_value
+    #   is `{}` — empty — and there's nothing to revert to). Raises
+    #   ArgumentError.
+    # - Does NOT cross-Value: raises ArgumentError if `version.value_id !=
+    #   self.id`. Cross-Value reverts are a misuse pattern (the caller
+    #   passed the wrong record), not a feature.
+    #
+    # ## Revertable version types
+    #
+    # Only :update versions are revertable in practice:
+    #   - :create → fails empty-before_value check.
+    #   - :destroy → fails value_id-nil check (source Value gone).
+    #   - :update → succeeds (assuming same-Value).
+    # Documented in §Plan-time decisions §A.
+    #
+    # ## Multi-cell forward-compat
+    #
+    # Iterates `field.class.value_columns` (plural) to handle Phase 05
+    # Currency (and any future multi-cell type). For all 17 current
+    # single-cell types, value_columns returns [value_column] and the
+    # loop runs once.
+    # rubocop:disable Metrics/AbcSize -- three guard clauses (each with a multi-line error message including ids) plus the column-iteration body genuinely belong together; splitting them would obscure the locked check ordering documented above. The ABC complexity is just over the 25 threshold and reflects the explicit error-message construction (not control-flow density).
+    def revert_to(version)
+      # Check 1: source Value must still exist. plan 04-02's subscriber writes
+      # value_id: nil for :destroy events (because the parent typed_eav_values
+      # row is gone by after_commit on :destroy time and FK ON DELETE SET NULL
+      # would FK-fail at INSERT otherwise). A destroy version cannot be
+      # reverted because we can't save! a destroyed AR record back into
+      # existence. This check covers all destroy versions.
+      if version.value_id.nil?
+        raise ArgumentError,
+              "Cannot revert version##{version.id}: source Value was destroyed " \
+              "(version.value_id is nil). To restore a destroyed entity's typed " \
+              "values, create a new Value record manually using version.before_value " \
+              "as the seed state."
+      end
+
+      # Check 2: version must have a before-state to revert TO. :create
+      # versions have empty before_value (`{}` — locked semantic per
+      # 04-CONTEXT.md §"Version row jsonb shape"). There is nothing to
+      # revert to — the create represents the first state of the Value.
+      # Apps that want "revert to initial creation state" semantically want
+      # to reset to the field's default value, which is a different operation.
+      if version.before_value.empty?
+        raise ArgumentError,
+              "Cannot revert to version##{version.id}: before_value is empty (this " \
+              "version represents a :create event with no before-state). Choose a " \
+              "later :update version to revert from."
+      end
+
+      # Check 3: cross-Value guard. Caller must pass a version belonging to
+      # this Value. Naming both ids in the error message helps inline debug.
+      unless version.value_id == id
+        raise ArgumentError,
+              "Cannot revert Value##{id} to a version belonging to Value##{version.value_id} " \
+              "(value_id mismatch). Pass a version returned by #{self.class.name.demodulize}#history."
+      end
+
+      # Restore each typed column from the version's before_value snapshot.
+      # value_columns (plural) handles multi-cell types like Phase 05 Currency.
+      # We use `self[col] = …` (raw column write) instead of `self.value = …`
+      # (cast through the field type) because:
+      #   1. value.before_value already stores cast values (the subscriber
+      #      writes `value[col]` which is the cast value AR returned).
+      #   2. self.value = expects the field's "logical" value shape (a single
+      #      scalar for single-cell types, a {amount, currency} hash for
+      #      Currency in Phase 05). Reconstructing that shape from
+      #      before_value's per-column hash adds complexity for zero benefit
+      #      since the per-column values are exactly what we need.
+      field.class.value_columns.each do |col|
+        self[col] = version.before_value[col.to_s]
+      end
+
+      save!
+    end
+    # rubocop:enable Metrics/AbcSize
+
     # Override AR's initialize so missing `:value` kwarg → UNSET_VALUE
     # substitution. This is the only mechanism that lets us distinguish
     # "no value given" from "value: nil given" (both leave the typed column
