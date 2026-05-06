@@ -61,7 +61,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 - Default off keeps current behavior. Branching/merging are explicitly out of scope. Default storage is event log; snapshot extension pattern documented for high-volume apps.
 
 ### Phase 5: Field type expansion
-**Goal:** Ship four new field types over the existing STI hierarchy. Each preserves the cast-tuple contract, the operator-dispatch model, and the foundational "no hardcoded attribute references" principle.
+**Goal:** Ship five new field types (Image, File, Reference, Currency, Percentage) over the existing STI hierarchy. Each preserves the cast-tuple contract, the operator-dispatch model, and the foundational "no hardcoded attribute references" principle.
 **Deps:** Phase 1 (partition tuple). Benefits from Phase 4 (versioning of new types).
 **Reqs:** REQ-03
 **Success:**
@@ -99,7 +99,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 | 2 - Phase-1 pipeline completions | 4/4 | complete | 2026-04-29 |
 | 3 - Event system | 2/2 | complete | 2026-05-01 |
 | 4 - Versioning | 3/3 | complete | 2026-05-06 |
-| 5 - Field type expansion | 0/4 | planned | - |
+| 5 - Field type expansion | 3/4 | in progress | - |
 | 6 - Bulk operations & import/export | 0/0 | pending | — |
 | 7 - Read optimization | 0/0 | pending | — |
 

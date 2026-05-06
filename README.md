@@ -502,6 +502,7 @@ When both a global field (`scope: nil`) and a scoped field share a name, the **s
 | `Percentage` | `decimal_value` | BigDecimal (0..1 range) | `decimal_places`, `display_as: :fraction \| :percent` |
 | `Image` | `string_value` (signed_id) + `:attachment` has_one_attached | String (Active Storage signed_id) | `allowed_content_types`, `max_size_bytes` |
 | `File` | `string_value` (signed_id) + `:attachment` has_one_attached | String (Active Storage signed_id) | `allowed_content_types`, `max_size_bytes` |
+| `Reference` | `integer_value` (FK) | Integer (target record ID) | `target_entity_type`, `target_scope` |
 
 ## Sections (Optional UI Grouping)
 
@@ -618,6 +619,21 @@ the canonical multi-cell consumer of these extension points.
     }
   end
   ```
+
+- **`Reference` (Phase 5):** Foreign-key field type. Stores the target record's integer ID in `integer_value`. Operators: `:eq`, `:is_null`, `:is_not_null`, `:references` (explicit narrowing — does NOT inherit `:integer_value`'s `:gt`/`:lt`/`:between` defaults; arithmetic comparisons on FKs don't carry useful semantics). The `:references` operator accepts AR record instances OR Integer IDs at query time, normalizing via `field.cast` (a class-mismatched record routes to `base.none` rather than `:is_null`). Options: `target_entity_type` (REQUIRED — String class name of the target model, validated to constantize at field save), `target_scope` (OPTIONAL — when set, the field is REJECTED at save time if `target_entity_type` is not registered with `has_typed_eav scope_method:` (Gating Decision 2); when set with a scoped target, value-time validation rejects writes whose target's `typed_eav_scope` does not match `target_scope` via a `target_partition_matches?` helper structurally parallel to Phase 1's `entity_partition_axis_matches?` but on the target axis). Cross-scope safety mirrors the existing `Value#validate_field_scope_matches_entity` guard pattern applied to the target rather than the source.
+
+  ```ruby
+  rf = TypedEAV::Field::Reference.create!(
+    name: "manager", entity_type: "Contact", scope: tenant_id,
+    options: { target_entity_type: "Contact", target_scope: tenant_id },
+  )
+  TypedEAV::Value.create!(entity: alice, field: rf, value: bob)         # accepts AR record
+  TypedEAV::Value.create!(entity: alice, field: rf, value: bob.id)      # accepts Integer FK
+  Contact.where_typed_eav(name: "manager", op: :references, value: bob) # filter by record
+  Contact.where_typed_eav(name: "manager", op: :references, value: 42)  # filter by FK
+  ```
+
+- **Phase 5 summary:** Five field types ship in Phase 5 — **Image, File, Reference, Currency, Percentage**. All five preserve the cast-tuple contract (`[casted, invalid?]`), the operator-dispatch model (`supported_operators` + `operator_column` for multi-cell types), and the no-hardcoded-attribute-references foundational principle. The infrastructure introduced in plan 05-01 (`read_value`, `apply_default_to`, `operator_column`, plus `write_value` from plan 05-02) is the canonical extension surface for any future external multi-cell field type.
 
 ## Validation Behavior
 
