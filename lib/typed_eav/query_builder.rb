@@ -68,6 +68,24 @@ module TypedEAV
           eq_predicate(base, arel_col, col, value)
         when :not_eq
           not_eq_predicate(base, arel_col, col, value)
+        when :references
+          # Phase 5 Reference field. `value` may be an Integer FK OR an
+          # AR record instance — `field.cast` normalizes both to an
+          # integer FK (a class-mismatched record marks the cast invalid
+          # via the second tuple element). Empty-relation semantics on
+          # invalid cast: returning `base.where(col => nil)` would
+          # collapse to :is_null which has different semantics ("rows
+          # without an FK at all" rather than "rows referencing this
+          # missing target"); `base.none` is the unambiguous "no match".
+          # The :references operator is registered ONLY on Field::Reference
+          # (the operator-validation gate above keeps it from leaking to
+          # other types).
+          fk, invalid = field.cast(value)
+          if invalid || fk.nil?
+            base.none
+          else
+            base.where(arel_col.eq(fk))
+          end
         when :gt
           base.where(arel_col.gt(value))
         when :gteq

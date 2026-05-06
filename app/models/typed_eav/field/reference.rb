@@ -87,12 +87,23 @@ module TypedEAV
       def cast(raw)
         return [nil, false] if raw.nil? || (raw.respond_to?(:empty?) && raw.empty?)
 
-        return [raw, false] if raw.is_a?(Integer)
+        # CRITICAL: top-level `::Integer` (and `::String` below). Inside
+        # `module TypedEAV; module Field`, the bare `Integer` constant
+        # resolves to TypedEAV::Field::Integer (a Field subclass), not
+        # the Ruby Integer class — so `raw.is_a?(Integer)` would always
+        # be false. Same hazard with String. The leading `::` anchors
+        # constant lookup to ::Object and avoids the namespace shadow.
+        return [raw, false] if raw.is_a?(::Integer)
 
-        if raw.is_a?(String)
+        if raw.is_a?(::String)
           # Integer(...) with exception: false returns nil for non-numeric
           # input (including decimals like "1.5" — fractional FKs are
           # nonsense). Same rejection pattern as Field::Integer#cast.
+          # `Integer(...)` is the Kernel method (not the constant —
+          # method-call syntax routes through Kernel#Integer rather
+          # than constant lookup, so the TypedEAV::Field::Integer
+          # constant shadow that bites `is_a?(::Integer)` above does
+          # NOT bite this call form).
           int = Integer(raw, exception: false)
           return [int, false] if int
 
