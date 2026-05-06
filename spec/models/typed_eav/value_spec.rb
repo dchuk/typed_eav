@@ -854,6 +854,56 @@ RSpec.describe TypedEAV::Value, type: :model do
       end
     end
 
+    # Phase 5: Currency two-cell column routing. Asserts that the
+    # write path correctly fans out the {amount, currency} hash across
+    # decimal_value + string_value, and the read path composes them back
+    # into a hash. The default_currency fallback is exercised here, and
+    # the both-columns-nil → value: nil case is asserted.
+    context "with a currency field" do
+      let(:field) { create(:currency_field, name: "price") }
+
+      it "round-trips {amount, currency} hash across both columns" do
+        value = described_class.create!(entity: contact, field: field,
+                                        value: { amount: BigDecimal("99.99"), currency: "USD" })
+        value.reload
+        expect(value.decimal_value).to eq(BigDecimal("99.99"))
+        expect(value.string_value).to eq("USD")
+        expect(value.value).to eq(amount: BigDecimal("99.99"), currency: "USD")
+      end
+
+      it "applies default_currency when only amount is given" do
+        value = described_class.create!(entity: contact, field: field, value: { amount: "10" })
+        value.reload
+        expect(value.decimal_value).to eq(BigDecimal("10"))
+        expect(value.string_value).to eq("USD")
+      end
+
+      it "value returns nil when both columns are nil" do
+        value = described_class.new(entity: contact, field: field)
+        # No value set; Value#value should return nil (read_value returns
+        # nil when both columns are nil — single-cell-nil is impossible
+        # post-validation).
+        expect(value.value).to be_nil
+      end
+    end
+
+    # Phase 5: Percentage decimal_value coverage and 0-1 range rejection.
+    context "with a percentage field" do
+      let(:field) { create(:percentage_field, name: "rate") }
+
+      it "stores BigDecimal in decimal_value" do
+        value = described_class.create!(entity: contact, field: field, value: "0.75")
+        value.reload
+        expect(value.decimal_value).to eq(BigDecimal("0.75"))
+      end
+
+      it "rejects out-of-range value" do
+        value = described_class.new(entity: contact, field: field, value: BigDecimal("1.5"))
+        expect(value).not_to be_valid
+        expect(value.errors[:value]).to include("must be between 0.0 and 1.0")
+      end
+    end
+
     context "when value= writes dispatch through field.write_value" do
       it "invokes field.write_value(self, casted) for a Text field assignment" do
         field = create(:text_field, name: "dispatch_text_write")

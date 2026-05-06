@@ -493,4 +493,79 @@ RSpec.describe TypedEAV::QueryBuilder do
       )
     end
   end
+
+  # Phase 5: Currency operator dispatch end-to-end. The :currency_eq
+  # operator is registered ONLY on Field::Currency; the operator_column
+  # override routes it to :string_value while every other supported
+  # operator routes to :decimal_value. These examples assert (a) the
+  # SQL emitted by QueryBuilder targets the correct column for each
+  # operator, (b) :eq on amount filters via decimal_value, (c)
+  # :currency_eq on currency code filters via string_value, (d) :between
+  # ranges over the amount column.
+  describe ".filter with currency fields" do
+    let!(:field) { create(:currency_field, name: "qb_price") }
+
+    before do
+      # Three contacts with three different currency-amount combos to
+      # exercise both columns under filtering.
+      [
+        [contact_a, BigDecimal("100.00"), "USD"],
+        [contact_b, BigDecimal("50.00"),  "EUR"],
+        [contact_c, BigDecimal("200.00"), "USD"],
+      ].each do |contact, amount, currency|
+        TypedEAV::Value.create!(entity: contact, field: field,
+                                value: { amount: amount, currency: currency })
+      end
+    end
+
+    it ":eq filters by amount (decimal_value column)" do
+      sql = described_class.filter(field, :eq, BigDecimal("100.00")).to_sql
+      expect(sql).to include("decimal_value")
+      # The string_value column should NOT appear in the equality predicate.
+      expect(sql).not_to include("string_value =")
+
+      results = described_class.filter(field, :eq, BigDecimal("100.00"))
+      expect(results.pluck(:entity_id)).to eq([contact_a.id])
+    end
+
+    it ":currency_eq filters by currency code (string_value column)" do
+      sql = described_class.filter(field, :currency_eq, "USD").to_sql
+      expect(sql).to include("string_value")
+      # The decimal_value column should NOT appear in the equality predicate.
+      expect(sql).not_to include("decimal_value =")
+
+      results = described_class.filter(field, :currency_eq, "USD")
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_a.id, contact_c.id)
+    end
+
+    it ":between filters amount range (decimal_value)" do
+      sql = described_class.filter(field, :between, [BigDecimal("75"), BigDecimal("150")]).to_sql
+      expect(sql).to include("decimal_value")
+
+      results = described_class.filter(field, :between, [BigDecimal("75"), BigDecimal("150")])
+      expect(results.pluck(:entity_id)).to eq([contact_a.id])
+    end
+
+    it ":gt filters amount (decimal_value)" do
+      results = described_class.filter(field, :gt, BigDecimal("75"))
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_a.id, contact_c.id)
+    end
+
+    it ":lt filters amount (decimal_value)" do
+      results = described_class.filter(field, :lt, BigDecimal("75"))
+      expect(results.pluck(:entity_id)).to eq([contact_b.id])
+    end
+
+    it ":is_null targets the amount column (decimal_value)" do
+      sql = described_class.filter(field, :is_null, nil).to_sql
+      expect(sql).to include("decimal_value")
+    end
+
+    it ":currency_eq is rejected on non-Currency fields by the operator gate" do
+      text_field = create(:text_field, name: "qb_not_currency")
+      expect { described_class.filter(text_field, :currency_eq, "USD") }.to raise_error(
+        ArgumentError, /Operator :currency_eq is not supported/
+      )
+    end
+  end
 end

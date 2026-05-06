@@ -56,7 +56,15 @@ module TypedEAV
         base = value_scope(field)
 
         case operator
-        when :eq
+        when :eq, :currency_eq
+          # :currency_eq (Phase 5 Currency) is semantically equality on the
+          # routed column — Currency's operator_column override has already
+          # routed `col` to :string_value, so reusing the eq_predicate is
+          # the canonical implementation. Without this branch, the case
+          # falls through to the `else` raise even though the column
+          # dispatch resolved correctly. The operator-validation gate at
+          # the top of #filter still narrows :currency_eq to Field::Currency
+          # only — no other field type accepts it.
           eq_predicate(base, arel_col, col, value)
         when :not_eq
           not_eq_predicate(base, arel_col, col, value)

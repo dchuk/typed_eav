@@ -101,6 +101,13 @@ RSpec.describe "Field type column mappings" do
     TypedEAV::Field::Url => :string_value,
     TypedEAV::Field::Color => :string_value,
     TypedEAV::Field::Json => :json_value,
+    # Phase 5 additions. Currency's PRIMARY column is decimal_value (the
+    # amount); the secondary string_value (currency code) is asserted via
+    # the value_columns multi-cell block in column_mapping_value_columns_spec.
+    # Percentage inherits decimal_value from Decimal (re-declared explicitly
+    # for STI subclass-of-subclass class-instance-variable lookup).
+    TypedEAV::Field::Currency => :decimal_value,
+    TypedEAV::Field::Percentage => :decimal_value,
   }.each do |klass, expected_column|
     it "#{klass.name.demodulize} maps to #{expected_column}" do
       expect(klass.value_column).to eq(expected_column)
@@ -135,6 +142,10 @@ RSpec.describe "Field type operator_column BC across all built-in types" do
     TypedEAV::Field::Url => :string_value,
     TypedEAV::Field::Color => :string_value,
     TypedEAV::Field::Json => :json_value,
+    # Percentage is a Decimal subclass (Phase 5) that inherits Decimal's
+    # operator set without overriding operator_column — every supported
+    # operator routes to decimal_value.
+    TypedEAV::Field::Percentage => :decimal_value,
   }.freeze
 
   phase05_operator_column_bc_types.each do |klass, expected_col|
@@ -146,6 +157,27 @@ RSpec.describe "Field type operator_column BC across all built-in types" do
                                                "returned #{klass.operator_column(op).inspect}, " \
                                                "expected #{expected_col.inspect}"
         end
+      end
+    end
+  end
+
+  # Phase 5 explicit non-default case: Currency overrides operator_column
+  # so that :currency_eq routes to :string_value while every other
+  # supported operator routes to :decimal_value. This block is the
+  # canonical assertion of that override.
+  context "with TypedEAV::Field::Currency (non-default operator_column override)" do
+    it ":currency_eq routes to :string_value (NOT value_column)" do
+      expect(TypedEAV::Field::Currency.operator_column(:currency_eq)).to eq(:string_value)
+      expect(TypedEAV::Field::Currency.value_column).to eq(:decimal_value)
+    end
+
+    it "every other supported operator routes to :decimal_value (the value_column)" do
+      non_currency_eq_ops = TypedEAV::Field::Currency.supported_operators - [:currency_eq]
+      non_currency_eq_ops.each do |op|
+        actual = TypedEAV::Field::Currency.operator_column(op)
+        expect(actual).to eq(:decimal_value),
+                          "Currency.operator_column(#{op.inspect}) returned #{actual.inspect}, " \
+                          "expected :decimal_value"
       end
     end
   end
@@ -175,6 +207,22 @@ RSpec.describe "Field type supported operators" do
   it "MultiSelect supports array operators" do
     ops = TypedEAV::Field::MultiSelect.supported_operators
     expect(ops).to include(:any_eq, :all_eq)
+  end
+
+  it "Currency has the explicit operator set (Phase 5)" do
+    # Explicit narrowing — does NOT inherit string-search operators
+    # (:contains/:starts_with/:ends_with) from decimal_value's default
+    # since those don't apply to amount-numeric or currency-code searches.
+    # :currency_eq is registered ONLY on this class.
+    expect(TypedEAV::Field::Currency.supported_operators).to match_array(
+      %i[eq gt lt gteq lteq between currency_eq is_null is_not_null],
+    )
+  end
+
+  it "Percentage inherits Decimal's operator set (Phase 5)" do
+    expect(TypedEAV::Field::Percentage.supported_operators).to eq(
+      TypedEAV::Field::Decimal.supported_operators,
+    )
   end
 end
 
@@ -273,6 +321,71 @@ RSpec.describe "Field type casting" do
       field = build(:multi_select_field)
       expect(field).to be_optionable
       expect(field).to be_array_field
+    end
+  end
+
+  describe TypedEAV::Field::Currency do
+    let(:field) { build(:currency_field) }
+
+    it "casts a full hash to {amount: BigDecimal, currency: String}" do
+      casted, invalid = field.cast({ amount: "99.99", currency: "USD" })
+      expect(casted).to eq(amount: BigDecimal("99.99"), currency: "USD")
+      expect(invalid).to be(false)
+    end
+
+    it "applies default_currency when amount given without currency" do
+      casted, invalid = field.cast({ amount: "10" })
+      expect(casted).to eq(amount: BigDecimal("10"), currency: "USD")
+      expect(invalid).to be(false)
+    end
+
+    it "casts nil to [nil, false]" do
+      expect(field.cast(nil)).to eq([nil, false])
+    end
+
+    it "casts empty hash to [nil, false]" do
+      expect(field.cast({})).to eq([nil, false])
+    end
+
+    it "marks bare Numeric input as invalid" do
+      expect(field.cast(99.99)).to eq([nil, true])
+    end
+
+    it "marks bare String input as invalid" do
+      expect(field.cast("99.99")).to eq([nil, true])
+    end
+
+    it "marks unparseable amount as invalid" do
+      expect(field.cast({ amount: "abc", currency: "USD" })).to eq([nil, true])
+    end
+
+    it "rejects non-3-letter currency code" do
+      expect(field.cast({ amount: "10", currency: "DOLLARS" })).to eq([nil, true])
+    end
+
+    it "uppercases currency code" do
+      casted, = field.cast({ amount: "10", currency: "usd" })
+      expect(casted[:currency]).to eq("USD")
+    end
+
+    it "accepts string-keyed hash" do
+      casted, invalid = field.cast({ "amount" => "5.00", "currency" => "EUR" })
+      expect(casted).to eq(amount: BigDecimal("5.00"), currency: "EUR")
+      expect(invalid).to be(false)
+    end
+  end
+
+  describe TypedEAV::Field::Percentage do
+    let(:field) { build(:percentage_field) }
+
+    it "round-trips 0.75 as BigDecimal via Decimal#cast" do
+      casted, invalid = field.cast("0.75")
+      expect(casted).to eq(BigDecimal("0.75"))
+      expect(invalid).to be(false)
+    end
+
+    it "casts nil to [nil, false]" do
+      expect(field.cast(nil)).to eq([nil, false])
     end
   end
 end
@@ -518,7 +631,8 @@ RSpec.describe "cast_value(nil) returns nil for all field types" do
   %i[text_field long_text_field integer_field decimal_field boolean_field
      date_field datetime_field select_field multi_select_field
      integer_array_field decimal_array_field text_array_field date_array_field
-     email_typed_eav url_field color_field json_field].each do |factory_name|
+     email_typed_eav url_field color_field json_field
+     currency_field percentage_field].each do |factory_name|
     it "#{factory_name} returns nil" do
       field = build(factory_name)
       expect(field.cast(nil).first).to be_nil
@@ -570,6 +684,18 @@ RSpec.describe "Supported operators for all field types" do
 
   it "DateArray supports array operators" do
     expect(TypedEAV::Field::DateArray.supported_operators).to include(:any_eq)
+  end
+
+  it "Currency supports the explicit Phase-5 set including :currency_eq" do
+    ops = TypedEAV::Field::Currency.supported_operators
+    expect(ops).to include(:eq, :gt, :lt, :gteq, :lteq, :between, :currency_eq, :is_null, :is_not_null)
+    # :currency_eq is registered ONLY on Currency.
+    expect(TypedEAV::Field::Decimal.supported_operators).not_to include(:currency_eq)
+    expect(TypedEAV::Field::Text.supported_operators).not_to include(:currency_eq)
+  end
+
+  it "Percentage inherits the Decimal operator set unchanged" do
+    expect(TypedEAV::Field::Percentage.supported_operators).to eq(TypedEAV::Field::Decimal.supported_operators)
   end
 end
 
@@ -1051,5 +1177,170 @@ RSpec.describe "TypedEAV::Field::Base#backfill_default!", type: :model do
       field.backfill_default!
       expect(TypedEAV::Value.where(field_id: field.id).count).to eq(5)
     end
+  end
+end
+
+# Phase 5: Currency operator_column override is asserted in the BC block
+# above; this block is the focused assertion site for the dispatch logic
+# in isolation.
+RSpec.describe TypedEAV::Field::Currency, ".operator_column" do
+  it ":currency_eq routes to :string_value" do
+    expect(described_class.operator_column(:currency_eq)).to eq(:string_value)
+  end
+
+  it ":eq, :gt, :lt, :gteq, :lteq, :between, :is_null, :is_not_null all route to :decimal_value" do
+    %i[eq gt lt gteq lteq between is_null is_not_null].each do |op|
+      actual = described_class.operator_column(op)
+      expect(actual).to eq(:decimal_value),
+                        "Expected Currency.operator_column(#{op.inspect}) -> :decimal_value, got #{actual.inspect}"
+    end
+  end
+end
+
+RSpec.describe TypedEAV::Field::Currency, "#validate_typed_value co-population", type: :model do
+  let(:contact) { Contact.create!(name: "Currency Co-pop", tenant_id: nil) }
+  # Use a field WITHOUT default_currency so the amount-only case doesn't
+  # silently fall back. The default_currency-fallback path is documented
+  # as "applies ONLY when the hash has an amount but no currency" — when
+  # set, an amount-only hash IS the documented fallback case (and is
+  # therefore co-populated after cast). We test the unhappy path here.
+  let(:field) { create(:currency_field, name: "co_pop_price", options: {}) }
+
+  it "rejects an amount-only hash when default_currency is not set" do
+    value = TypedEAV::Value.new(entity: contact, field: field)
+    value.value = { amount: BigDecimal("10"), currency: nil }
+    value.valid?
+    expect(value.errors[:value]).to include("must have both amount and currency")
+  end
+
+  it "rejects a currency-only hash" do
+    value = TypedEAV::Value.new(entity: contact, field: field)
+    value.value = { amount: nil, currency: "USD" }
+    value.valid?
+    expect(value.errors[:value]).to include("must have both amount and currency")
+  end
+
+  it "accepts a co-populated hash" do
+    value = TypedEAV::Value.new(entity: contact, field: field)
+    value.value = { amount: BigDecimal("10"), currency: "USD" }
+    expect(value).to be_valid
+  end
+
+  it "default_currency fallback path: amount-only with default set is co-populated after cast" do
+    field_with_default = create(:currency_field, name: "co_pop_with_default") # factory provides default_currency: "USD"
+    value = TypedEAV::Value.new(entity: contact, field: field_with_default)
+    value.value = { amount: BigDecimal("10") } # no currency key
+    expect(value).to be_valid
+    expect(value.string_value).to eq("USD")
+  end
+
+  it "rejects a currency outside allowed_currencies when set" do
+    field.update!(options: field.options.merge(allowed_currencies: %w[USD EUR]))
+    value = TypedEAV::Value.new(entity: contact, field: field)
+    value.value = { amount: BigDecimal("10"), currency: "GBP" }
+    value.valid?
+    expect(value.errors[:value]).to include(I18n.t("errors.messages.inclusion"))
+  end
+end
+
+RSpec.describe TypedEAV::Field::Currency, ".validations (field-level options)", type: :model do
+  it "rejects default_currency that is not 3 uppercase letters" do
+    field = build(:currency_field, options: { default_currency: "us" })
+    expect(field).not_to be_valid
+    expect(field.errors[:default_currency]).to be_present
+  end
+
+  it "rejects allowed_currencies that is not an Array of 3-letter uppercase codes" do
+    field = build(:currency_field, options: { default_currency: "USD", allowed_currencies: %w[USD eur] })
+    expect(field).not_to be_valid
+    expect(field.errors[:allowed_currencies]).to be_present
+  end
+
+  it "accepts well-formed options" do
+    field = build(:currency_field, options: { default_currency: "USD", allowed_currencies: %w[USD EUR] })
+    expect(field).to be_valid
+  end
+end
+
+RSpec.describe TypedEAV::Field::Percentage, "#validate_typed_value (0-1 range)", type: :model do
+  let(:contact) { Contact.create!(name: "Pct Range", tenant_id: nil) }
+
+  it "accepts 0.5" do
+    field = create(:percentage_field, name: "pct_mid")
+    value = TypedEAV::Value.new(entity: contact, field: field, value: BigDecimal("0.5"))
+    expect(value).to be_valid
+  end
+
+  it "accepts boundary 0" do
+    field = create(:percentage_field, name: "pct_low")
+    value = TypedEAV::Value.new(entity: contact, field: field, value: BigDecimal("0"))
+    expect(value).to be_valid
+  end
+
+  it "accepts boundary 1" do
+    field = create(:percentage_field, name: "pct_hi")
+    value = TypedEAV::Value.new(entity: contact, field: field, value: BigDecimal("1"))
+    expect(value).to be_valid
+  end
+
+  it "rejects 1.5" do
+    field = create(:percentage_field, name: "pct_over")
+    value = TypedEAV::Value.new(entity: contact, field: field, value: BigDecimal("1.5"))
+    value.valid?
+    expect(value.errors[:value]).to include("must be between 0.0 and 1.0")
+  end
+
+  it "rejects -0.1" do
+    field = create(:percentage_field, name: "pct_under")
+    value = TypedEAV::Value.new(entity: contact, field: field, value: BigDecimal("-0.1"))
+    value.valid?
+    expect(value.errors[:value]).to include("must be between 0.0 and 1.0")
+  end
+end
+
+RSpec.describe TypedEAV::Field::Percentage, "#format" do
+  it "renders display_as: :percent as '75.5%' for 0.755 with decimal_places: 1" do
+    field = described_class.new(options: { decimal_places: 1, display_as: :percent })
+    expect(field.format(BigDecimal("0.755"))).to eq("75.5%")
+  end
+
+  it "renders display_as: :percent default decimal_places: 2 as '75.5%' for 0.755" do
+    field = described_class.new(options: { display_as: :percent })
+    # 0.755 * 100 = 75.5 → rounded to 2 decimal places = 75.5 (no trailing
+    # zeros in BigDecimal#round#to_s).
+    expect(field.format(BigDecimal("0.755"))).to eq("75.5%")
+  end
+
+  it "renders display_as: :fraction as '0.75'" do
+    field = described_class.new(options: { display_as: :fraction })
+    expect(field.format(BigDecimal("0.75"))).to eq("0.75")
+  end
+
+  it "defaults to :fraction when display_as is unset" do
+    field = described_class.new
+    expect(field.format(BigDecimal("0.75"))).to eq("0.75")
+  end
+
+  it "returns nil for nil input" do
+    expect(described_class.new.format(nil)).to be_nil
+  end
+end
+
+RSpec.describe TypedEAV::Field::Percentage, ".validations (field-level options)", type: :model do
+  it "rejects negative decimal_places" do
+    field = build(:percentage_field, options: { decimal_places: -1 })
+    expect(field).not_to be_valid
+    expect(field.errors[:decimal_places]).to be_present
+  end
+
+  it "rejects display_as outside :fraction / :percent" do
+    field = build(:percentage_field, options: { display_as: :weird })
+    expect(field).not_to be_valid
+    expect(field.errors[:display_as]).to be_present
+  end
+
+  it "accepts display_as: :percent" do
+    field = build(:percentage_field, options: { display_as: :percent, decimal_places: 1 })
+    expect(field).to be_valid
   end
 end

@@ -238,6 +238,41 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
         "string_value" => "USD",
       )
     end
+
+    # Phase 5: Currency end-to-end two-cell snapshot. The forward-compat
+    # multi-cell test above stubs an anonymous Field subclass; this test
+    # uses the real Field::Currency to confirm the documented forward-compat
+    # claim (RESEARCH §RQ-6: subscriber's value_columns iteration is
+    # forward-compat for Currency without subscriber changes) holds with
+    # the real, registered Currency type.
+    it "captures both decimal_value and string_value for a real Currency Value update" do
+      currency_field = nil
+      TypedEAV.with_scope("t1") do
+        currency_field = TypedEAV::Field::Currency.create!(
+          name: "currency_snap_price",
+          entity_type: "Contact",
+          scope: "t1",
+          options: { default_currency: "USD" },
+        )
+      end
+
+      value = TypedEAV::Value.create!(entity: contact, field: currency_field,
+                                      value: { amount: BigDecimal("99.99"), currency: "USD" })
+      value.update!(value: { amount: BigDecimal("109.99"), currency: "EUR" })
+
+      versions = TypedEAV::ValueVersion.where(value_id: value.id).order(:changed_at)
+      update_version = versions.last
+      expect(update_version.change_type).to eq("update")
+      expect(update_version.before_value.keys).to match_array(%w[decimal_value string_value])
+      expect(update_version.after_value.keys).to match_array(%w[decimal_value string_value])
+      expect(update_version.before_value["string_value"]).to eq("USD")
+      expect(update_version.after_value["string_value"]).to eq("EUR")
+      # Amount values are jsonb-serialized BigDecimal → string by AR's jsonb
+      # coercion (matches the existing :update spec at line 165 which sees
+      # "integer_value" => 41 coerced from a numeric column).
+      expect(update_version.before_value["decimal_value"].to_d).to eq(BigDecimal("99.99"))
+      expect(update_version.after_value["decimal_value"].to_d).to eq(BigDecimal("109.99"))
+    end
   end
 
   describe "actor coercion", :real_commits do
