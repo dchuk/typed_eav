@@ -244,6 +244,55 @@ module TypedEAV
         [raw, false]
       end
 
+      # ── Phase 05 multi-cell extension points ──
+      #
+      # These two instance methods are the field-side surface that resolves
+      # Value#value semantics and the default-application path. Single-cell
+      # field types (every built-in as of Phase 04) inherit the defaults
+      # below and behave identically to the pre-Phase-05 direct-column-access
+      # shape.
+      #
+      # Multi-cell field types (Phase 05: Currency stores `{amount, currency}`
+      # across decimal_value + string_value) override these to compose /
+      # unpack the logical value across multiple physical columns. The
+      # dispatch keeps Value#value and Value#apply_field_default oblivious
+      # to multi-cell — they always go through the field, so adding new
+      # multi-cell types in the future requires no Value-side changes.
+      #
+      # IMPORTANT: read_value and apply_default_to are paired. Multi-cell
+      # types MUST override BOTH together — overriding only one creates an
+      # asymmetry where reads see the multi-cell shape but defaults populate
+      # only one column.
+
+      # Returns the logical value for this field as stored on the given
+      # Value record. Default reads `value_record[self.class.value_column]`.
+      # Override in multi-cell field types to compose a hash from multiple
+      # columns (e.g., Field::Currency returns
+      # `{amount: r[:decimal_value], currency: r[:string_value]}`).
+      #
+      # Called from Value#value. The Value#value `return nil unless field`
+      # guard runs before this method, so `self` is always set.
+      def read_value(value_record)
+        value_record[self.class.value_column]
+      end
+
+      # Writes this field's configured default to the given Value record.
+      # Default writes `value_record[self.class.value_column] = default_value`,
+      # bypassing Value#value= to avoid re-casting an already-cast default
+      # (default_value is cast at field save time via validate_default_value).
+      # Override in multi-cell types to populate multiple columns from a
+      # composite default (e.g., Field::Currency unpacks `default_value`'s
+      # `{amount: ..., currency: ...}` hash into decimal_value + string_value).
+      #
+      # Called from Value#apply_field_default in two contexts:
+      #   1. Initial value assignment when no `value:` kwarg was passed
+      #      (UNSET_VALUE sentinel resolution path).
+      #   2. Pending-value resolution (apply_pending_value branch where
+      #      @pending_value was UNSET_VALUE and the field arrived later).
+      def apply_default_to(value_record)
+        value_record[self.class.value_column] = default_value
+      end
+
       # ── Introspection ──
 
       def field_type_name
