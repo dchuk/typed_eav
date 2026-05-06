@@ -60,6 +60,7 @@ module TypedEAV
       integer: "TypedEAV::Field::Integer",
       decimal: "TypedEAV::Field::Decimal",
       boolean: "TypedEAV::Field::Boolean",
+      currency: "TypedEAV::Field::Currency",
       date: "TypedEAV::Field::Date",
       date_time: "TypedEAV::Field::DateTime",
       select: "TypedEAV::Field::Select",

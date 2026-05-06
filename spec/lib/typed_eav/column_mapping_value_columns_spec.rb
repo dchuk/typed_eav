@@ -17,21 +17,33 @@ RSpec.describe TypedEAV::ColumnMapping do
       expect(TypedEAV::Field::MultiSelect.value_columns).to eq([:json_value])
     end
 
-    it "covers every built-in field type with the default" do
-      # 17 built-in types. Every one inherits the default value_columns →
-      # [value_column] until Phase 05 Currency overrides. This spec is
-      # the regression guard: if anyone adds a built-in type that
-      # overrides value_columns without also overriding value_column,
-      # this fails. Acceptable failure: Phase 05 Currency lands and adds
-      # the override deliberately — at that point this spec is updated
-      # to skip Currency and assert the new override returns the
-      # expected two-element Array.
+    it "covers every built-in single-cell field type with the default" do
+      # All built-in single-cell types inherit the default value_columns →
+      # [value_column]. This spec is the regression guard: if anyone adds
+      # a built-in single-cell type that overrides value_columns without
+      # also overriding value_column, this fails.
+      #
+      # Phase 05 multi-cell types (Currency) deliberately override
+      # value_columns; they are listed in MULTI_CELL_BUILTINS and
+      # excluded here. The override is asserted positively in the
+      # multi-cell block below.
+      multi_cell_class_names = %w[TypedEAV::Field::Currency]
       TypedEAV::Config::BUILTIN_FIELD_TYPES.each_value do |class_name|
+        next if multi_cell_class_names.include?(class_name)
+
         klass = class_name.constantize
         expect(klass.value_columns).to eq([klass.value_column]),
                                        "Expected #{klass}.value_columns to default to " \
                                        "[#{klass.value_column.inspect}], got #{klass.value_columns.inspect}"
       end
+    end
+
+    it "Currency (Phase 05 multi-cell) returns [:decimal_value, :string_value]" do
+      # Currency is the canonical multi-cell consumer of the override.
+      # decimal_value carries the amount; string_value carries the ISO
+      # 4217 currency code. Versioning's snapshot loop and Value's
+      # _dispatch_value_change_update filter both iterate this array.
+      expect(TypedEAV::Field::Currency.value_columns).to eq(%i[decimal_value string_value])
     end
 
     it "raises NotImplementedError when called on a subclass without value_column declared" do

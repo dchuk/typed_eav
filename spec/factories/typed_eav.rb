@@ -135,6 +135,12 @@ FactoryBot.define do
     entity_type { "Contact" }
   end
 
+  factory :currency_field, class: "TypedEAV::Field::Currency" do
+    sequence(:name) { |n| "currency_field_#{n}" }
+    entity_type { "Contact" }
+    options { { default_currency: "USD" } }
+  end
+
   # ── Values ──
 
   factory :typed_value, class: "TypedEAV::Value" do
