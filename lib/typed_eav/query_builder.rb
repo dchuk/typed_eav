@@ -30,10 +30,13 @@ module TypedEAV
       #   Model.where(id: QueryBuilder.filter(field, :gt, 5).select(:entity_id))
       # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength -- one operator-dispatch case statement; flattening keeps the supported-operators list scannable in one place.
       def filter(field, operator, value)
-        col = field.class.value_column
         operator = operator.to_sym
 
-        # Validate operator is supported by this field type
+        # Validate operator is supported by this field type. The gate runs
+        # BEFORE column resolution so an unsupported operator raises a
+        # descriptive ArgumentError instead of silently dispatching to
+        # `operator_column`'s default (which would point at the wrong
+        # column for multi-cell types).
         supported = field.class.supported_operators
         unless supported.include?(operator)
           raise ArgumentError,
@@ -41,6 +44,13 @@ module TypedEAV
                 "Supported operators: #{supported.map { |o| ":#{o}" }.join(", ")}"
         end
 
+        # Phase 05: route the operator to its physical column via field-side
+        # dispatch. Single-cell types (every built-in as of Phase 04) return
+        # `value_column` for every operator — BC-safe. Multi-cell types
+        # (Phase 05 Currency) route operators like `:eq` (amount) and
+        # `:currency_eq` (currency code) to different columns. See
+        # ColumnMapping#operator_column.
+        col = field.class.operator_column(operator)
         arel_col = values_table[col]
 
         base = value_scope(field)

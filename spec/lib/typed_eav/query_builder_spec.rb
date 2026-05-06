@@ -448,4 +448,49 @@ RSpec.describe TypedEAV::QueryBuilder do
       expect { described_class.filter(field, :between, "a".."z") }.to raise_error(ArgumentError, /not supported/)
     end
   end
+
+  # Phase 05: column dispatch through `field.class.operator_column(operator)`.
+  # Replaces the prior `field.class.value_column` direct read at the column-
+  # selection site. For all 17 built-in single-cell types, operator_column
+  # returns value_column for every supported operator — BC-safe. The new
+  # context asserts (a) the dispatch returns the expected column for
+  # representative types, (b) the resulting SQL still references that
+  # column, and (c) the validation gate runs BEFORE column resolution so
+  # an unsupported operator raises ArgumentError rather than silently
+  # routing to a wrong column.
+  describe "column dispatch through field.class.operator_column" do
+    it "uses the operator-routed column for Text :eq (string_value)" do
+      text_field = create(:text_field, name: "qb_text_disp")
+      TypedEAV::Value.create!(entity: contact_a, field: text_field, value: "hello")
+      expect(text_field.class.operator_column(:eq)).to eq(:string_value)
+      rel = described_class.filter(text_field, :eq, "hello")
+      expect(rel.to_sql).to include("string_value")
+    end
+
+    it "uses the operator-routed column for Integer :gt (integer_value)" do
+      int_field = create(:integer_field, name: "qb_int_disp")
+      TypedEAV::Value.create!(entity: contact_a, field: int_field, value: 42)
+      expect(int_field.class.operator_column(:gt)).to eq(:integer_value)
+      rel = described_class.filter(int_field, :gt, 0)
+      expect(rel.to_sql).to include("integer_value")
+    end
+
+    it "uses the operator-routed column for Boolean :eq (boolean_value)" do
+      bool_field = create(:boolean_field, name: "qb_bool_disp")
+      TypedEAV::Value.create!(entity: contact_a, field: bool_field, value: true)
+      expect(bool_field.class.operator_column(:eq)).to eq(:boolean_value)
+      rel = described_class.filter(bool_field, :eq, true)
+      expect(rel.to_sql).to include("boolean_value")
+    end
+
+    it "validates operator support BEFORE calling operator_column" do
+      # If the gate ran AFTER operator_column, an unsupported op would
+      # silently dispatch to the default column (returning a wrong-column
+      # query). The ArgumentError proves the gate runs first.
+      bool_field = create(:boolean_field, name: "qb_bool_gate")
+      expect { described_class.filter(bool_field, :gt, true) }.to raise_error(
+        ArgumentError, /Operator :gt is not supported/
+      )
+    end
+  end
 end
