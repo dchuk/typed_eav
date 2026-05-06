@@ -1,0 +1,11 @@
+# typed_eav Roadmap
+
+Execution order for the items in `typed_eav-enhancement-plan.md`, reconciled against the codebase mapping at `.vbw-planning/codebase/` and externally reviewed via Codex Plan Reviewer (Apr 2026).
+
+This roadmap is dependency-ordered, not category-grouped. The plan organizes items by category (foundational, field types, bulk, perf, events). The roadmap orders them by what unblocks what: scope partitioning first (it changes the partition key everything else uses); then "complete the pipeline" Phase-1 items; events before versioning (versioning depends on the event/context contract); versioning before bulk (bulk's `version_grouping:` option is undefinable without versioning); field types in parallel; bulk after versioning; read-perf last (materialized index depends on field-change events).
+
+The plan's foundational principle — no hardcoded attribute references; everything runtime-defined and accessed through generic accessors — is binding for every phase below. Cross-cutting requirements from the plan §"Cross-cutting requirements" apply to every item.
+
+## Phases
+
+- [x] Phase 1: Two-level scope partitioning
