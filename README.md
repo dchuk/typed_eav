@@ -498,6 +498,8 @@ When both a global field (`scope: nil`) and a scoped field share a name, the **s
 | `Url` | `string_value` | String | strips whitespace |
 | `Color` | `string_value` | String | hex color values |
 | `Json` | `json_value` | Hash/Array | arbitrary JSON |
+| `Currency` | `decimal_value` + `string_value` | `{amount: BigDecimal, currency: String}` | `default_currency`, `allowed_currencies` |
+| `Percentage` | `decimal_value` | BigDecimal (0..1 range) | `decimal_places`, `display_as: :fraction \| :percent` |
 
 ## Sections (Optional UI Grouping)
 
@@ -568,6 +570,25 @@ class:
 Defaults delegate to `value_column` for all three, so existing single-
 cell types are unchanged. The built-in `Field::Currency` (Phase 5) is
 the canonical multi-cell consumer of these extension points.
+
+### Built-in Phase-5 field types
+
+- **`Currency` (Phase 5):** Stores `{amount: BigDecimal, currency: String}` across two typed columns (`decimal_value` for the amount; `string_value` for the ISO 4217 currency code). Operators: `:eq`, `:gt`, `:lt`, `:gteq`, `:lteq`, `:between` target the amount; `:currency_eq` targets the currency code; `:is_null` / `:is_not_null` target the amount column (a Currency value is null when its amount is null). Cast input MUST be a hash with `:amount` and/or `:currency` keys — bare numeric/string values are rejected with `:invalid` to enforce explicit currency dimension at write time. Options: `default_currency` (String ISO code, applied as fallback only when an amount is given without an explicit currency), `allowed_currencies` (Array of ISO codes; `validate_typed_value` enforces inclusion). Versioning snapshots automatically capture both columns under `value_columns` iteration (no Phase 4 subscriber changes required). The `:currency_eq` operator is registered ONLY on `Field::Currency`; the QueryBuilder operator-validation gate rejects it with a clear `ArgumentError` if invoked on any other field type.
+
+  ```ruby
+  Contact.where_typed_eav(name: "price", op: :currency_eq, value: "USD")
+  Contact.where_typed_eav(name: "price", op: :between,     value: [50, 150])
+  ```
+
+- **`Percentage` (Phase 5):** A `Field::Decimal` subclass storing the underlying fraction in 0..1 (inclusive). The `:percent` representation is a format-time concern — call `field.format(value)` with `display_as: :percent` to render `0.75` as `"75.0%"`. Options: `decimal_places` (Integer >= 0, default 2; format-time precision only — does NOT alter what's stored in `decimal_value`), `display_as` (`:fraction` default, or `:percent`). Validation: out-of-range values (e.g., `1.5`) fail with the message `"must be between 0.0 and 1.0"`. Storage and operator semantics inherit from `Field::Decimal`.
+
+  ```ruby
+  pf = TypedEAV::Field::Percentage.create!(
+    name: "discount", entity_type: "Order", scope: tenant_id,
+    options: { display_as: :percent, decimal_places: 1 },
+  )
+  pf.format(BigDecimal("0.755")) # => "75.5%"
+  ```
 
 ## Validation Behavior
 
