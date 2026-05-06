@@ -108,6 +108,11 @@ RSpec.describe "Field type column mappings" do
     # for STI subclass-of-subclass class-instance-variable lookup).
     TypedEAV::Field::Currency => :decimal_value,
     TypedEAV::Field::Percentage => :decimal_value,
+    # Phase 5 plan 03: Active Storage-backed types. Both store the
+    # blob's signed_id (a String) in :string_value; the :attachment
+    # has_one_attached association lives on TypedEAV::Value.
+    TypedEAV::Field::Image => :string_value,
+    TypedEAV::Field::File => :string_value,
   }.each do |klass, expected_column|
     it "#{klass.name.demodulize} maps to #{expected_column}" do
       expect(klass.value_column).to eq(expected_column)
@@ -146,6 +151,12 @@ RSpec.describe "Field type operator_column BC across all built-in types" do
     # operator set without overriding operator_column — every supported
     # operator routes to decimal_value.
     TypedEAV::Field::Percentage => :decimal_value,
+    # Phase 5 plan 03: Image and File inherit the default operator_column
+    # (delegates to value_column → :string_value). Their explicit
+    # operator narrowing is to [:eq, :is_null, :is_not_null]; all three
+    # route to :string_value via the inherited delegation.
+    TypedEAV::Field::Image => :string_value,
+    TypedEAV::Field::File => :string_value,
   }.freeze
 
   phase05_operator_column_bc_types.each do |klass, expected_col|
@@ -223,6 +234,18 @@ RSpec.describe "Field type supported operators" do
     expect(TypedEAV::Field::Percentage.supported_operators).to eq(
       TypedEAV::Field::Decimal.supported_operators,
     )
+  end
+
+  it "Image has the explicit operator set [:eq, :is_null, :is_not_null] (Phase 5 plan 03)" do
+    # Explicit narrowing — signed_id strings don't support :contains,
+    # :starts_with, :ends_with, or numeric/range operators. Presence
+    # checks via :is_null / :is_not_null are the canonical
+    # "does this entity have an attachment?" query.
+    expect(TypedEAV::Field::Image.supported_operators).to eq(%i[eq is_null is_not_null])
+  end
+
+  it "File has the same explicit operator set as Image (Phase 5 plan 03)" do
+    expect(TypedEAV::Field::File.supported_operators).to eq(%i[eq is_null is_not_null])
   end
 end
 
@@ -386,6 +409,71 @@ RSpec.describe "Field type casting" do
 
     it "casts nil to [nil, false]" do
       expect(field.cast(nil)).to eq([nil, false])
+    end
+  end
+
+  # Phase 5 plan 03: Image and File share the same cast contract — nil/
+  # blank returns [nil, false]; String passthrough returns [raw, false]
+  # (treated as a signed_id); ActiveStorage::Blob returns [signed_id,
+  # false]; everything else (IO, File, Tempfile, Hash) returns [nil, true].
+  # The dummy app loads Active Storage via `require "rails/all"`, so
+  # cast does NOT raise here — the unloaded-path raise is covered in
+  # active_storage_soft_detect_spec.rb.
+  describe TypedEAV::Field::Image do
+    let(:field) { build(:image_field) }
+
+    it "casts nil to [nil, false]" do
+      expect(field.cast(nil)).to eq([nil, false])
+    end
+
+    it "casts blank String to [nil, false]" do
+      expect(field.cast("")).to eq([nil, false])
+    end
+
+    it "passes a String through as a signed_id" do
+      expect(field.cast("some_signed_id_str")).to eq(["some_signed_id_str", false])
+    end
+
+    it "extracts signed_id from an ActiveStorage::Blob" do
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: StringIO.new("img"),
+        filename: "img.png",
+        content_type: "image/png",
+      )
+      expect(field.cast(blob)).to eq([blob.signed_id, false])
+    end
+
+    it "marks a StringIO as invalid" do
+      expect(field.cast(StringIO.new("x"))).to eq([nil, true])
+    end
+
+    it "marks a Hash as invalid" do
+      expect(field.cast({ raw: "data" })).to eq([nil, true])
+    end
+  end
+
+  describe TypedEAV::Field::File do
+    let(:field) { build(:file_field) }
+
+    it "casts nil to [nil, false]" do
+      expect(field.cast(nil)).to eq([nil, false])
+    end
+
+    it "passes a String through as a signed_id" do
+      expect(field.cast("some_signed_id_str")).to eq(["some_signed_id_str", false])
+    end
+
+    it "extracts signed_id from an ActiveStorage::Blob" do
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: StringIO.new("doc"),
+        filename: "doc.pdf",
+        content_type: "application/pdf",
+      )
+      expect(field.cast(blob)).to eq([blob.signed_id, false])
+    end
+
+    it "marks a StringIO as invalid" do
+      expect(field.cast(StringIO.new("x"))).to eq([nil, true])
     end
   end
 end
@@ -632,7 +720,8 @@ RSpec.describe "cast_value(nil) returns nil for all field types" do
      date_field datetime_field select_field multi_select_field
      integer_array_field decimal_array_field text_array_field date_array_field
      email_typed_eav url_field color_field json_field
-     currency_field percentage_field].each do |factory_name|
+     currency_field percentage_field
+     image_field file_field].each do |factory_name|
     it "#{factory_name} returns nil" do
       field = build(factory_name)
       expect(field.cast(nil).first).to be_nil
@@ -696,6 +785,14 @@ RSpec.describe "Supported operators for all field types" do
 
   it "Percentage inherits the Decimal operator set unchanged" do
     expect(TypedEAV::Field::Percentage.supported_operators).to eq(TypedEAV::Field::Decimal.supported_operators)
+  end
+
+  it "Image supports only :eq, :is_null, :is_not_null (Phase 5 plan 03)" do
+    expect(TypedEAV::Field::Image.supported_operators).to eq(%i[eq is_null is_not_null])
+  end
+
+  it "File supports only :eq, :is_null, :is_not_null (Phase 5 plan 03)" do
+    expect(TypedEAV::Field::File.supported_operators).to eq(%i[eq is_null is_not_null])
   end
 end
 
@@ -1342,5 +1439,79 @@ RSpec.describe TypedEAV::Field::Percentage, ".validations (field-level options)"
   it "accepts display_as: :percent" do
     field = build(:percentage_field, options: { display_as: :percent, decimal_places: 1 })
     expect(field).to be_valid
+  end
+end
+
+# Phase 5 plan 03: on_image_attached hook firing.
+# Asserts the after_commit dispatcher on TypedEAV::Value:
+#   1. fires for Field::Image-typed Values when an attachment is added,
+#   2. does NOT fire for Field::File-typed Values (image-specific by
+#      ROADMAP design),
+#   3. does NOT fire for Text/Integer/etc. (non-image fields),
+#   4. does NOT fire when on_image_attached is nil (zero overhead).
+#
+# :event_callbacks snapshots Config.on_image_attached so per-example
+# state is restored cleanly. The hook signature is `(value, blob)` — the
+# tests record both into a captures array.
+RSpec.describe "Config.on_image_attached hook dispatch", :event_callbacks, type: :model do
+  let(:contact) { Contact.create!(name: "Hook Test", tenant_id: nil) }
+  let(:hook_calls) { [] }
+
+  before do
+    TypedEAV.config.on_image_attached = lambda { |value, blob|
+      hook_calls << [value.id, blob.filename.to_s, blob.content_type]
+    }
+  end
+
+  it "fires when an attachment is added to a Field::Image-typed Value" do
+    field = create(:image_field, name: "avatar")
+    value = TypedEAV::Value.create!(entity: contact, field: field)
+    value.attachment.attach(io: StringIO.new("img-data"), filename: "a.png", content_type: "image/png")
+    value.update!(string_value: value.attachment.blob.signed_id)
+
+    expect(hook_calls.size).to eq(1)
+    expect(hook_calls.last).to eq([value.id, "a.png", "image/png"])
+  end
+
+  it "does NOT fire for Field::File attachments" do
+    field = create(:file_field, name: "doc")
+    value = TypedEAV::Value.create!(entity: contact, field: field)
+    value.attachment.attach(io: StringIO.new("doc-data"), filename: "a.pdf", content_type: "application/pdf")
+    value.update!(string_value: value.attachment.blob.signed_id)
+
+    expect(hook_calls).to be_empty
+  end
+
+  it "does NOT fire for Field::Text-typed Values (regression: every Value gets the macro association)" do
+    text_field = create(:text_field, name: "label")
+    value = TypedEAV::Value.create!(entity: contact, field: text_field, value: "hello")
+    # The :attachment association exists on every Value (declared at
+    # engine boot), but for non-Image fields the dispatcher's
+    # is_a?(Field::Image) guard short-circuits BEFORE probing
+    # attached?. Even attaching directly should not fire the hook.
+    value.attachment.attach(io: StringIO.new("img"), filename: "a.png", content_type: "image/png")
+    value.update!(string_value: "hello again") # bumps string_value to satisfy saved_change
+
+    expect(hook_calls).to be_empty
+  end
+
+  it "does NOT fire when Config.on_image_attached is nil" do
+    TypedEAV.config.on_image_attached = nil
+    field = create(:image_field, name: "avatar_unset_hook")
+    value = TypedEAV::Value.create!(entity: contact, field: field)
+    value.attachment.attach(io: StringIO.new("img"), filename: "a.png", content_type: "image/png")
+    expect { value.update!(string_value: value.attachment.blob.signed_id) }.not_to raise_error
+    expect(hook_calls).to be_empty
+  end
+
+  it "isolates hook errors so the after_commit chain does not crash the user save" do
+    TypedEAV.config.on_image_attached = ->(_v, _b) { raise "boom" }
+    field = create(:image_field, name: "avatar_raise")
+    value = TypedEAV::Value.create!(entity: contact, field: field)
+    value.attachment.attach(io: StringIO.new("img"), filename: "a.png", content_type: "image/png")
+    # The save! call must succeed despite the hook raising — the row is
+    # already committed by the time after_commit fires; crashing the
+    # caller would corrupt the user's view of the save outcome.
+    expect { value.update!(string_value: value.attachment.blob.signed_id) }.not_to raise_error
   end
 end

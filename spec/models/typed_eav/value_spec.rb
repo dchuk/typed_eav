@@ -904,6 +904,49 @@ RSpec.describe TypedEAV::Value, type: :model do
       end
     end
 
+    # Phase 5 plan 03: Image and File attach a blob via Active Storage's
+    # `:attachment` has_one_attached association (declared on
+    # TypedEAV::Value at engine boot when AS is loaded). The signed_id
+    # is stored in string_value; Value#value returns the signed_id
+    # String. Both contexts cover the round-trip + AR-side attachment
+    # state.
+    context "with an image field" do
+      let(:field) { create(:image_field, name: "avatar") }
+
+      it "stores the attachment blob's signed_id in string_value" do
+        value = described_class.create!(entity: contact, field: field)
+        value.attachment.attach(io: StringIO.new("img-data"), filename: "a.png", content_type: "image/png")
+        value.update!(string_value: value.attachment.blob.signed_id)
+        value.reload
+
+        expect(value.string_value).to eq(value.attachment.blob.signed_id)
+        expect(value.value).to eq(value.attachment.blob.signed_id)
+        expect(value.attachment).to be_attached
+      end
+
+      it "value reads back as nil when no attachment is set" do
+        value = described_class.new(entity: contact, field: field)
+        expect(value.value).to be_nil
+        expect(value.attachment).not_to be_attached
+      end
+    end
+
+    context "with a file field" do
+      let(:field) { create(:file_field, name: "doc") }
+
+      it "stores the attachment blob's signed_id in string_value" do
+        value = described_class.create!(entity: contact, field: field)
+        value.attachment.attach(io: StringIO.new("doc-data"), filename: "a.pdf",
+                                content_type: "application/pdf")
+        value.update!(string_value: value.attachment.blob.signed_id)
+        value.reload
+
+        expect(value.string_value).to eq(value.attachment.blob.signed_id)
+        expect(value.value).to eq(value.attachment.blob.signed_id)
+        expect(value.attachment).to be_attached
+      end
+    end
+
     context "when value= writes dispatch through field.write_value" do
       it "invokes field.write_value(self, casted) for a Text field assignment" do
         field = create(:text_field, name: "dispatch_text_write")
