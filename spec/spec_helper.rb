@@ -54,17 +54,19 @@ RSpec.configure do |config|
   #                      `scope_method: :tenant_id`) doesn't raise when the
   #                      example calls class-level query methods without
   #                      setting up a scope."
-  #   :event_callbacks - "I exercise Phase 03 event dispatch — snapshot/
-  #                      restore Config.on_value_change, Config.on_field_change,
-  #                      and the EventDispatcher internal-subscribers arrays
-  #                      around the example so Phase 04+ engine-load
-  #                      registrations survive."
+  #   :event_callbacks - "I exercise Phase 03 or Phase 04 event dispatch —
+  #                      snapshot/restore Config.on_value_change,
+  #                      Config.on_field_change, Config.versioning,
+  #                      Config.actor_resolver, and the EventDispatcher
+  #                      internal-subscribers arrays around the example so
+  #                      Phase 04+ engine-load registrations survive."
   #   :real_commits    - "I create real AR records and need after_commit to
   #                      fire durably." Disables transactional fixtures for
-  #                      the example; manually deletes Value → Option →
-  #                      Field → Section → Contact/Product rows after.
-  #                      Combine with :event_callbacks on integration specs
-  #                      that exercise Phase 03 dispatch.
+  #                      the example; manually deletes ValueVersion → Value →
+  #                      Option → Field → Section → Contact/Product/Project
+  #                      rows after. Combine with :event_callbacks on
+  #                      integration specs that exercise Phase 03 or Phase
+  #                      04 dispatch.
   #
   # Everything else runs as-is. Previously the around block wrapped every
   # example in `unscoped` by default, which masked scoped+global name-
@@ -78,20 +80,26 @@ RSpec.configure do |config|
     end
   end
 
-  # :event_callbacks - snapshot/restore Phase 03 dispatch state per example.
-  # Uses snapshot-and-restore rather than EventDispatcher.reset! / Config.reset!
-  # because Phase 04 versioning will register internal subscribers at engine
-  # load — wiping the internal list in test teardown would break Phase 04
-  # specs that follow. Mirrors the :scoping / :unscoped opt-in metadata
-  # pattern (see PATTERNS.md §"`:unscoped` metadata for class-query specs").
+  # :event_callbacks - snapshot/restore Phase 03 + Phase 04 dispatch state
+  # per example. Snapshot list: Config.on_value_change, Config.on_field_change,
+  # Config.versioning, Config.actor_resolver, EventDispatcher.value_change_internals,
+  # EventDispatcher.field_change_internals. Uses snapshot-and-restore rather
+  # than EventDispatcher.reset! / Config.reset! because Phase 04 versioning
+  # registers internal subscribers at engine load (plan 04-02) — wiping the
+  # internal list in test teardown would break Phase 04 specs that follow.
+  # Mirrors the :scoping / :unscoped opt-in metadata pattern.
   config.around(:each, :event_callbacks) do |example|
     saved_on_value_change = TypedEAV::Config.on_value_change
     saved_on_field_change = TypedEAV::Config.on_field_change
+    saved_versioning      = TypedEAV::Config.versioning
+    saved_actor_resolver  = TypedEAV::Config.actor_resolver
     saved_value_internals = TypedEAV::EventDispatcher.value_change_internals.dup
     saved_field_internals = TypedEAV::EventDispatcher.field_change_internals.dup
 
     TypedEAV::Config.on_value_change = nil
     TypedEAV::Config.on_field_change = nil
+    TypedEAV::Config.versioning      = false
+    TypedEAV::Config.actor_resolver  = nil
     TypedEAV::EventDispatcher.value_change_internals.clear
     TypedEAV::EventDispatcher.field_change_internals.clear
 
@@ -99,6 +107,8 @@ RSpec.configure do |config|
   ensure
     TypedEAV::Config.on_value_change = saved_on_value_change
     TypedEAV::Config.on_field_change = saved_on_field_change
+    TypedEAV::Config.versioning      = saved_versioning
+    TypedEAV::Config.actor_resolver  = saved_actor_resolver
     TypedEAV::EventDispatcher.instance_variable_set(:@value_change_internals, saved_value_internals)
     TypedEAV::EventDispatcher.instance_variable_set(:@field_change_internals, saved_field_internals)
   end
@@ -116,14 +126,18 @@ RSpec.configure do |config|
   # wrap. Setting `use_transactional_fixtures` on the example group has no
   # effect — the runtime never reads it.
   #
-  # Cleanup order matters: Value rows reference Field via FK (ON DELETE SET
-  # NULL post Phase 02), Field rows reference Section via FK. Delete children
-  # before parents so we don't trip FK constraints on Postgres. Option rows
-  # belong to Field (dependent: :destroy), so deleting Field rows takes them
-  # along — but we delete Option explicitly first to keep the cleanup ordering
-  # grep-able and not depend on AR's destroy chain (delete_all bypasses
-  # callbacks anyway). Contact / Product / Project are the dummy app's host
-  # entities — clean them too so cross-test row counts stay stable.
+  # Cleanup order matters: ValueVersion rows reference Value/Field via FK
+  # (ON DELETE SET NULL — would NULL on Value/Field delete, but explicit
+  # delete keeps the table empty between examples for "exactly N versions
+  # written" assertions in Phase 04 specs). Value rows reference Field via
+  # FK (ON DELETE SET NULL post Phase 02). Field rows reference Section
+  # via FK. Delete children before parents so we don't trip FK constraints
+  # on Postgres. Option rows belong to Field (dependent: :destroy), so
+  # deleting Field rows takes them along — but we delete Option explicitly
+  # first to keep the cleanup ordering grep-able and not depend on AR's
+  # destroy chain (delete_all bypasses callbacks anyway). Contact / Product /
+  # Project are the dummy app's host entities — clean them too so cross-
+  # test row counts stay stable.
   #
   # We do NOT use database_cleaner — the gem has no such dependency and
   # the manual cleanup is short enough to inline.
@@ -132,6 +146,7 @@ RSpec.configure do |config|
     example.example_group.use_transactional_tests = false
     example.run
   ensure
+    TypedEAV::ValueVersion.delete_all
     TypedEAV::Value.delete_all
     TypedEAV::Option.delete_all
     TypedEAV::Field::Base.delete_all
