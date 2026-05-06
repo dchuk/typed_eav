@@ -568,4 +568,62 @@ RSpec.describe TypedEAV::QueryBuilder do
       )
     end
   end
+
+  # Phase 5 plan 04: :references operator dispatch. Accepts AR record
+  # OR Integer FK; field.cast normalizes both to Integer; the predicate
+  # emits `WHERE integer_value = ?`. Class-mismatched records flow to
+  # base.none (empty relation) — semantically distinct from :is_null
+  # (which would match "no FK at all" rather than "no match for this
+  # specific target").
+  describe ".filter with reference fields" do
+    # contact_a/b/c are defined with tenant_id: nil at the top of this
+    # spec, so the field stays at scope: nil (global) to satisfy the
+    # source-entity scope match. target_scope is also nil so cross-
+    # tenant target lookups don't trip the value-time validator —
+    # the GD2 negative path is covered in field_spec.
+    let!(:target_a) { create(:contact, name: "TargetA") }
+    let!(:target_b) { create(:contact, name: "TargetB") }
+    let!(:field) do
+      create(:reference_field,
+             name: "qb_manager",
+             options: { target_entity_type: "Contact" })
+    end
+
+    before do
+      # Three reference values: A → target_a, B → target_b, C → target_a.
+      TypedEAV::Value.create!(entity: contact_a, field: field, value: target_a)
+      TypedEAV::Value.create!(entity: contact_b, field: field, value: target_b)
+      TypedEAV::Value.create!(entity: contact_c, field: field, value: target_a)
+    end
+
+    it ":references with Integer FK targets integer_value" do
+      sql = described_class.filter(field, :references, target_a.id).to_sql
+      expect(sql).to include("integer_value")
+      results = described_class.filter(field, :references, target_a.id)
+      expect(results.pluck(:entity_id)).to contain_exactly(contact_a.id, contact_c.id)
+    end
+
+    it ":references with AR record returns matching values" do
+      # field.cast(AR record) → [record.id, false] when class matches.
+      results = described_class.filter(field, :references, target_b)
+      expect(results.pluck(:entity_id)).to eq([contact_b.id])
+    end
+
+    it ":references with class-mismatched record returns empty relation (NOT null filter)" do
+      # field.cast(Project) → [nil, true] (class mismatch). The
+      # branch routes to base.none — explicitly NOT collapsing to
+      # WHERE integer_value IS NULL which would have :is_null
+      # semantics and match every Value lacking an FK.
+      project = Project.create!(name: "WrongType")
+      results = described_class.filter(field, :references, project)
+      expect(results.to_a).to be_empty
+    end
+
+    it ":references is rejected on non-Reference fields by the operator gate" do
+      text_field = create(:text_field, name: "qb_not_ref")
+      expect { described_class.filter(text_field, :references, target_a) }.to raise_error(
+        ArgumentError, /Operator :references is not supported/
+      )
+    end
+  end
 end

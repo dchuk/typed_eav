@@ -113,6 +113,11 @@ RSpec.describe "Field type column mappings" do
     # has_one_attached association lives on TypedEAV::Value.
     TypedEAV::Field::Image => :string_value,
     TypedEAV::Field::File => :string_value,
+    # Phase 5 plan 04: Reference stores the target's integer FK in
+    # integer_value. The :references operator (and the field-class's
+    # :eq) both route to integer_value via the inherited operator_column
+    # default (no override needed).
+    TypedEAV::Field::Reference => :integer_value,
   }.each do |klass, expected_column|
     it "#{klass.name.demodulize} maps to #{expected_column}" do
       expect(klass.value_column).to eq(expected_column)
@@ -157,6 +162,12 @@ RSpec.describe "Field type operator_column BC across all built-in types" do
     # route to :string_value via the inherited delegation.
     TypedEAV::Field::Image => :string_value,
     TypedEAV::Field::File => :string_value,
+    # Phase 5 plan 04: Reference inherits the default operator_column —
+    # all four supported operators (:eq, :is_null, :is_not_null,
+    # :references) route to :integer_value via the inherited
+    # delegation. The :references operator is registered ONLY on
+    # Reference but does not need a per-operator column override.
+    TypedEAV::Field::Reference => :integer_value,
   }.freeze
 
   phase05_operator_column_bc_types.each do |klass, expected_col|
@@ -246,6 +257,14 @@ RSpec.describe "Field type supported operators" do
 
   it "File has the same explicit operator set as Image (Phase 5 plan 03)" do
     expect(TypedEAV::Field::File.supported_operators).to eq(%i[eq is_null is_not_null])
+  end
+
+  it "Reference has the explicit operator set [:eq, :is_null, :is_not_null, :references] (Phase 5 plan 04)" do
+    # Explicit narrowing — does NOT inherit :integer_value's default
+    # set (which includes :gt, :lt, :gteq, :lteq, :between) since
+    # arithmetic comparisons on FKs don't carry useful semantics.
+    # :references is registered ONLY on this class.
+    expect(TypedEAV::Field::Reference.supported_operators).to eq(%i[eq is_null is_not_null references])
   end
 end
 
@@ -474,6 +493,58 @@ RSpec.describe "Field type casting" do
 
     it "marks a StringIO as invalid" do
       expect(field.cast(StringIO.new("x"))).to eq([nil, true])
+    end
+  end
+
+  # Phase 5 plan 04: Reference cast contract. Accepts Integer FKs,
+  # numeric Strings, and AR records matching target_entity_type.
+  # Class-mismatch / non-numeric / non-record inputs return [nil, true]
+  # (the cast-tuple invalid bit flows to errors.add(:value, :invalid)
+  # via Value#validate_value).
+  describe TypedEAV::Field::Reference do
+    subject(:field) do
+      described_class.new(
+        name: "manager", entity_type: "Contact",
+        options: { target_entity_type: "Contact" }
+      )
+    end
+
+    it "casts nil to [nil, false]" do
+      expect(field.cast(nil)).to eq([nil, false])
+    end
+
+    it "casts blank String to [nil, false]" do
+      expect(field.cast("")).to eq([nil, false])
+    end
+
+    it "casts Integer to [int, false]" do
+      expect(field.cast(42)).to eq([42, false])
+    end
+
+    it "casts numeric String to [int, false]" do
+      expect(field.cast("42")).to eq([42, false])
+    end
+
+    it "marks non-numeric String as invalid" do
+      expect(field.cast("not_a_number")).to eq([nil, true])
+    end
+
+    it "marks fractional String as invalid (FKs are Integer)" do
+      expect(field.cast("1.5")).to eq([nil, true])
+    end
+
+    it "casts an AR record matching target_entity_type to [record.id, false]" do
+      contact = Contact.create!(name: "Target", tenant_id: 1)
+      expect(field.cast(contact)).to eq([contact.id, false])
+    end
+
+    it "rejects an AR record of a different class" do
+      project = Project.create!(name: "Wrong Type", tenant_id: 1)
+      expect(field.cast(project)).to eq([nil, true])
+    end
+
+    it "marks a Hash as invalid" do
+      expect(field.cast({ raw: "data" })).to eq([nil, true])
     end
   end
 end
@@ -721,7 +792,8 @@ RSpec.describe "cast_value(nil) returns nil for all field types" do
      integer_array_field decimal_array_field text_array_field date_array_field
      email_typed_eav url_field color_field json_field
      currency_field percentage_field
-     image_field file_field].each do |factory_name|
+     image_field file_field
+     reference_field].each do |factory_name|
     it "#{factory_name} returns nil" do
       field = build(factory_name)
       expect(field.cast(nil).first).to be_nil
@@ -793,6 +865,17 @@ RSpec.describe "Supported operators for all field types" do
 
   it "File supports only :eq, :is_null, :is_not_null (Phase 5 plan 03)" do
     expect(TypedEAV::Field::File.supported_operators).to eq(%i[eq is_null is_not_null])
+  end
+
+  it "Reference adds :references but narrows away :gt/:lt/:between (Phase 5 plan 04)" do
+    ops = TypedEAV::Field::Reference.supported_operators
+    expect(ops).to eq(%i[eq is_null is_not_null references])
+    # :references is registered ONLY on Reference.
+    expect(TypedEAV::Field::Integer.supported_operators).not_to include(:references)
+    expect(TypedEAV::Field::Text.supported_operators).not_to include(:references)
+    # :gt / :lt / :between are NOT inherited from :integer_value's default
+    # set — arithmetic comparisons on FKs don't carry useful semantics.
+    expect(ops).not_to include(:gt, :lt, :between)
   end
 end
 
@@ -1439,6 +1522,91 @@ RSpec.describe TypedEAV::Field::Percentage, ".validations (field-level options)"
   it "accepts display_as: :percent" do
     field = build(:percentage_field, options: { display_as: :percent, decimal_places: 1 })
     expect(field).to be_valid
+  end
+end
+
+# Phase 5 plan 04: Reference field-save validations. The presence
+# validator enforces target_entity_type as REQUIRED; the resolves
+# validator rejects unconstantizable class names; the
+# target_scope_requires_scoped_target validator enforces Gating
+# Decision 2.
+RSpec.describe TypedEAV::Field::Reference, ".validations (field-level options)", type: :model do
+  describe "target_entity_type presence + resolution" do
+    it "requires target_entity_type" do
+      field = described_class.new(name: "x", entity_type: "Contact", scope: 1)
+      expect(field).not_to be_valid
+      expect(field.errors[:target_entity_type]).to be_present
+    end
+
+    it "rejects unresolvable target_entity_type" do
+      field = described_class.new(
+        name: "x", entity_type: "Contact", scope: 1,
+        options: { target_entity_type: "NonExistentClass" }
+      )
+      expect(field).not_to be_valid
+      expect(field.errors[:target_entity_type]).to include(/must be a valid class name/)
+    end
+
+    it "accepts a resolvable target_entity_type" do
+      field = described_class.new(
+        name: "valid_ref", entity_type: "Contact", scope: 1,
+        options: { target_entity_type: "Contact" }
+      )
+      expect(field).to be_valid
+    end
+  end
+
+  # Phase 5 Gating Decision 2 (RESOLVED — see 05-RESEARCH.md final section
+  # and 05-04-PLAN.md must_haves block):
+  # - target_scope SET + target_entity_type unscoped → field save FAILS
+  # - target_scope NIL + any target → field saves
+  # - target_scope SET + target scoped → field saves (cross-scope value
+  #   rejection happens at value save time, not here)
+  #
+  # Product is the dummy app's unscoped target type (registered with
+  # `has_typed_eav types: [...]` but NO `scope_method:`, so its
+  # typed_eav_scope_method is nil — the negative-path trigger).
+  describe "Gating Decision 2: target_scope requires a scoped target" do
+    it "rejects target_scope when target_entity_type is unscoped (Product)" do
+      field = described_class.new(
+        name: "ref_to_unscoped",
+        entity_type: "Contact",
+        scope: 1,
+        options: { target_entity_type: "Product", target_scope: 99 },
+      )
+      expect(field).not_to be_valid
+      expect(field.errors[:target_scope]).to include(/cannot be set when target_entity_type/)
+    end
+
+    it "accepts nil target_scope with an unscoped target (Product)" do
+      field = described_class.new(
+        name: "ref_to_unscoped_nil",
+        entity_type: "Contact",
+        scope: 1,
+        options: { target_entity_type: "Product" },
+      )
+      expect(field).to be_valid
+    end
+
+    it "accepts target_scope when target_entity_type is scoped (Contact)" do
+      field = described_class.new(
+        name: "ref_to_scoped",
+        entity_type: "Contact",
+        scope: 1,
+        options: { target_entity_type: "Contact", target_scope: 1 },
+      )
+      expect(field).to be_valid
+    end
+
+    it "accepts nil target_scope with a scoped target (Contact)" do
+      field = described_class.new(
+        name: "ref_to_scoped_nil",
+        entity_type: "Contact",
+        scope: 1,
+        options: { target_entity_type: "Contact" },
+      )
+      expect(field).to be_valid
+    end
   end
 end
 

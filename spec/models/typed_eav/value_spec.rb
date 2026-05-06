@@ -947,6 +947,76 @@ RSpec.describe TypedEAV::Value, type: :model do
       end
     end
 
+    # Phase 5 plan 04: Reference round-trip + cross-scope validation.
+    # FK lives in integer_value; Value#value reads back the Integer.
+    # When target_scope is nil on the field, references to ANY target
+    # (including cross-tenant) are accepted — no cross-scope check.
+    context "with a reference field (target_scope nil)" do
+      let(:source) { Contact.create!(name: "Source", tenant_id: 1) }
+      let(:target) { Contact.create!(name: "Target", tenant_id: 1) }
+      let(:field) do
+        create(:reference_field,
+               name: "manager_unscoped", scope: 1,
+               options: { target_entity_type: "Contact" })
+      end
+
+      it "stores the target id in integer_value" do
+        value = described_class.create!(entity: source, field: field, value: target)
+        value.reload
+        expect(value.integer_value).to eq(target.id)
+        expect(value.value).to eq(target.id)
+      end
+
+      it "accepts cross-tenant target when target_scope is nil" do
+        cross_tenant_target = Contact.create!(name: "OtherTenant", tenant_id: 999)
+        value = described_class.new(entity: source, field: field, value: cross_tenant_target)
+        expect(value).to be_valid
+      end
+
+      it "accepts an Integer FK directly" do
+        value = described_class.create!(entity: source, field: field, value: target.id)
+        value.reload
+        expect(value.integer_value).to eq(target.id)
+      end
+    end
+
+    # Phase 5 plan 04: Reference cross-scope rejection at value save
+    # time. When target_scope is set on the field, the target record's
+    # typed_eav_scope must match. Mirrors the structural pattern of
+    # Phase 1's entity_partition_axis_matches? guard but on the
+    # target axis (target_record.typed_eav_scope vs field.target_scope
+    # option).
+    context "with a reference field (target_scope set)" do
+      let(:source)           { Contact.create!(name: "Source",   tenant_id: 1) }
+      let(:in_scope_target)  { Contact.create!(name: "InScope",  tenant_id: 1) }
+      let(:out_scope_target) { Contact.create!(name: "OutScope", tenant_id: 999) }
+      let(:field) do
+        create(:reference_field,
+               name: "scoped_manager", scope: 1,
+               options: { target_entity_type: "Contact", target_scope: 1 })
+      end
+
+      it "accepts in-scope target" do
+        value = described_class.new(entity: source, field: field, value: in_scope_target)
+        expect(value).to be_valid
+      end
+
+      it "rejects out-of-scope target" do
+        value = described_class.new(entity: source, field: field, value: out_scope_target)
+        expect(value).not_to be_valid
+        expect(value.errors[:value]).to include(/target's scope does not match/)
+      end
+
+      it "marks missing target as :invalid" do
+        # FK that points at no row — value-save validation surfaces the
+        # canonical :invalid symbol (reused for cast-time invalidation
+        # for UX consistency per the plan-time decision).
+        value = described_class.new(entity: source, field: field, value: 999_999)
+        expect(value).not_to be_valid
+        expect(value.errors[:value]).to be_present
+      end
+    end
+
     context "when value= writes dispatch through field.write_value" do
       it "invokes field.write_value(self, casted) for a Text field assignment" do
         field = create(:text_field, name: "dispatch_text_write")
