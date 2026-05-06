@@ -307,6 +307,23 @@ module TypedEAV
     after_commit :_dispatch_value_change_update,  on: :update
     after_commit :_dispatch_value_change_destroy, on: :destroy
 
+    # Phase 05 image-attached dispatch. Declared AFTER the value-change
+    # callbacks so it runs LAST in the after_commit chain — Phase 04
+    # versioning (slot 0 inside _dispatch_value_change_*) and Phase 03
+    # on_value_change both fire before this. The hook is informational
+    # ("an image was attached"), not mutational; running last avoids
+    # polluting earlier hooks' snapshots / context with attachment-
+    # derived state.
+    #
+    # The `on: %i[create update]` filter mirrors the value-change pattern.
+    # The dispatcher itself further narrows to "field is Field::Image"
+    # AND "string_value just changed" AND "attachment is attached" — so
+    # plain Text/Integer Value writes pay only the after_commit hop, no
+    # callable invocation, no association probe. Non-Image typed Values
+    # (Field::File, every other built-in) explicitly do NOT fire this
+    # hook — File-attached has no parallel hook by ROADMAP design.
+    after_commit :_dispatch_image_attached, on: %i[create update]
+
     private
 
     def apply_pending_value
@@ -507,6 +524,51 @@ module TypedEAV
       return unless field
 
       TypedEAV::EventDispatcher.dispatch_value_change(self, :destroy)
+    end
+
+    # Phase 05 on_image_attached dispatch.
+    #
+    # Fires Config.on_image_attached(value, blob) when ALL of:
+    #   1. ::ActiveStorage::Blob is defined (lazy soft-detect; the
+    #      `:attachment` association doesn't exist when AS is unloaded).
+    #   2. field is non-nil AND is a Field::Image (NOT Field::File —
+    #      File-attached has no parallel hook by ROADMAP design).
+    #   3. self responds to :attachment (engine boot registered the
+    #      has_one_attached macro on TypedEAV::Value).
+    #   4. attachment.attached? — there's an actual blob to pass.
+    #   5. string_value (the signed_id storage column) just changed in
+    #      the committed save — filters out unrelated updates that
+    #      happen to leave an existing attachment in place.
+    #   6. Config.on_image_attached is non-nil (no-op when not configured;
+    #      zero overhead for apps that don't use the hook).
+    #
+    # Error policy: rescues StandardError and logs via Rails.logger. The
+    # after_commit chain MUST NOT crash on hook failures — the row is
+    # already committed and the user's save call has returned. Mirrors
+    # the on_value_change error-isolation precedent (EventDispatcher's
+    # user-callback rescue policy at 03-CONTEXT.md §User-callback error
+    # policy).
+    #
+    # Why not in EventDispatcher: this hook is image-specific, not a
+    # value-change generalization. EventDispatcher's contract is a
+    # `(value, change_type, context)` tuple; on_image_attached's
+    # contract is `(value, blob)`. Routing through EventDispatcher would
+    # require a fourth dispatch surface; the model-side after_commit is
+    # the simplest fit.
+    def _dispatch_image_attached
+      return unless defined?(::ActiveStorage::Blob)
+      return unless field
+      return unless field.is_a?(TypedEAV::Field::Image)
+      return unless respond_to?(:attachment)
+      return unless attachment.attached?
+      return unless saved_change_to_string_value?
+
+      hook = TypedEAV.config.on_image_attached
+      return if hook.nil?
+
+      hook.call(self, attachment.blob)
+    rescue StandardError => e
+      Rails.logger.error("TypedEAV on_image_attached hook raised: #{e.class}: #{e.message}")
     end
   end
 end
