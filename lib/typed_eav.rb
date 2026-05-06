@@ -16,6 +16,7 @@ module TypedEAV
   autoload :HasTypedEAV
   autoload :QueryBuilder
   autoload :EventDispatcher
+  autoload :ValueVersion
 
   # Raised when a model declared `has_typed_eav scope_method: ...` but no
   # scope can be resolved at query time and `config.require_scope` is truthy.

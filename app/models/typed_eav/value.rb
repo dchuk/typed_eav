@@ -38,6 +38,20 @@ module TypedEAV
                inverse_of: :values,
                optional: true
 
+    # Append-only audit log of mutations to this Value. Written by
+    # TypedEAV::Versioning::Subscriber (plan 04-02) when the host entity
+    # opted into versioning AND `config.versioning = true`. Read via
+    # `value.versions.order(changed_at: :desc)` (or the convenience
+    # `value.history` alias added in plan 04-03).
+    #
+    # `dependent: nil` (the implicit AR default) — version rows are
+    # preserved when the Value is destroyed (the FK is ON DELETE SET NULL,
+    # nulling value_id; the row remains queryable by (entity_type,
+    # entity_id, field_id)).
+    has_many :versions,
+             class_name: "TypedEAV::ValueVersion",
+             inverse_of: :value
+
     # ── Validations ──
 
     validates :field, uniqueness: { scope: %i[entity_type entity_id] }
