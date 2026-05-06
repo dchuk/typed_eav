@@ -108,6 +108,49 @@ RSpec.describe "Field type column mappings" do
   end
 end
 
+# Phase 05 BC regression: Field::Base ships `operator_column(operator)` as
+# a class method that defaults to `value_column`. Every built-in field
+# type as of Phase 04 must return the same column from
+# `operator_column(op)` as `value_column` for every operator the type
+# explicitly supports. This is the regression guard that future external
+# field types (registered via Config.register_field_type) inherit safely.
+# Mirrors the precedent set by spec/lib/typed_eav/column_mapping_value_columns_spec.rb
+# (Phase 04's exhaustive value_columns regression).
+RSpec.describe "Field type operator_column BC across all built-in types" do
+  phase05_operator_column_bc_types = {
+    TypedEAV::Field::Text => :string_value,
+    TypedEAV::Field::LongText => :text_value,
+    TypedEAV::Field::Integer => :integer_value,
+    TypedEAV::Field::Decimal => :decimal_value,
+    TypedEAV::Field::Boolean => :boolean_value,
+    TypedEAV::Field::Date => :date_value,
+    TypedEAV::Field::DateTime => :datetime_value,
+    TypedEAV::Field::Select => :string_value,
+    TypedEAV::Field::MultiSelect => :json_value,
+    TypedEAV::Field::IntegerArray => :json_value,
+    TypedEAV::Field::DecimalArray => :json_value,
+    TypedEAV::Field::TextArray => :json_value,
+    TypedEAV::Field::DateArray => :json_value,
+    TypedEAV::Field::Email => :string_value,
+    TypedEAV::Field::Url => :string_value,
+    TypedEAV::Field::Color => :string_value,
+    TypedEAV::Field::Json => :json_value,
+  }.freeze
+
+  phase05_operator_column_bc_types.each do |klass, expected_col|
+    context klass.name do
+      it "operator_column delegates to value_column for every supported operator" do
+        klass.supported_operators.each do |op|
+          expect(klass.operator_column(op)).to eq(expected_col),
+                                               "#{klass.name}.operator_column(#{op.inspect}) " \
+                                               "returned #{klass.operator_column(op).inspect}, " \
+                                               "expected #{expected_col.inspect}"
+        end
+      end
+    end
+  end
+end
+
 RSpec.describe "Field type supported operators" do
   it "Integer supports numeric operators" do
     ops = TypedEAV::Field::Integer.supported_operators

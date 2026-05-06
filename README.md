@@ -550,6 +550,25 @@ TypedEAV.configure do |c|
 end
 ```
 
+### Multi-cell field types (Phase 5)
+
+External field types may store their logical value across multiple typed
+columns. To support this, override three methods on your custom field
+class:
+
+- `read_value(value_record)` (instance method) — return the composite
+  value from the multi-cell shape (e.g.,
+  `{amount: BigDecimal, currency: String}`).
+- `apply_default_to(value_record)` (instance method) — write the
+  configured default across all relevant columns.
+- `self.operator_column(operator)` (class method) — return which physical
+  column a given operator acts on (e.g., `:eq` → `:decimal_value` for
+  amount, `:currency_eq` → `:string_value` for currency code).
+
+Defaults delegate to `value_column` for all three, so existing single-
+cell types are unchanged. The built-in `Field::Currency` (Phase 5) is
+the canonical multi-cell consumer of these extension points.
+
 ## Validation Behavior
 
 A few non-obvious contracts worth knowing about up front:
