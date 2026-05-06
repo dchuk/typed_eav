@@ -71,6 +71,8 @@ module TypedEAV
       text_array: "TypedEAV::Field::TextArray",
       date_array: "TypedEAV::Field::DateArray",
       email: "TypedEAV::Field::Email",
+      file: "TypedEAV::Field::File",
+      image: "TypedEAV::Field::Image",
       url: "TypedEAV::Field::Url",
       color: "TypedEAV::Field::Color",
       json: "TypedEAV::Field::Json",

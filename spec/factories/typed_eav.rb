@@ -147,6 +147,21 @@ FactoryBot.define do
     options { { decimal_places: 2, display_as: :fraction } }
   end
 
+  # Phase 5 Active Storage-backed field types. Both store the attached
+  # blob's signed_id in string_value; the :attachment has_one_attached
+  # association on TypedEAV::Value is registered at engine boot (when
+  # ActiveStorage::Blob is defined; soft-detect per Gating Decision 1).
+  # Factories don't override value_column — the field class declares it.
+  factory :image_field, class: "TypedEAV::Field::Image" do
+    sequence(:name) { |n| "image_field_#{n}" }
+    entity_type { "Contact" }
+  end
+
+  factory :file_field, class: "TypedEAV::Field::File" do
+    sequence(:name) { |n| "file_field_#{n}" }
+    entity_type { "Contact" }
+  end
+
   # ── Values ──
 
   factory :typed_value, class: "TypedEAV::Value" do
