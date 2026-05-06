@@ -141,6 +141,12 @@ FactoryBot.define do
     options { { default_currency: "USD" } }
   end
 
+  factory :percentage_field, class: "TypedEAV::Field::Percentage" do
+    sequence(:name) { |n| "percentage_field_#{n}" }
+    entity_type { "Contact" }
+    options { { decimal_places: 2, display_as: :fraction } }
+  end
+
   # ── Values ──
 
   factory :typed_value, class: "TypedEAV::Value" do
