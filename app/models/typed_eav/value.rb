@@ -104,10 +104,17 @@ module TypedEAV
           @pending_value = UNSET_VALUE
         end
       elsif field
-        # Cast through the field type, then write to the native column.
-        # Rails will further cast via the column type on save.
+        # Cast through the field type, then dispatch the write to the field's
+        # `write_value(self, casted)`. For single-cell types, write_value's
+        # default writes `self[value_column] = casted` — behaviorally
+        # identical to the prior direct write. For multi-cell types
+        # (Phase 05 Currency), write_value unpacks the composite casted
+        # value across multiple typed columns. Without this dispatch, a
+        # Currency cast result (a Hash) would be written verbatim to
+        # decimal_value, raising TypeMismatch at save time.
+        # Rails will further cast each column on save via its column type.
         casted, invalid = field.cast(val)
-        self[value_column] = casted
+        field.write_value(self, casted)
         @cast_was_invalid = invalid
       else
         # Field not yet assigned - stash for later

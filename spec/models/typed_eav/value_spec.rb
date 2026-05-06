@@ -853,5 +853,34 @@ RSpec.describe TypedEAV::Value, type: :model do
         expect(field).to have_received(:apply_default_to).with(v)
       end
     end
+
+    context "when value= writes dispatch through field.write_value" do
+      it "invokes field.write_value(self, casted) for a Text field assignment" do
+        field = create(:text_field, name: "dispatch_text_write")
+        val = described_class.new(entity: contact, field: field)
+        allow(field).to receive(:write_value).and_call_original
+        val.value = "hello"
+        expect(val.string_value).to eq("hello")
+        expect(field).to have_received(:write_value).with(val, "hello")
+      end
+
+      it "invokes field.write_value(self, casted) for an Integer field assignment" do
+        field = create(:integer_field, name: "dispatch_int_write")
+        val = described_class.new(entity: contact, field: field)
+        allow(field).to receive(:write_value).and_call_original
+        val.value = "42"
+        expect(val.integer_value).to eq(42)
+        expect(field).to have_received(:write_value).with(val, 42)
+      end
+
+      it "invokes field.write_value(self, casted) for a Boolean field assignment" do
+        field = create(:boolean_field, name: "dispatch_bool_write")
+        val = described_class.new(entity: contact, field: field)
+        allow(field).to receive(:write_value).and_call_original
+        val.value = true
+        expect(val.boolean_value).to be(true)
+        expect(field).to have_received(:write_value).with(val, true)
+      end
+    end
   end
 end

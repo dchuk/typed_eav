@@ -246,23 +246,23 @@ module TypedEAV
 
       # ── Phase 05 multi-cell extension points ──
       #
-      # These two instance methods are the field-side surface that resolves
-      # Value#value semantics and the default-application path. Single-cell
-      # field types (every built-in as of Phase 04) inherit the defaults
-      # below and behave identically to the pre-Phase-05 direct-column-access
-      # shape.
+      # These three instance methods are the field-side surface that resolves
+      # Value#value semantics, the write path, and the default-application
+      # path. Single-cell field types (every built-in as of Phase 04) inherit
+      # the defaults below and behave identically to the pre-Phase-05 direct-
+      # column-access shape.
       #
       # Multi-cell field types (Phase 05: Currency stores `{amount, currency}`
       # across decimal_value + string_value) override these to compose /
       # unpack the logical value across multiple physical columns. The
-      # dispatch keeps Value#value and Value#apply_field_default oblivious
-      # to multi-cell — they always go through the field, so adding new
-      # multi-cell types in the future requires no Value-side changes.
+      # dispatch keeps Value#value, Value#value=, and Value#apply_field_default
+      # oblivious to multi-cell — they always go through the field, so adding
+      # new multi-cell types in the future requires no Value-side changes.
       #
-      # IMPORTANT: read_value and apply_default_to are paired. Multi-cell
-      # types MUST override BOTH together — overriding only one creates an
-      # asymmetry where reads see the multi-cell shape but defaults populate
-      # only one column.
+      # IMPORTANT: read_value, write_value, and apply_default_to are paired.
+      # Currency overrides ALL THREE — overriding only one creates an
+      # asymmetry where reads see the multi-cell shape but writes / defaults
+      # populate only one column (or vice versa).
 
       # Returns the logical value for this field as stored on the given
       # Value record. Default reads `value_record[self.class.value_column]`.
@@ -274,6 +274,21 @@ module TypedEAV
       # guard runs before this method, so `self` is always set.
       def read_value(value_record)
         value_record[self.class.value_column]
+      end
+
+      # Writes a casted value to the given Value record. Default writes
+      # `value_record[self.class.value_column] = casted`. Override in multi-
+      # cell types to unpack a composite casted value into multiple columns
+      # (e.g., Field::Currency unpacks `{amount: BigDecimal, currency: String}`
+      # into decimal_value + string_value).
+      #
+      # Called from Value#value=. The cast invariant is preserved: `casted`
+      # is whatever the field's `cast(raw)` returned as the first element.
+      # For single-cell types that's a scalar; for Currency it's a Hash.
+      # Without this dispatch, a Currency cast result (a Hash) would be
+      # written to a single typed column, raising TypeMismatch at save time.
+      def write_value(value_record, casted)
+        value_record[self.class.value_column] = casted
       end
 
       # Writes this field's configured default to the given Value record.
