@@ -26,6 +26,46 @@ RSpec.describe TypedEAV::ColumnMapping do
     end
   end
 
+  # Phase 5: operator_column class-method dispatch — the single seam that
+  # lets multi-cell field types (Phase 5 Currency) route different operators
+  # to different physical columns without QueryBuilder hardcoding column
+  # names. Default delegates to value_column; all 17 existing built-in types
+  # inherit this default and remain BC.
+  describe ".operator_column" do
+    it "delegates to value_column by default for arbitrary operators" do
+      klass = Class.new do
+        include TypedEAV::ColumnMapping
+
+        value_column :integer_value
+      end
+      expect(klass.operator_column(:eq)).to eq(:integer_value)
+      expect(klass.operator_column(:gt)).to eq(:integer_value)
+      expect(klass.operator_column(:made_up_operator)).to eq(:integer_value)
+    end
+
+    it "is a class method (not instance method) — dispatch happens at QueryBuilder.filter time without an instance" do
+      klass = Class.new do
+        include TypedEAV::ColumnMapping
+
+        value_column :string_value
+      end
+      expect(klass).to respond_to(:operator_column)
+      expect(klass.new).not_to respond_to(:operator_column)
+    end
+
+    it "returns the same column as value_column for every built-in field type's supported operators" do
+      # Smoke check that existing types remain BC-safe through the default.
+      [TypedEAV::Field::Integer, TypedEAV::Field::Text, TypedEAV::Field::Boolean].each do |klass|
+        klass.supported_operators.each do |op|
+          expect(klass.operator_column(op)).to eq(klass.value_column),
+                                               "#{klass.name}.operator_column(#{op.inspect}) " \
+                                               "returned #{klass.operator_column(op).inspect}, " \
+                                               "expected #{klass.value_column.inspect}"
+        end
+      end
+    end
+  end
+
   describe ".default_operators_for" do
     # We test via the field types that use defaults vs overrides
     it "returns numeric operators for integer_value fields" do

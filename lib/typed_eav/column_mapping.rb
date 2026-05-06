@@ -67,6 +67,29 @@ module TypedEAV
         [value_column]
       end
 
+      # Which physical column this operator acts on. Defaults to `value_column`
+      # for single-cell field types — every built-in type as of Phase 04
+      # inherits the default and returns the same column for every supported
+      # operator.
+      #
+      # Multi-cell field types (Phase 05: Currency) override this to route
+      # different operators to different columns. For example, Currency stores
+      # `{amount, currency}` across `decimal_value` + `string_value`; the
+      # `:eq` operator targets amount (`decimal_value`); the `:currency_eq`
+      # operator targets currency code (`string_value`).
+      #
+      # Called from `QueryBuilder.filter` AFTER the
+      # `supported_operators.include?(operator)` validation gate, so this
+      # method is only invoked with operators the field explicitly supports.
+      # Subclasses overriding for unsupported operators is a programming
+      # error caught by the gate, not by this method.
+      #
+      # The unused `operator` parameter is intentional in the default —
+      # subclasses use it to dispatch.
+      def operator_column(_operator)
+        value_column
+      end
+
       # All operators this field type supports for querying.
       # Subclasses can override to restrict or extend.
       def supported_operators
