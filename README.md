@@ -500,6 +500,8 @@ When both a global field (`scope: nil`) and a scoped field share a name, the **s
 | `Json` | `json_value` | Hash/Array | arbitrary JSON |
 | `Currency` | `decimal_value` + `string_value` | `{amount: BigDecimal, currency: String}` | `default_currency`, `allowed_currencies` |
 | `Percentage` | `decimal_value` | BigDecimal (0..1 range) | `decimal_places`, `display_as: :fraction \| :percent` |
+| `Image` | `string_value` (signed_id) + `:attachment` has_one_attached | String (Active Storage signed_id) | `allowed_content_types`, `max_size_bytes` |
+| `File` | `string_value` (signed_id) + `:attachment` has_one_attached | String (Active Storage signed_id) | `allowed_content_types`, `max_size_bytes` |
 
 ## Sections (Optional UI Grouping)
 
@@ -588,6 +590,33 @@ the canonical multi-cell consumer of these extension points.
     options: { display_as: :percent, decimal_places: 1 },
   )
   pf.format(BigDecimal("0.755")) # => "75.5%"
+  ```
+
+- **`Image` (Phase 5):** Active Storage-backed field type. Stores the attached blob's `signed_id` (a String) in `string_value`. Operators: `:eq`, `:is_null`, `:is_not_null`. Options: `allowed_content_types` (Array of strings; supports exact matches like `"image/png"` and `image/*` family wildcards), `max_size_bytes` (Integer; nil disables the cap). The single `:attachment` has_one_attached association is declared on `TypedEAV::Value` at engine boot when Active Storage is loaded; otherwise `Field::Image#cast` raises `NotImplementedError` with an actionable install message. The `:attachment` association is shared with `Field::File` — Image vs File is a class-identity distinction (used by the `on_image_attached` hook), not a separate association.
+
+  ```ruby
+  field = TypedEAV::Field::Image.create!(
+    name: "avatar", entity_type: "Contact",
+    options: { allowed_content_types: %w[image/png image/jpeg image/webp], max_size_bytes: 5_000_000 },
+  )
+  value = TypedEAV::Value.create!(entity: contact, field: field)
+  value.attachment.attach(io: file_io, filename: "avatar.png", content_type: "image/png")
+  value.update!(string_value: value.attachment.blob.signed_id)
+  value.value # => the signed_id String
+  ```
+
+- **`File` (Phase 5):** Same shape as `Field::Image` but without image-specific semantics. Stores `signed_id` in `string_value`; same operator set; same options (`allowed_content_types`, `max_size_bytes`). The Image vs File distinction is by `value.field.class` at runtime — apps that want strict image-only validation set `allowed_content_types: ["image/*"]` on `Field::Image`; `Field::File` is a general-purpose attachment slot.
+
+- **Active Storage dependency (Phase 5):** Lazy soft-detect via `defined?(::ActiveStorage::Blob)`. The gem does NOT add Active Storage as a hard dependency — apps that never use Image/File never need to install it. To use Image or File fields, add `gem "activestorage"` to your Gemfile (already included in Rails 7.1+ via the `rails` meta-gem) and run `bin/rails active_storage:install` to create the `active_storage_blobs` / `active_storage_attachments` / `active_storage_variant_records` tables. The mirror precedent is `acts_as_tenant`, which is also soft-detected (see `Config::DEFAULT_SCOPE_RESOLVER`).
+
+- **`on_image_attached` hook (Phase 5):** Fires from `after_commit` on `TypedEAV::Value` when a `Field::Image`-typed Value's attachment is added or replaced. Receives `(value, blob)`. Configure via `TypedEAV.configure { |c| c.on_image_attached = ->(v, b) { ... } }`. Hook ordering: runs AFTER versioning (Phase 4) and AFTER `on_value_change` (Phase 3) so it sees the persisted version row and the user-callback context. File attachments do NOT fire this hook — the name is image-specific by design. Use `on_value_change` for a generic value-mutation signal that covers File-typed Values too.
+
+  ```ruby
+  TypedEAV.configure do |c|
+    c.on_image_attached = ->(value, blob) {
+      ProcessImageJob.perform_later(value.id, blob.id)
+    }
+  end
   ```
 
 ## Validation Behavior
