@@ -784,4 +784,74 @@ RSpec.describe TypedEAV::Value, type: :model do
       end
     end
   end
+
+  # Phase 05: Value#value reads through `field.read_value(self)` and
+  # Value#apply_field_default delegates to `field.apply_default_to(self)`.
+  # These two dispatches are the field-side surface that lets multi-cell
+  # types (Phase 05 Currency) compose / unpack a logical value across
+  # multiple typed columns without Value-side changes. Single-cell types
+  # are unchanged behaviorally — the spec asserts the dispatch is invoked
+  # and that the returned value matches the pre-dispatch shape for
+  # representative single-cell types (Text, Integer, Boolean).
+  describe "Value#value and #apply_field_default route through Field extension points" do
+    let(:contact) { create(:contact) }
+
+    context "when value reads dispatch through field.read_value" do
+      it "invokes field.read_value(self) for a Text field" do
+        field = create(:text_field, name: "dispatch_text")
+        val = described_class.create!(entity: contact, field: field, value: "hello")
+        # Use allow + have_received (codebase convention) instead of
+        # expect-receive — same observation, plays nicer with rubocop's
+        # RSpec/MessageSpies cop.
+        allow(field).to receive(:read_value).and_call_original
+        expect(val.value).to eq("hello")
+        expect(field).to have_received(:read_value).with(val)
+      end
+
+      it "invokes field.read_value(self) for an Integer field" do
+        field = create(:integer_field, name: "dispatch_int")
+        val = described_class.create!(entity: contact, field: field, value: 42)
+        allow(field).to receive(:read_value).and_call_original
+        expect(val.value).to eq(42)
+        expect(field).to have_received(:read_value).with(val)
+      end
+
+      it "invokes field.read_value(self) for a Boolean field" do
+        field = create(:boolean_field, name: "dispatch_bool")
+        val = described_class.create!(entity: contact, field: field, value: true)
+        allow(field).to receive(:read_value).and_call_original
+        expect(val.value).to be(true)
+        expect(field).to have_received(:read_value).with(val)
+      end
+
+      it "returns nil without dispatching when field is unset" do
+        # Orphan-Value branch: no field → no dispatch, no NoMethodError.
+        # Mirrors the read-path orphan-skip contract documented in
+        # PATTERNS.md §"Defend the read path".
+        val = described_class.new(entity: contact)
+        expect(val.value).to be_nil
+      end
+    end
+
+    context "when apply_field_default dispatches through field.apply_default_to" do
+      it "invokes field.apply_default_to(self) when value: kwarg is omitted (Text default)" do
+        field = create(:text_field, name: "dispatch_text_def", default_value_meta: { "v" => "default!" })
+        # The Value's `field` AR association resolves to the SAME instance
+        # that was passed in via `field:` — so spying on this instance
+        # captures the apply_default_to call from the create path.
+        allow(field).to receive(:apply_default_to).and_call_original
+        v = contact.typed_values.create!(field: field)
+        expect(v.string_value).to eq("default!")
+        expect(field).to have_received(:apply_default_to).with(v)
+      end
+
+      it "invokes field.apply_default_to(self) when value: kwarg is omitted (Integer default)" do
+        field = create(:integer_field, name: "dispatch_int_def", default_value_meta: { "v" => 7 })
+        allow(field).to receive(:apply_default_to).and_call_original
+        v = contact.typed_values.create!(field: field)
+        expect(v.integer_value).to eq(7)
+        expect(field).to have_received(:apply_default_to).with(v)
+      end
+    end
+  end
 end

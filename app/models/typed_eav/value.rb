@@ -70,10 +70,23 @@ module TypedEAV
     # and `value` reads it back as a Ruby Integer. No custom caster needed
     # for storage - the database column type IS the caster.
 
+    # Logical value of this Value record as defined by its field type.
+    #
+    # Single-cell field types return `self[value_column]` — the typed
+    # column's scalar (Integer, String, BigDecimal, etc.). Multi-cell
+    # types (Phase 05: Currency) return a composite (e.g.,
+    # `{amount: BigDecimal, currency: String}`) composed from multiple
+    # typed columns by the field's `read_value` override.
+    #
+    # The dispatch through `field.read_value(self)` is the single read-side
+    # extension point — Value remains oblivious to multi-cell types. Single-
+    # cell behavior is unchanged: Field::Base#read_value's default returns
+    # `value_record[self.class.value_column]`, which equals
+    # `self[value_column]`.
     def value
       return nil unless field
 
-      self[value_column]
+      field.read_value(self)
     end
 
     def value=(val)
@@ -306,15 +319,21 @@ module TypedEAV
       @pending_value = nil
     end
 
-    # Writes field.default_value (already cast or nil) directly to the typed
-    # column. Does NOT route through value= because field.default_value is
-    # already cast via cast(default_value_meta["v"]).first — re-casting
-    # would be redundant. Field-side validate_default_value (field/base.rb)
-    # catches invalid raw defaults at field save time, so what we read here
-    # is always either a castable value or nil.
+    # Writes the field's configured default to the typed column(s) via the
+    # `field.apply_default_to(self)` dispatch. Does NOT route through value=
+    # because field.default_value is already cast via
+    # cast(default_value_meta["v"]).first — re-casting would be redundant.
+    # Field-side validate_default_value (field/base.rb) catches invalid raw
+    # defaults at field save time, so what apply_default_to writes is always
+    # either a castable value or nil.
+    #
+    # Multi-cell forward-compat: single-cell types fall through to
+    # `self[value_column] = field.default_value` (Field::Base default).
+    # Currency / future multi-cell types override `apply_default_to` to
+    # populate multiple columns from a composite default. The dispatch
+    # preserves the bypass-Value#value= contract end-to-end.
     def apply_field_default
-      default = field.default_value
-      self[value_column] = default
+      field.apply_default_to(self)
     end
 
     def validate_value
