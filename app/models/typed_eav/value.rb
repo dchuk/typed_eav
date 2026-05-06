@@ -303,13 +303,21 @@ module TypedEAV
     # versioning and Phase 07 matview consumers, so we drop the event
     # at the model boundary rather than push the nil-guard downstream.
     #
-    # Update filter: only fire :update when `saved_change_to_attribute?(
-    # field.class.value_column)` is true. A Value row's only meaningful
-    # change for downstream consumers is the typed column for its field;
-    # field_id repointing or other bookkeeping shifts are out-of-spec for
-    # the event contract. Without this filter, Phase 04 versioning would
-    # pile up no-op version rows (every audit-trail commit) and Phase 07
-    # matview would refresh on bookkeeping-only writes.
+    # Update filter (Phase 04 fix): only fire :update when ANY of the typed
+    # columns the field uses changed (value_columns plural — added in
+    # plan 04-02). For all 17 single-cell field types as of Phase 04,
+    # value_columns returns [value_column], so this is behaviorally
+    # identical to the singular form Phase 03 shipped. For Phase 05
+    # Currency (two-cell), a change to either column correctly fires the
+    # event. Without this fix, Phase 05 Currency would have a latent bug
+    # where changes to the second cell alone are silently dropped at the
+    # dispatch gate (Scout §3 / Discrepancy D3 from plan 04-01).
+    #
+    # A Value row's only meaningful change for downstream consumers is
+    # its typed columns — field_id repointing or other bookkeeping shifts
+    # are out-of-spec for the event contract. Without this filter, Phase 04
+    # versioning would pile up no-op version rows (every audit-trail
+    # commit) and Phase 07 matview would refresh on bookkeeping-only writes.
 
     def _dispatch_value_change_create
       return unless field
@@ -319,7 +327,20 @@ module TypedEAV
 
     def _dispatch_value_change_update
       return unless field
-      return unless saved_change_to_attribute?(field.class.value_column)
+      # Forward-compat with Phase 05 Currency (and any future multi-cell
+      # field type): check if ANY of the typed columns the field uses
+      # changed in the just-committed save. Phase 04 plan 02 introduces
+      # `value_columns` plural in lib/typed_eav/column_mapping.rb; for
+      # all 17 current single-cell types, value_columns returns
+      # [value_column], so this filter is behaviorally identical to the
+      # prior singular form. For Phase 05 Currency
+      # (value_columns → [:decimal_value, :string_value]), a change to
+      # either cell now correctly fires the :update event — without this
+      # plural fix, a Currency change to only the string_value (currency
+      # code) cell would silently be missed by the dispatch gate, and
+      # Phase 04 versioning would never see it (Scout §3 / Discrepancy D3
+      # from plan 04-01).
+      return unless field.class.value_columns.any? { |col| saved_change_to_attribute?(col) }
 
       TypedEAV::EventDispatcher.dispatch_value_change(self, :update)
     end
