@@ -99,7 +99,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 | 2 - Phase-1 pipeline completions | 4/4 | complete | 2026-04-29 |
 | 3 - Event system | 2/2 | complete | 2026-05-01 |
 | 4 - Versioning | 3/3 | complete | 2026-05-06 |
-| 5 - Field type expansion | 0/0 | pending | — |
+| 5 - Field type expansion | 0/4 | planned | - |
 | 6 - Bulk operations & import/export | 0/0 | pending | — |
 | 7 - Read optimization | 0/0 | pending | — |
 
