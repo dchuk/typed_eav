@@ -107,6 +107,34 @@ module TypedEAV
       field.class.value_column
     end
 
+    # Append-only audit log of mutations to this Value, ordered most-
+    # recent-first. Returns a relation that can be chained (`.where`,
+    # `.limit`, `.pluck`).
+    #
+    # Implemented as an instance method (not `has_many ... -> { order(...) }`)
+    # so the ordering is explicit at the call site for documentation
+    # purposes — readers see `value.history.first` and know they're getting
+    # the most-recent version. Hidden default-scope ordering is harder to
+    # discover and easier to accidentally override.
+    #
+    # Tie-breaks on id when multiple versions share a changed_at (rare —
+    # requires same-second writes from concurrent threads or a backfill
+    # script that pinned a single timestamp). Without the secondary id
+    # ordering, callers iterating `history` after a same-second batch
+    # would see non-deterministic order across DB executions.
+    #
+    # Survives Value destruction: even after `value.destroy!` and the FK
+    # nulls value_id on the version rows, the version rows are still
+    # queryable via the entity reference. `history` returns nothing in
+    # that case (the `versions` association is keyed on value_id and
+    # returns no rows when value_id is NULL on all rows). Use
+    # `TypedEAV::ValueVersion.where(entity: contact, field_id: field.id).order(changed_at: :desc)`
+    # to query orphaned audit history (the README §"Versioning" §"Querying
+    # full audit history" subsection documents this fallback).
+    def history
+      versions.order(changed_at: :desc, id: :desc)
+    end
+
     # Override AR's initialize so missing `:value` kwarg → UNSET_VALUE
     # substitution. This is the only mechanism that lets us distinguish
     # "no value given" from "value: nil given" (both leave the typed column
