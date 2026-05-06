@@ -19,6 +19,19 @@ unless ActiveRecord::Migrator.migrations_paths.include?(engine_migration_path)
   ActiveRecord::Migrator.migrations_paths << engine_migration_path
 end
 
+# Apply any pending dummy-app migrations. `maintain_test_schema!` only
+# loads schema from db/schema.rb; this dummy app does not commit a
+# schema dump (intentional — the migrations are short and the test DB
+# is recreated rarely). Without this block, a fresh check-out with new
+# migrations under spec/dummy/db/migrate (e.g., the Phase 05 Active
+# Storage tables) would fail with "ActiveRecord::StatementInvalid:
+# relation \"active_storage_blobs\" does not exist" the first time
+# specs run. We use the dummy-only migration path so engine-level
+# migrations (already applied) don't trip DuplicateMigrationNameError.
+dummy_migration_path = File.expand_path("dummy/db/migrate", __dir__)
+dummy_ctx = ActiveRecord::MigrationContext.new(dummy_migration_path)
+dummy_ctx.migrate if dummy_ctx.needs_migration?
+
 # Tell FactoryBot where to find our factory definitions
 FactoryBot.definition_file_paths = [
   File.expand_path("factories", __dir__),
@@ -89,26 +102,29 @@ RSpec.configure do |config|
   # internal list in test teardown would break Phase 04 specs that follow.
   # Mirrors the :scoping / :unscoped opt-in metadata pattern.
   config.around(:each, :event_callbacks) do |example|
-    saved_on_value_change = TypedEAV::Config.on_value_change
-    saved_on_field_change = TypedEAV::Config.on_field_change
-    saved_versioning      = TypedEAV::Config.versioning
-    saved_actor_resolver  = TypedEAV::Config.actor_resolver
-    saved_value_internals = TypedEAV::EventDispatcher.value_change_internals.dup
-    saved_field_internals = TypedEAV::EventDispatcher.field_change_internals.dup
+    saved_on_value_change   = TypedEAV::Config.on_value_change
+    saved_on_field_change   = TypedEAV::Config.on_field_change
+    saved_on_image_attached = TypedEAV::Config.on_image_attached
+    saved_versioning        = TypedEAV::Config.versioning
+    saved_actor_resolver    = TypedEAV::Config.actor_resolver
+    saved_value_internals   = TypedEAV::EventDispatcher.value_change_internals.dup
+    saved_field_internals   = TypedEAV::EventDispatcher.field_change_internals.dup
 
-    TypedEAV::Config.on_value_change = nil
-    TypedEAV::Config.on_field_change = nil
-    TypedEAV::Config.versioning      = false
-    TypedEAV::Config.actor_resolver  = nil
+    TypedEAV::Config.on_value_change   = nil
+    TypedEAV::Config.on_field_change   = nil
+    TypedEAV::Config.on_image_attached = nil
+    TypedEAV::Config.versioning        = false
+    TypedEAV::Config.actor_resolver    = nil
     TypedEAV::EventDispatcher.value_change_internals.clear
     TypedEAV::EventDispatcher.field_change_internals.clear
 
     example.run
   ensure
-    TypedEAV::Config.on_value_change = saved_on_value_change
-    TypedEAV::Config.on_field_change = saved_on_field_change
-    TypedEAV::Config.versioning      = saved_versioning
-    TypedEAV::Config.actor_resolver  = saved_actor_resolver
+    TypedEAV::Config.on_value_change   = saved_on_value_change
+    TypedEAV::Config.on_field_change   = saved_on_field_change
+    TypedEAV::Config.on_image_attached = saved_on_image_attached
+    TypedEAV::Config.versioning        = saved_versioning
+    TypedEAV::Config.actor_resolver    = saved_actor_resolver
     TypedEAV::EventDispatcher.instance_variable_set(:@value_change_internals, saved_value_internals)
     TypedEAV::EventDispatcher.instance_variable_set(:@field_change_internals, saved_field_internals)
   end

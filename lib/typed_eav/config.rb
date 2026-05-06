@@ -208,6 +208,31 @@ module TypedEAV
       # even when the rename was bundled with other edits.
       attr_accessor :on_field_change
 
+      # Phase 05 hook: fires from after_commit on TypedEAV::Value when a
+      # Field::Image-typed Value gains (or replaces) an attachment. Receives
+      # `(value, blob)`. Default nil — no-op when not configured.
+      #
+      # Hook ordering: fires AFTER versioning (Phase 04) and AFTER
+      # on_value_change (Phase 03). The hook is informational ("an image
+      # was attached"), not mutational; running it last avoids polluting
+      # earlier hooks' snapshots / context with attachment-derived state.
+      #
+      # Active Storage soft-detect (Gating Decision 1, Phase 05): when
+      # Active Storage is not loaded at engine boot, the after_commit
+      # dispatcher on TypedEAV::Value short-circuits via the
+      # `defined?(::ActiveStorage::Blob)` guard — this accessor exists
+      # regardless (set/get is a no-op if no dispatcher fires). Mirrors
+      # the on_value_change / on_field_change idiom (plain attr_accessor
+      # rather than the hand-rolled `defined?(@var)` reader because the
+      # hook contract is "nil means unset"; there is no "explicitly nil
+      # vs never set" distinction this hook needs to surface).
+      #
+      # File-attached has no parallel hook in Phase 05 — the on_image_attached
+      # name is image-specific by ROADMAP design. Apps that want a generic
+      # file-attached signal use on_value_change (Phase 03) or subscribe to
+      # ActiveSupport::Notifications directly.
+      attr_accessor :on_image_attached
+
       # Register a custom field type.
       def register_field_type(name, class_name)
         field_types[name.to_sym] = class_name
@@ -250,6 +275,9 @@ module TypedEAV
         # that needs to clear EVERYTHING calls EventDispatcher.reset! too.
         self.on_value_change = nil
         self.on_field_change = nil
+        # Phase 05 image-attached hook (parallel to on_value_change /
+        # on_field_change reset for test isolation).
+        self.on_image_attached = nil
       end
     end
   end

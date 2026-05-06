@@ -84,6 +84,51 @@ RSpec.describe TypedEAV::Config, "versioning + actor_resolver" do
     end
   end
 
+  # Phase 05 hook: Config.on_image_attached fires from after_commit on
+  # TypedEAV::Value when a Field::Image-typed Value gains an attachment.
+  # This block is the canonical accessor coverage; integration / dispatch
+  # coverage lives in field_spec.rb.
+  describe ".on_image_attached", :event_callbacks do
+    it "defaults to nil" do
+      described_class.reset!
+      expect(described_class.on_image_attached).to be_nil
+    end
+
+    it "is settable to a callable" do
+      hook = ->(value, blob) { [value, blob] }
+      described_class.on_image_attached = hook
+      expect(described_class.on_image_attached).to eq(hook)
+    end
+
+    it "is reset to nil by Config.reset!" do
+      described_class.on_image_attached = ->(_value, _blob) { :did }
+      described_class.reset!
+      expect(described_class.on_image_attached).to be_nil
+    end
+
+    it "is included in Config.reset! alongside on_value_change / on_field_change" do
+      described_class.on_value_change   = ->(_v, _t, _c) { :did }
+      described_class.on_field_change   = ->(_f, _t) { :did }
+      described_class.on_image_attached = ->(_v, _b) { :did }
+
+      described_class.reset!
+
+      expect(described_class.on_value_change).to be_nil
+      expect(described_class.on_field_change).to be_nil
+      expect(described_class.on_image_attached).to be_nil
+    end
+
+    # If the :event_callbacks hook in spec_helper.rb is missing the
+    # saved_on_image_attached / restore lines added in plan 05-03 P01,
+    # state from this assignment leaks to subsequent specs and the
+    # next "defaults to nil" assertion fails. Mirrors the
+    # actor_resolver leak-detection example above.
+    it "spec_helper :event_callbacks isolation: restores Config.on_image_attached after exit" do
+      described_class.on_image_attached = ->(_v, _b) { :leaked }
+      expect(described_class.on_image_attached.call(:v, :b)).to eq(:leaked)
+    end
+  end
+
   describe "spec_helper :event_callbacks isolation", :event_callbacks do
     it "restores Config.versioning after the example exits" do
       # If this fails, the :event_callbacks hook in spec_helper.rb is
