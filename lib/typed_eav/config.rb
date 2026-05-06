@@ -117,6 +117,62 @@ module TypedEAV
       end
       attr_writer :require_scope # rubocop:disable Style/AccessorGrouping
 
+      # Master kill-switch for Phase 04 versioning. When false (default), the
+      # Phase 04 internal subscriber is NOT registered with EventDispatcher
+      # at engine boot — zero overhead for apps that don't use versioning.
+      # When true, the subscriber registers but only writes a version row
+      # when value.entity_type belongs to a host model that opted in via
+      # `has_typed_eav versioned: true` (per-entity opt-in flows through
+      # Registry; both layers land in plan 04-02).
+      #
+      # Decoupling the master switch from the per-entity decision: disabling
+      # for all is one toggle here; enabling for some is a per-host decision
+      # in `has_typed_eav`. Apps that want to A/B-test versioning across
+      # environments toggle this single flag.
+      #
+      # Default false because the schema migration only matters for apps that
+      # opt in. A v0.1.x deployment that pulls in Phase 04 without changing
+      # any config or model declarations sees no behavior change — the
+      # subscriber doesn't register, no version rows are written, no perf
+      # impact at all. The migration is still copied (idempotent), but the
+      # table sits empty.
+      def versioning
+        defined?(@versioning) ? @versioning : false
+      end
+      attr_writer :versioning # rubocop:disable Style/AccessorGrouping
+
+      # Permissive actor resolver. Mirrors the `scope_resolver` callable
+      # shape (lib/typed_eav.rb:94: `Config.scope_resolver&.call`) but the
+      # return contract is permissive: any value the app chooses (AR object,
+      # integer, string, nil) is acceptable, and nil is the documented
+      # fail-permissive sentinel.
+      #
+      # Called from TypedEAV::Versioning::Subscriber (plan 04-02) once per
+      # version row write: `actor = TypedEAV.config.actor_resolver&.call`.
+      # The return is coerced via `normalize_one`-style String coercion
+      # (gem's existing pattern at lib/typed_eav.rb:239-243) before storage
+      # in the typed_eav_value_versions.changed_by column. nil flows through
+      # as nil — the column is nullable (db/migrate/20260505000000).
+      #
+      # Why permissive (vs. scope_resolver's strict return contract):
+      # missing scope is a tenant-isolation hazard (catastrophic, fail-
+      # closed). Missing actor is a degraded audit log (recoverable,
+      # sometimes legitimate — system writes, migrations, console).
+      # Forcing every Versioned write to have an actor would reject every
+      # console save, every migration backfill, every job that didn't set
+      # `with_context(actor: ...)` — hostile defaults for a gem.
+      # 04-CONTEXT.md §"actor_resolver returning nil" locks the permissive
+      # contract; apps that need strict enforcement do it inside their own
+      # resolver lambda (`-> { Current.user || raise SomeAppError }`).
+      #
+      # Default nil (no resolver) means every version row's changed_by is
+      # nil. Apps wire this up by setting `c.actor_resolver = -> { ... }`
+      # in an initializer alongside `c.versioning = true`.
+      def actor_resolver
+        defined?(@actor_resolver) ? @actor_resolver : nil
+      end
+      attr_writer :actor_resolver # rubocop:disable Style/AccessorGrouping
+
       # Public single-proc slot for value-change events.
       # Signature: ->(value, change_type, context) { ... }
       # - value:        TypedEAV::Value (the just-committed row)
@@ -173,6 +229,16 @@ module TypedEAV
         self.field_types = BUILTIN_FIELD_TYPES.dup
         self.scope_resolver = DEFAULT_SCOPE_RESOLVER
         self.require_scope = true
+        # Phase 04 versioning master switch + actor resolver. Reset to defaults
+        # (false / nil) so test isolation matches `Config.on_value_change` / etc.
+        # Internal subscribers (TypedEAV::Versioning::Subscriber, registered
+        # at engine load by plan 04-02) are deliberately NOT cleared here —
+        # they live on EventDispatcher.value_change_internals and survive
+        # Config.reset! by design (the snapshot/restore split is locked at
+        # 03-CONTEXT.md §Reset split). Test teardown that needs to clear
+        # subscribers too calls EventDispatcher.reset!.
+        self.versioning = false
+        self.actor_resolver = nil
         # Test isolation: scoping_spec/field_spec/etc. call Config.reset! in
         # `after` hooks — this ensures user procs set in earlier tests don't
         # leak across examples. Internal subscribers
