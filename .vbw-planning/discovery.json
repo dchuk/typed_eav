@@ -111,6 +111,34 @@
       "area": "actor-resolver-nil",
       "phase": "04",
       "date": "2026-05-04"
+    },
+    {
+      "question": "Bulk write failure isolation in Entity.bulk_set_typed_eav_values — single transaction (all-or-nothing), savepoints per record (partial success), or per-record transactions (no outer atomicity)?",
+      "answer": "Savepoints per record inside an outer transaction. ActiveRecord::Base.transaction(requires_new: true) per record gives partial success matching the result shape (successes / errors_by_record): bad records roll back to their savepoint and surface in errors_by_record; good records commit on outer COMMIT. Outer-level failures (deadlock, connection drop) still abort the whole batch. Default on_error: :continue semantics implied by partial success; no explicit on_error: keyword in v0.6.0. Rejected: strict all-or-nothing (makes errors_by_record pointless), per-record transactions (loses cross-record atomicity, breaks Phase 3 on_value_change semantics).",
+      "area": "bulk-write-failure-isolation",
+      "phase": "06",
+      "date": "2026-05-06"
+    },
+    {
+      "question": "Field.import_schema conflict policy when (name, entity_type, scope, parent_scope) already exists with different attributes — silent skip, always overwrite, always error, or per-call flag?",
+      "answer": "on_conflict: keyword argument with values :error (default), :skip, :overwrite. Type changes (incompatible STI subclass swap, e.g., Field::String → Field::Decimal) ALWAYS raise regardless of flag, since the gem cannot infer a safe migration of existing typed values across *_value columns. Idempotence key remains (name, entity_type, scope, parent_scope); identical attributes are no-ops under any flag. Default :error surfaces drift loudly — a stale CI hash never silently reverts production. :skip covers 'ensure schema present' deploys. :overwrite covers admin force-sync. Mirrors Rails upsert_all on_duplicate: idiom. Rejected: silent-skip-only (drift goes unnoticed), always-overwrite (stale hash imports too dangerous as default), always-error (noisy for CI 'ensure present' use case).",
+      "area": "schema-import-conflict-policy",
+      "phase": "06",
+      "date": "2026-05-06"
+    },
+    {
+      "question": "TypedEAV::CSVMapper.row_to_attributes — mapping shape, per-row return value, and streaming model?",
+      "answer": "Bundled decision: (1) Mapping shape — single hash. String keys map CSV headers ({\"Email Address\" => :email}); integer keys map column indexes for headerless files ({0 => :email}). No transform overrides in v0.6.0; callers preprocess CSV::Row before calling row_to_attributes. (2) Per-row return — always returns TypedEAV::CSVMapper::Result with .attributes / .errors / .success?. Never raises on row-level errors. Type coercion goes through existing Field#cast; cast failures land in .errors, not exceptions. Symmetric with bulk_set_typed_eav_values successes/errors_by_record so users learn one mental model. (3) Streaming — per-row API, no file-level orchestration in the library. Callers use CSV.foreach(path, headers: true) { |row| ... } to keep memory O(1). Rejected: raise-on-error per row (loses structural 'never fail-whole-import' promise), transform overrides in mapping (over-scoped for v0.6.0), library-side file orchestration (caller-orchestrated streaming covers the use case).",
+      "area": "csv-mapping-and-result-shape",
+      "phase": "06",
+      "date": "2026-05-06"
+    },
+    {
+      "question": "version_grouping: option in bulk_set_typed_eav_values — what mechanism, what default mode, and what happens when Config.versioning = false?",
+      "answer": "Mechanism + default: add nullable, indexed version_group_id uuid column to typed_eav_value_versions (additive migration on top of Phase 4's table; uses disable_ddl_transaction! + algorithm: :concurrently per PATTERNS.md production-safety pattern). Bulk operations populate version_group_id; non-bulk writes leave it NULL (backward-compatible). Default version_grouping: :per_record when versioning is enabled — one uuid per record touched; all field changes for record X share that uuid. Aligns with savepoint-per-record boundary from bulk write failure isolation decision. :per_field also supported (one uuid per field touched across the bulk set) for 'what entities had field Y bulk-updated together?' queries. Disabled-versioning behavior: raise ArgumentError when version_grouping: is explicitly passed but Config.versioning = false. Omitting the option works in either env so env-conditional callers don't branch. Loud failure prevents silent no-op footgun. Rejected: collapse multiple field changes into single version row with NULL field_id (reshapes Phase 4 schema), use shared changed_at timestamp instead of column (ambiguous under concurrent bulks / clock skew), silently ignore when versioning disabled (silent no-op footgun), warn-and-continue (Rails moving away from this pattern).",
+      "area": "version-grouping-and-disabled-versioning",
+      "phase": "06",
+      "date": "2026-05-06"
     }
   ],
   "inferred": [
@@ -209,6 +237,30 @@
       "text": "Config.actor_resolver mirrors Config.scope_resolver shape but with permissive nil semantics: a nil return is allowed and yields a version row with changed_by: nil. typed_eav_value_versions.changed_by is nullable. There is no TypedEAV::ActorRequired exception, no Config.system_actor sentinel fallback, and no Config.require_actor strict-mode in Phase 4. Apps that need stricter policy enforce it in their own actor_resolver lambda or via a downstream validation on the version row.",
       "priority": "Must-have",
       "source": "Phase 4 discussion: actor-resolver-nil"
+    },
+    {
+      "id": "REQ-04",
+      "text": "bulk_set_typed_eav_values uses savepoints per record inside an outer ActiveRecord transaction; result is { successes:, errors_by_record: }",
+      "priority": "Must-have",
+      "source": "Discussion: bulk-write-failure-isolation"
+    },
+    {
+      "id": "REQ-04",
+      "text": "Field.import_schema accepts on_conflict: keyword (:error default, :skip, :overwrite); incompatible field-type changes always raise",
+      "priority": "Must-have",
+      "source": "Discussion: schema-import-conflict-policy"
+    },
+    {
+      "id": "REQ-04",
+      "text": "TypedEAV::CSVMapper.row_to_attributes returns TypedEAV::CSVMapper::Result (.attributes, .errors, .success?) and never raises on row-level errors; mapping is a hash with string keys (headers) or integer keys (indexes)",
+      "priority": "Must-have",
+      "source": "Discussion: csv-mapping-and-result-shape"
+    },
+    {
+      "id": "REQ-04",
+      "text": "typed_eav_value_versions gets a nullable indexed version_group_id uuid column; bulk_set_typed_eav_values populates it with version_grouping: :per_record (default) or :per_field; explicit version_grouping: with versioning disabled raises ArgumentError",
+      "priority": "Must-have",
+      "source": "Discussion: version-grouping-and-disabled-versioning"
     }
   ],
   "deferred": [
@@ -301,6 +353,31 @@
       "idea": "Auto-injection of reverted_from_version_id on the new version row's context during Value#revert_to. Phase 4 leaves this to the caller via TypedEAV.with_context(reverted_from_version_id: v.id) { ... }. Revisit if the manual pattern proves error-prone.",
       "mentioned_during": "Phase 4 discussion: revert-semantics",
       "date": "2026-05-04"
+    },
+    {
+      "idea": "on_error: keyword on bulk_set_typed_eav_values (:continue / :raise / :rollback_all) — re-evaluate after v0.6.0 if real callers ask for it",
+      "mentioned_during": "Phase 6 discussion: bulk-write-failure-isolation",
+      "date": "2026-05-06"
+    },
+    {
+      "idea": "Transform overrides in CSV mapping ({header => {field:, transform:}})",
+      "mentioned_during": "Phase 6 discussion: csv-mapping-and-result-shape",
+      "date": "2026-05-06"
+    },
+    {
+      "idea": "Library-side whole-file CSV orchestration helper (caller-orchestrated streaming covers the use case in v0.6.0)",
+      "mentioned_during": "Phase 6 discussion: csv-mapping-and-result-shape",
+      "date": "2026-05-06"
+    },
+    {
+      "idea": "Bulk delete API for typed values",
+      "mentioned_during": "Phase 6 discussion: out-of-scope check",
+      "date": "2026-05-06"
+    },
+    {
+      "idea": "Schema migration tooling for incompatible field-type changes — currently always raises in import_schema",
+      "mentioned_during": "Phase 6 discussion: schema-import-conflict-policy",
+      "date": "2026-05-06"
     }
   ]
 }

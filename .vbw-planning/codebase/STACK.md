@@ -2,7 +2,7 @@
 
 ## Project Type
 
-**Ruby gem** — `typed_eav` v0.1.0. Distributed as a Rails Engine; published to RubyGems via GitHub Actions trusted publishing.
+**Ruby gem** — `typed_eav` v0.2.0. Distributed as a Rails Engine; published to RubyGems via GitHub Actions trusted publishing.
 
 Summary (from gemspec):
 > "Add dynamic custom fields to ActiveRecord models at runtime using native database typed columns instead of jsonb blobs. Hybrid EAV with real indexes, real types, real query performance."
@@ -17,7 +17,7 @@ Author: Darrin Chuk
 |---|---|---|
 | Ruby | `>= 3.1` | `required_ruby_version` in gemspec; CI matrix tests 3.1, 3.2, 3.3, 3.4 |
 | Rails | `>= 7.1` | Single hard dependency; resolves to `8.1.3` in `Gemfile.lock` |
-| PostgreSQL | required | The README states "Requires PostgreSQL"; jsonb `@>`, `text_pattern_ops` btree, and partial GIN indexes are PG-specific |
+| PostgreSQL | required | The README states "Requires PostgreSQL"; jsonb `@>`, `text_pattern_ops` btree, partial GIN/unique indexes, `algorithm: :concurrently`, and `FOR UPDATE` row locking are PG-specific |
 | Zeitwerk | `~> 2.6` (via Rails) | Standard Rails autoloading; a dedicated spec (`spec/lib/typed_eav/zeitwerk_loading_spec.rb`) guards eager-load correctness |
 
 ## Test / Dev Stack
@@ -32,9 +32,14 @@ Author: Darrin Chuk
 
 ## Test Harness
 
-- **Dummy Rails app at `spec/dummy/`** — minimal Rails environment for the engine's specs (config in `spec/dummy/config/{boot,environment,routes,database}`). Test models (`Contact`, `Product`) live in `spec/dummy/app/models/test_models.rb` and are explicitly required from `spec_helper.rb` because Zeitwerk can't autoload two classes from one file.
+- **Dummy Rails app at `spec/dummy/`** — minimal Rails environment for the engine's specs (config in `spec/dummy/config/{boot,environment,routes,database,storage.yml}`). Test models (`Contact`, `Product`, `Project`) live in `spec/dummy/app/models/test_models.rb` and are explicitly required from `spec_helper.rb` because Zeitwerk can't autoload three classes from one file.
+  - `Contact` — `has_typed_eav scope_method: :tenant_id` (scoped, single-axis).
+  - `Product` — `has_typed_eav types: [:text, :integer, :decimal, :boolean]` (unscoped, type-restricted).
+  - `Project` — `has_typed_eav scope_method: :tenant_id, parent_scope_method: :workspace_id` (Phase 01 two-level partition host).
 - **Engine migrations are added to the test schema** by `spec_helper.rb` (`ActiveRecord::Migrator.migrations_paths << TypedEAV::Engine.root.join("db/migrate")`).
-- **Transactional fixtures** + per-example `unscoped` opt-in metadata (see `CONVENTIONS.md`).
+- **Pending dummy-app migrations applied at suite start** — Phase 05 added `spec/dummy/db/migrate/20260506000000_create_active_storage_tables.active_storage.rb`; `spec_helper.rb` runs `MigrationContext.new(dummy_path).migrate` so a fresh check-out doesn't fail on the missing `active_storage_blobs` table.
+- **Transactional fixtures** + per-example metadata flags `:unscoped`, `:scoping`, `:event_callbacks`, `:real_commits` (see TESTING.md).
+- **Active Storage soft-detect**: `Engine.register_attachment_associations!` registers `has_one_attached :attachment` on `TypedEAV::Value` only when `::ActiveStorage::Blob` is defined. The dummy app pulls the full `rails` meta-gem so AS is always loaded under the test suite; production hosts that exclude AS get a no-op.
 
 ## Generators (consumer-facing)
 
@@ -61,4 +66,4 @@ The gem ships two Rails generators, both registered with explicit `namespace` de
 
 ## Versioning
 
-Single source of truth: `lib/typed_eav/version.rb` (`TypedEAV::VERSION`). The gemspec reads it directly. Release workflow asserts `git tag` matches.
+Single source of truth: `lib/typed_eav/version.rb` (`TypedEAV::VERSION = "0.2.0"`). The gemspec reads it directly. Release workflow asserts `git tag` matches.
