@@ -16,6 +16,7 @@ module TypedEAV
   autoload :HasTypedEAV
   autoload :Partition
   autoload :QueryBuilder
+  autoload :SchemaPortability
   autoload :EventDispatcher
   autoload :CSVMapper
   autoload :ValueVersion
