@@ -135,4 +135,28 @@ RSpec.describe TypedEAV::ValueVersion do
       expect(version.field_id).to be_nil
     end
   end
+
+  describe "#version_group_id" do
+    # Phase 06 correlation tag — additive uuid column landed in
+    # `db/migrate/20260506000001_add_version_group_id_to_typed_eav_value_versions.rb`.
+    # No AR-model change was needed; the column is auto-discovered from
+    # the schema.
+    it "responds to version_group_id (column auto-discovered from schema)" do
+      expect(described_class.new).to respond_to(:version_group_id)
+    end
+
+    it "round-trips a uuid through reload", :real_commits do
+      contact = Contact.create!(name: "test", tenant_id: "t1")
+      uuid = SecureRandom.uuid
+      version = described_class.create!(
+        entity: contact,
+        change_type: "create",
+        changed_at: Time.current,
+        version_group_id: uuid,
+        after_value: { "integer_value" => 1 },
+      )
+
+      expect(described_class.find(version.id).version_group_id).to eq(uuid)
+    end
+  end
 end

@@ -361,6 +361,46 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
     end
   end
 
+  describe "version_group_id forwarding (Phase 06 correlation tag)" do
+    # Phase 06 prep — the bulk-write API (Plan 06-03) injects a per-bulk
+    # UUID via `TypedEAV.with_context(version_group_id: uuid) { ... }`.
+    # The subscriber must read the key out of context and forward it onto
+    # the version row. When the key is absent, the column stays NULL —
+    # backward-compatible.
+    it "writes context[:version_group_id] onto the version row", :real_commits do
+      TypedEAV.registry.register("Contact", types: nil, versioned: true)
+      # Re-register subscriber per Discrepancy D4.
+      TypedEAV::EventDispatcher.register_internal_value_change(
+        described_class.method(:call),
+      )
+      uuid = SecureRandom.uuid
+
+      value = TypedEAV.with_context(version_group_id: uuid) do
+        TypedEAV::Value.create!(entity: contact, field: field, value: 42)
+      end
+
+      expect(value.versions.last.version_group_id).to eq(uuid)
+    ensure
+      TypedEAV.registry.register("Contact", types: nil, versioned: false)
+    end
+
+    it "leaves version_group_id NULL when no with_context block is active", :real_commits do
+      # Backward-compatibility assertion: every pre-Phase-06 caller path
+      # (non-bulk writes) continues to produce version rows with NULL
+      # version_group_id. The column is nullable; no validation fires.
+      TypedEAV.registry.register("Contact", types: nil, versioned: true)
+      TypedEAV::EventDispatcher.register_internal_value_change(
+        described_class.method(:call),
+      )
+
+      value = TypedEAV::Value.create!(entity: contact, field: field, value: 42)
+
+      expect(value.versions.last.version_group_id).to be_nil
+    ensure
+      TypedEAV.registry.register("Contact", types: nil, versioned: false)
+    end
+  end
+
   describe "engine boot registration" do
     it "subscriber identity is comparable via .method(:call)" do
       # Document the expected callable identity. The :event_callbacks hook
