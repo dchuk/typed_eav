@@ -16,6 +16,7 @@ module TypedEAV
   autoload :HasTypedEAV
   autoload :QueryBuilder
   autoload :EventDispatcher
+  autoload :CSVMapper
   autoload :ValueVersion
   autoload :Versioned
   autoload :Versioning
