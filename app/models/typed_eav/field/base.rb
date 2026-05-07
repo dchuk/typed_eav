@@ -449,14 +449,14 @@ module TypedEAV
       # are not part of a tenant's tenant-scoped schema).
       def self.export_schema(entity_type:, scope: nil, parent_scope: nil)
         fields = where(entity_type: entity_type, scope: scope, parent_scope: parent_scope)
-                   .includes(:field_options)
-                   .order(:sort_order)
-                   .map { |field| _export_field_entry(field) }
+                 .includes(:field_options)
+                 .order(:sort_order)
+                 .map { |field| _export_field_entry(field) }
 
         sections = TypedEAV::Section
-                     .where(entity_type: entity_type, scope: scope, parent_scope: parent_scope)
-                     .order(:sort_order)
-                     .map { |section| _export_section_entry(section) }
+                   .where(entity_type: entity_type, scope: scope, parent_scope: parent_scope)
+                   .order(:sort_order)
+                   .map { |section| _export_section_entry(section) }
 
         {
           "schema_version" => 1,
@@ -478,6 +478,7 @@ module TypedEAV
       # equality short-circuit: an export of `[a,b]` vs `[b,a]` represents
       # different display orderings even with the same value set, so they
       # must compare unequal here.
+      # rubocop:disable Metrics/AbcSize -- the projection is a flat key-by-key column copy plus an optional options_data branch; splitting into per-attribute helpers would scatter the export shape across multiple methods and break the symmetry with the equality short-circuit (which compares against this exact projection).
       def self._export_field_entry(field)
         entry = {
           "name" => field.name,
@@ -508,6 +509,7 @@ module TypedEAV
         end
         entry
       end
+      # rubocop:enable Metrics/AbcSize
 
       # Projects a Section AR record into the canonical export-entry Hash.
       # Sections have no nested associations to serialize — fields belong to
@@ -560,12 +562,10 @@ module TypedEAV
       # `:error`-policy collision, a `validate_default_value` failure on
       # `:overwrite`) rolls back ALL prior writes from this call. Callers
       # see an all-or-nothing import.
-      #
-      # rubocop:disable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity -- conflict-policy decision tree + type-swap guard + section import in one place; splitting hurts readability of the idempotence-key logic.
       def self.import_schema(hash, on_conflict: :error)
         unless hash["schema_version"] == 1
           raise ArgumentError,
-                "Unsupported schema_version: #{hash['schema_version'].inspect}. " \
+                "Unsupported schema_version: #{hash["schema_version"].inspect}. " \
                 "Expected 1. Re-export from a current typed_eav version."
         end
 
@@ -573,7 +573,7 @@ module TypedEAV
         unless valid_policies.include?(on_conflict)
           raise ArgumentError,
                 "Unsupported on_conflict: #{on_conflict.inspect}. " \
-                "Supported: #{valid_policies.map { |p| ":#{p}" }.join(', ')}."
+                "Supported: #{valid_policies.map { |p| ":#{p}" }.join(", ")}."
         end
 
         result = { "created" => 0, "updated" => 0, "skipped" => 0, "unchanged" => 0, "errors" => [] }
@@ -590,11 +590,10 @@ module TypedEAV
 
         result
       end
-      # rubocop:enable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Per-field import dispatch. Extracted from `import_schema` for readability;
       # the shape of the decision tree is documented on `import_schema`.
-      # rubocop:disable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity -- type-swap raise + equality short-circuit + on_conflict dispatch + STI create are all conditional branches off a single existing/incoming pair; splitting further would scatter the field-vs-section symmetry across multiple files.
+      # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- type-swap raise + equality short-circuit + on_conflict dispatch + STI create are all conditional branches off a single existing/incoming pair; splitting further would scatter the field-vs-section symmetry across multiple files.
       def self._import_field_entry(entry, on_conflict, result)
         existing = find_by(
           name: entry["name"],
@@ -610,7 +609,7 @@ module TypedEAV
           # `on_conflict:` policy.
           if existing.type != entry["type"]
             raise ArgumentError,
-                  "Cannot change field '#{entry['name']}' from #{existing.type} to #{entry['type']}: " \
+                  "Cannot change field '#{entry["name"]}' from #{existing.type} to #{entry["type"]}: " \
                   "data-loss guard. The gem cannot infer a safe migration of existing typed values " \
                   "across *_value columns. Manually destroy and recreate the field if the type change " \
                   "is intentional."
@@ -627,8 +626,8 @@ module TypedEAV
           case on_conflict
           when :error
             raise ArgumentError,
-                  "Field '#{entry['name']}' already exists for #{entry['entity_type']} " \
-                  "(scope=#{entry['scope'].inspect}, parent_scope=#{entry['parent_scope'].inspect}) " \
+                  "Field '#{entry["name"]}' already exists for #{entry["entity_type"]} " \
+                  "(scope=#{entry["scope"].inspect}, parent_scope=#{entry["parent_scope"].inspect}) " \
                   "and its attributes diverge from the incoming schema. " \
                   "Pass on_conflict: :skip or :overwrite to import over the existing field, " \
                   "or re-export from the source environment to confirm the divergence is intentional."
@@ -676,12 +675,13 @@ module TypedEAV
           result["created"] += 1
         end
       end
-      # rubocop:enable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
       private_class_method :_import_field_entry
 
       # Per-section import dispatch. Same decision-tree shape as
       # `_import_field_entry` but with no nested options table — sections
       # have no `options_data` to delete-and-recreate.
+      # rubocop:disable Metrics/MethodLength -- the section-side decision tree mirrors the field-side (existing? → equality short-circuit → on_conflict dispatch → create); keeping it inline preserves the field/section symmetry the equality helpers depend on.
       def self._import_section_entry(entry, on_conflict, result)
         existing = TypedEAV::Section.find_by(
           code: entry["code"],
@@ -699,8 +699,8 @@ module TypedEAV
           case on_conflict
           when :error
             raise ArgumentError,
-                  "Section '#{entry['code']}' already exists for #{entry['entity_type']} " \
-                  "(scope=#{entry['scope'].inspect}, parent_scope=#{entry['parent_scope'].inspect}) " \
+                  "Section '#{entry["code"]}' already exists for #{entry["entity_type"]} " \
+                  "(scope=#{entry["scope"].inspect}, parent_scope=#{entry["parent_scope"].inspect}) " \
                   "and its attributes diverge from the incoming schema. " \
                   "Pass on_conflict: :skip or :overwrite to import over the existing section, " \
                   "or re-export from the source environment to confirm the divergence is intentional."
@@ -719,6 +719,7 @@ module TypedEAV
           result["created"] += 1
         end
       end
+      # rubocop:enable Metrics/MethodLength
       private_class_method :_import_section_entry
 
       # Row-equality helper for fields. Serializes the existing AR record
