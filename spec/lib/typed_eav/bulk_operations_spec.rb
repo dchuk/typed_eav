@@ -33,6 +33,15 @@ require "spec_helper"
 # `context[:version_group_id]` so the UUID survives even after the
 # per-record `with_context` has unwound).
 RSpec.describe "Entity.bulk_set_typed_eav_values" do
+  describe "host class API boundary" do
+    it "does not expose bulk execution helpers as private host-class methods" do
+      expect(Contact.private_methods).not_to include(
+        :apply_bulk_record_save,
+        :stamp_pending_version_group_ids,
+      )
+    end
+  end
+
   # ────────────────────────────────────────────────────────────
   # Query counter — counts SQL queries emitted by a block. Filters
   # SCHEMA / TRANSACTION / CACHE rows that the AR notifications stream
@@ -508,16 +517,15 @@ RSpec.describe "Entity.bulk_set_typed_eav_values" do
       # commit and NO version rows are written. Proves cross-record
       # atomicity preserved across :none / :per_record / :per_field.
       def force_outer_rollback_via_exception(version_grouping)
-        # Arrange a raise from inside the records loop. The simplest hook:
-        # stub `apply_bulk_record_save` (private class method on
-        # ClassQueryMethods) to raise after the FIRST record's savepoint
-        # commits. The outer transaction is in scope, so the raise causes
-        # the OUTER transaction to roll back — BOTH the first record's
-        # changes (already committed to its savepoint) and any version
-        # rows that the after_commit chain would have written.
+        # Arrange a raise from inside the records loop. The executor hook
+        # raises after the FIRST record's savepoint commits. The outer
+        # transaction is in scope, so the raise causes the OUTER transaction
+        # to roll back — BOTH the first record's changes (already committed
+        # to its savepoint) and any version rows that the after_commit chain
+        # would have written.
         call_count = 0
-        original = Contact.method(:apply_bulk_record_save)
-        allow(Contact).to receive(:apply_bulk_record_save) do |**kwargs|
+        original = TypedEAV::BulkWrite.method(:apply_record_save)
+        allow(TypedEAV::BulkWrite).to receive(:apply_record_save) do |**kwargs|
           call_count += 1
           original.call(**kwargs)
           raise "simulated outer-tx failure" if call_count == 1
