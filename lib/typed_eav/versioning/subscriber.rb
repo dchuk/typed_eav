@@ -107,12 +107,31 @@ module TypedEAV
           # correct (parent row exists at after_commit time).
           version_value_id = change_type == :destroy ? nil : value.id
 
-          # Phase 06 bulk-operations correlation tag. Plan 06-03's
-          # `bulk_set_typed_eav_values` API injects a UUID via
-          # `TypedEAV.with_context(version_group_id: uuid) { ... }` so every
-          # version row produced inside the block shares a single
-          # correlation token. Non-bulk writes omit the key, the value
-          # falls through as nil, and the column (added in
+          # Phase 06 bulk-operations correlation tag. Two delivery paths:
+          #
+          # 1. PER-VALUE SNAPSHOT (preferred). Plan 06-05's
+          #    `bulk_set_typed_eav_values` stamps `value.pending_version_group_id`
+          #    on each affected Value object BEFORE `record.save`, INSIDE
+          #    the per-record `with_context` block. Reading the snapshot
+          #    here (not `current_context`) guarantees the UUID survives
+          #    the outer-transaction `after_commit` boundary — by the time
+          #    we run, the lexical `with_context` block has unwound and
+          #    `current_context` would be empty, but the per-Value ivar
+          #    persists. Mirrors the existing in-memory ivar pattern at
+          #    `app/models/typed_eav/value.rb:92-123` (`@cast_was_invalid`).
+          #    Locked at 06-CONTEXT.md line 26 — savepoints per record
+          #    inside an outer transaction, no relaxation of the structure.
+          #
+          # 2. CONTEXT FALLBACK. Non-bulk callers may still wrap a single
+          #    write in `TypedEAV.with_context(version_group_id: uuid) { ... }`
+          #    (e.g., a script correlating one update with one external
+          #    request id). For those paths the Value ivar is unset; the
+          #    `||` falls through to `context[:version_group_id]`. Also
+          #    used as the belt-and-suspenders fallback for any future
+          #    after_commit-inside-savepoint dispatch path that bulk writes
+          #    might leverage.
+          #
+          # When neither path supplies a UUID the column (added in
           # `db/migrate/20260506000001`) stays NULL — backward-compatible:
           # unchanged subscribers and unchanged callers continue to work.
           TypedEAV::ValueVersion.create!(
@@ -124,7 +143,7 @@ module TypedEAV
             before_value: before_value,
             after_value: after_value,
             context: context.to_h, # frozen → unfrozen jsonb-serializable hash
-            version_group_id: context[:version_group_id],
+            version_group_id: value.pending_version_group_id || context[:version_group_id],
             change_type: change_type.to_s,
             changed_at: Time.current,
           )

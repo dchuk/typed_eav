@@ -584,45 +584,175 @@ module TypedEAV
         # keys are last-wins on duplicates so caller-side dedup is automatic.
         vbn = values_by_field_name.transform_keys(&:to_s)
 
+        # Pre-allocate per-field UUIDs ONCE for `:per_field` mode. All Value
+        # rows whose field name is "age" (across every record in the batch)
+        # share `field_uuids["age"]`; all rows for "email" share
+        # `field_uuids["email"]`. The Hash is consulted per-record by
+        # `value.field.name` lookup; `field_uuids` itself is computed once
+        # before the records loop. (RESEARCH §Risks §per_field grouping
+        # semantics.)
+        #
+        # `:per_record` and `:none` leave `field_uuids` nil — generation
+        # happens per-record inside the loop (`:per_record`) or not at all
+        # (`:none`).
+        field_uuids = effective_grouping == :per_field ? vbn.keys.index_with { SecureRandom.uuid } : nil
+
         successes = []
         errors_by_record = {}
 
         ActiveRecord::Base.transaction do
           records.each do |record|
+            # `:per_record` UUID is generated BEFORE entering the savepoint
+            # so it survives the savepoint's local scope (the with_context
+            # block below pushes it onto the thread-local context stack as
+            # a belt-and-suspenders fallback). `:per_field` reuses
+            # `field_uuids` — no per-record allocation. `:none` skips both.
+            record_uuid = effective_grouping == :per_record ? SecureRandom.uuid : nil
+
             # Per-record SAVEPOINT (CONTEXT-locked structure, preserved under
-            # all `version_grouping:` values). `transaction(requires_new: true)`
-            # is the gem idiom — see `Field::Base#backfill_default!` at
-            # lines 400–408 of app/models/typed_eav/field/base.rb.
+            # all `version_grouping:` values — never relaxed to per-record
+            # top-level transactions). `transaction(requires_new: true)` is
+            # the gem idiom — see `Field::Base#backfill_default!` at lines
+            # 400–408 of app/models/typed_eav/field/base.rb.
             ActiveRecord::Base.transaction(requires_new: true) do
-              # T2 will inject `:per_record` / `:per_field` UUID stamping here.
-              # T1 ships only the `:none` path; the variable is read but the
-              # branches for `:per_record` / `:per_field` are no-ops in T1.
-              record.typed_eav_attributes = vbn.map { |n, v| { name: n, value: v } }
-              if record.save
-                successes << record
-              else
-                # Capture errors using the AR-native errors-hash shape, with
-                # symbol keys converted to strings to match CSVMapper::Result.
-                errors_by_record[record] = record.errors.messages.transform_keys(&:to_s)
-                # `raise ActiveRecord::Rollback` rolls back the savepoint
-                # (this record only) WITHOUT propagating the exception. Other
-                # records in the loop continue and the outer transaction
-                # commits at end-of-loop with the successful records.
-                raise ActiveRecord::Rollback
-              end
+              apply_bulk_record_save(
+                record: record,
+                vbn: vbn,
+                effective_grouping: effective_grouping,
+                uuids: { record: record_uuid, field: field_uuids },
+                accumulator: { successes: successes, errors_by_record: errors_by_record },
+              )
             end
           end
         end
-
-        # `effective_grouping` is read but currently only the `:none` branch
-        # is meaningful — silence Ruby/rubocop warnings about an unused
-        # variable while T2 has not yet wired the version_grouping branches.
-        _ = effective_grouping
 
         { successes: successes, errors_by_record: errors_by_record }
       end
 
       private
+
+      # Per-record body of `bulk_set_typed_eav_values`. Extracted to keep
+      # the public method readable; runs INSIDE the per-record savepoint
+      # opened by the caller. Mutates `successes` / `errors_by_record` so
+      # the public method can return them after the outer transaction
+      # commits.
+      #
+      # ## What this method does (per record, in order)
+      #
+      # 1. Optionally wrap the work in `TypedEAV.with_context(version_group_id: ...)`
+      #    — pushes a snapshot of the UUID into the thread-local context
+      #    stack so any future after_commit-inside-savepoint dispatch path
+      #    sees it. The PRIMARY delivery is the per-Value snapshot (step 3),
+      #    not this push — by the time the OUTER transaction's after_commit
+      #    fires, the with_context block has lexically unwound and
+      #    `current_context` would be empty. The push is a belt-and-
+      #    suspenders fallback (locked at 06-CONTEXT.md line 26).
+      # 2. Call `record.typed_eav_attributes = ...` — builds new Value rows
+      #    or marks existing rows for nested-attributes update. Goes through
+      #    the standard instance setter so allowed_typed_eav_types and
+      #    field-name resolution are reused; bulk write does NOT bypass
+      #    `typed_eav_attributes=`.
+      # 3. Walk the dirty Value rows (`record.typed_values.select { |v|
+      #    v.new_record? || v.changed? }`) and stamp
+      #    `value.pending_version_group_id = uuid` on each. This is the
+      #    PRIMARY delivery of the UUID to the Phase 4 versioning
+      #    subscriber — the in-memory ivar persists across the outer-
+      #    transaction `after_commit` boundary even after `with_context`
+      #    has unwound. (06-CONTEXT.md line 26 — savepoints per record
+      #    inside an outer transaction; `app/models/typed_eav/value.rb:92-123`
+      #    — the existing `@cast_was_invalid` precedent for in-memory ivars
+      #    on Value.)
+      # 4. `record.save` — flushes the Value INSERTs/UPDATEs in ONE save
+      #    (one savepoint, one save) regardless of how many fields were
+      #    set. For `:per_field` mode, all field changes for record X
+      #    commit together; partial-failure within a record (e.g., one
+      #    field invalid) rolls back the whole savepoint per CONTEXT
+      #    failure-isolation contract.
+      # 5. On failure: capture errors, raise ActiveRecord::Rollback to
+      #    roll back the savepoint (this record only). The pending_version_group_id
+      #    stamps on the failed record's Value rows never become version
+      #    rows — savepoint rollback voids the staged after_commit chain
+      #    for those rows.
+      def apply_bulk_record_save(record:, vbn:, effective_grouping:, uuids:, accumulator:)
+        # Run the body inside a `with_context` push when versioning is
+        # active. For `:per_record`, push the per-record UUID; for
+        # `:per_field`, the exact value is moot (the subscriber reads from
+        # the per-Value snapshot, not from current_context — see the
+        # subscriber preference at lib/typed_eav/versioning/subscriber.rb
+        # line 137). For `:none`, skip the push entirely so non-versioned
+        # bulk writes pay zero context overhead.
+        push_uuid = case effective_grouping
+                    when :per_record then uuids[:record]
+                    when :per_field  then uuids[:field].values.first
+                    end
+
+        do_save = lambda do
+          record.typed_eav_attributes = vbn.map { |n, v| { name: n, value: v } }
+
+          # Stamp the per-Value snapshot BEFORE save so the AR object
+          # carries the UUID through its after_commit chain. Single save
+          # per record below; the per-Value ivar is what survives the
+          # outer-transaction after_commit boundary.
+          stamp_pending_version_group_ids(record, effective_grouping, uuids)
+
+          if record.save
+            accumulator[:successes] << record
+          else
+            # Capture errors using `errors.messages` (the modern AR shape;
+            # `errors.to_h` is flagged by Rails/DeprecatedActiveModelErrorsMethods).
+            # Both return `{attribute => [messages]}`; we string-key to match
+            # the CSVMapper::Result#errors shape so callers can write one
+            # error-handling path that consumes both.
+            accumulator[:errors_by_record][record] = record.errors.messages.transform_keys(&:to_s)
+            # `raise ActiveRecord::Rollback` rolls back the savepoint
+            # (this record only) WITHOUT propagating the exception. Other
+            # records in the loop continue and the outer transaction
+            # commits at end-of-loop with the successful records.
+            raise ActiveRecord::Rollback
+          end
+        end
+
+        if push_uuid
+          TypedEAV.with_context(version_group_id: push_uuid, &do_save)
+        else
+          do_save.call
+        end
+      end
+
+      # Walks the record's dirty Value rows (those that the next
+      # `record.save` will INSERT or UPDATE) and stamps
+      # `pending_version_group_id` on each. The stamp is consumed by the
+      # Phase 4 versioning subscriber when the outer transaction's
+      # after_commit chain fires. See `lib/typed_eav/versioning/subscriber.rb`
+      # line 137 for the read-side.
+      #
+      # Filter: `v.new_record? || v.changed?` selects exactly the rows that
+      # the upcoming save will flush. `typed_eav_attributes=` builds new
+      # rows (new_record? true) or sets `value=` on existing rows (which
+      # marks them as changed). Already-clean Value rows (existing rows
+      # whose value didn't change in this batch) are excluded so we don't
+      # stamp UUIDs onto rows whose after_commit won't fire — preserves
+      # the "version row only when the cell actually moved" contract from
+      # `Value#_dispatch_value_change_update` at app/models/typed_eav/value.rb:518.
+      def stamp_pending_version_group_ids(record, effective_grouping, uuids)
+        return if effective_grouping == :none
+
+        record.typed_values.each do |value|
+          next unless value.new_record? || value.changed?
+
+          uuid = case effective_grouping
+                 when :per_record then uuids[:record]
+                 when :per_field  then uuids[:field][value.field&.name]
+                 end
+          # `uuids[:field]` lookup may yield nil if the dirty Value's
+          # field name isn't in the bulk input (e.g., a Value built by
+          # some other code path inside `typed_eav_attributes=`).
+          # Stamping nil is the same as not stamping — the subscriber's
+          # `||` falls through to context[:version_group_id] which itself
+          # may be nil.
+          value.pending_version_group_id = uuid if uuid
+        end
+      end
 
       # Resolves the scope and parent_scope kwargs into a concrete tuple for
       # field-definition lookup. See `typed_eav_definitions` docs for kwarg

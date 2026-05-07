@@ -221,6 +221,7 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
         entity_type: "Contact",
         entity_id: contact.id,
         field: multi_field,
+        pending_version_group_id: nil, # Phase 06: subscriber reads this (snapshot path)
       )
       allow(value_double).to receive(:[]).with(:decimal_value).and_return(BigDecimal("99.99"))
       allow(value_double).to receive(:[]).with(:string_value).and_return("USD")
@@ -328,7 +329,8 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
       value_double = instance_double(
         TypedEAV::Value,
         id: 1, field_id: 1, entity_type: "Contact", entity_id: 1,
-        field: field_double
+        field: field_double,
+        pending_version_group_id: nil # Phase 06: subscriber reads this (snapshot path)
       )
       allow(value_double).to receive_messages("[]": 42, attribute_before_last_save: nil)
 

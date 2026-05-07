@@ -127,6 +127,31 @@ module TypedEAV
       field.class.value_column
     end
 
+    # Phase 06 bulk-operations correlation tag — TRANSIENT in-memory ivar
+    # (NOT a DB column, NOT validated, NOT persisted). Stamped by
+    # `Entity.bulk_set_typed_eav_values` on each affected Value object
+    # BEFORE `record.save` inside the per-record `with_context` block. The
+    # Phase 04 versioning subscriber reads it preferentially over
+    # `context[:version_group_id]` so the UUID survives the outer-transaction
+    # `after_commit` boundary even after `with_context` has unwound (the
+    # `with_context` block lexically pops on yield-return; by the time the
+    # outer transaction's after_commit chain fires, `TypedEAV.current_context`
+    # would observe an empty Hash, but the per-Value snapshot persists in
+    # the AR object's @pending_version_group_id ivar).
+    #
+    # Mirrors the existing in-memory ivar pattern at `value=` line 118
+    # (`@cast_was_invalid`): a transient flag stamped during the write path
+    # and read by a downstream observer (validate_value / subscriber). No
+    # accessor magic — plain attr_accessor; the ivar is allocated lazily on
+    # first write.
+    #
+    # Non-bulk callers do not stamp this ivar and the Phase 4 subscriber
+    # falls back to `context[:version_group_id]` (which the existing
+    # `with_context(version_group_id: uuid) { ... }` callers already set).
+    # Backward compatible: every pre-Phase-6 caller path continues to work
+    # unchanged.
+    attr_accessor :pending_version_group_id
+
     # Append-only audit log of mutations to this Value, ordered most-
     # recent-first. Returns a relation that can be chained (`.where`,
     # `.limit`, `.pluck`).
