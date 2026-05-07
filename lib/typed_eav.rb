@@ -14,6 +14,7 @@ module TypedEAV
   autoload :Config
   autoload :Registry
   autoload :HasTypedEAV
+  autoload :Partition
   autoload :QueryBuilder
   autoload :EventDispatcher
   autoload :CSVMapper

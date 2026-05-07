@@ -222,10 +222,10 @@ module TypedEAV
                  # per CONTEXT.md drops both scope AND parent_scope predicates.
                  # The OR-collapse at field_id level naturally OR's across all
                  # (scope, parent_scope) combinations.
-                 TypedEAV::Field::Base.where(entity_type: name)
+                 TypedEAV::Partition.visible_fields(entity_type: name, mode: :all_partitions)
                else
                  s, ps = resolved
-                 TypedEAV::Field::Base.for_entity(name, scope: s, parent_scope: ps)
+                 TypedEAV::Partition.visible_fields(entity_type: name, scope: s, parent_scope: ps)
                end
 
         if all_scopes
@@ -310,10 +310,10 @@ module TypedEAV
       def typed_eav_definitions(scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
         resolved = resolve_scope(scope, parent_scope)
         if resolved.equal?(ALL_SCOPES)
-          TypedEAV::Field::Base.where(entity_type: name)
+          TypedEAV::Partition.visible_fields(entity_type: name, mode: :all_partitions)
         else
           s, ps = resolved
-          TypedEAV::Field::Base.for_entity(name, scope: s, parent_scope: ps)
+          TypedEAV::Partition.visible_fields(entity_type: name, scope: s, parent_scope: ps)
         end
       end
 
