@@ -17,6 +17,7 @@
       <th>Name</th>
       <th>Required</th>
       <th>Scope</th>
+      <th>Parent Scope</th>
       <th>Options</th>
       <th>Default</th>
       <th></th>
@@ -32,6 +33,7 @@
         <td><%= field.name %></td>
         <td><%= field.required? ? "Yes" : "" %></td>
         <td><code><%= field.scope.inspect %></code></td>
+        <td><code><%= field.parent_scope.inspect %></code></td>
         <td><code><%= field.options %></code></td>
         <td><code><%= field.default_value.inspect %></code></td>
         <td><%= button_to "Delete", typed_eav_field_path(field), method: :delete,

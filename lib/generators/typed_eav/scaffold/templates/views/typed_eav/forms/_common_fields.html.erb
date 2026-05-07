@@ -38,11 +38,21 @@
 
 <div>
   <label>Scope</label>
-  <%# The controller derives scope from the ambient value (TypedEAV.current_scope)
-      and never permits it from params. Display it read-only so users can see which
+  <%# The controller derives scope from the ambient partition tuple and never
+      permits it from params. Display it read-only so users can see which
       partition this field belongs to without implying they can change it. %>
+  <% current_partition = field.new_record? ? TypedEAV.current_scope : nil %>
+  <% current_partition_scope = current_partition&.first %>
+  <% current_partition_parent_scope = current_partition&.last %>
   <input type="text"
-         value="<%= field.scope.presence || (field.new_record? ? (TypedEAV.current_scope || "Global (all scopes)") : "Global (all scopes)") %>"
+         value="<%= field.scope.presence || (current_partition_scope.presence || "Global (all scopes)") %>"
+         disabled readonly />
+</div>
+
+<div>
+  <label>Parent Scope</label>
+  <input type="text"
+         value="<%= field.parent_scope.presence || (current_partition_parent_scope.presence || "Global (all parent scopes)") %>"
          disabled readonly />
 </div>
 

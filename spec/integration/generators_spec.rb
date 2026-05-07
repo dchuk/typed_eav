@@ -77,6 +77,33 @@ RSpec.describe "TypedEAV generators" do
       expect(controller).to include("head :not_found")
     end
 
+    it "routes generated admin field visibility and section checks through the partition seam" do
+      controller = File.read(File.join(destination, "app/controllers/typed_eav_controller.rb"))
+
+      expect(controller).to include("TypedEAV::Partition.visible_fields")
+      expect(controller).to include("TypedEAV::Partition.find_visible_section!")
+      expect(controller).not_to include("TypedEAV::Field::Base.where(scope: [scope, nil])")
+      expect(controller).not_to include("TypedEAV::Section.for_entity(entity_type, scope: scope).find")
+    end
+
+    it "shows both partition axes in the generated admin views" do
+      index = File.read(File.join(destination, "app/views/typed_eav/index.html.erb"))
+      common_fields = File.read(File.join(destination, "app/views/typed_eav/forms/_common_fields.html.erb"))
+
+      expect(index).to include("<th>Parent Scope</th>")
+      expect(index).to include("field.parent_scope.inspect")
+      expect(common_fields).to include("<label>Parent Scope</label>")
+      expect(common_fields).to include("field.parent_scope")
+    end
+
+    it "documents tuple-shaped scope resolver examples in the generated initializer" do
+      initializer = File.read(File.join(destination, "config/initializers/typed_eav.rb"))
+
+      expect(initializer).to include("returns `[scope, parent_scope]`")
+      expect(initializer).to include("c.scope_resolver = -> { [Current.account&.id, nil] }")
+      expect(initializer).not_to include("c.scope_resolver = -> { Current.account&.id }")
+    end
+
     it "appends the typed_eav_fields routes" do
       routes = File.read(File.join(destination, "config/routes.rb"))
       expect(routes).to include("resources :typed_eav_fields")

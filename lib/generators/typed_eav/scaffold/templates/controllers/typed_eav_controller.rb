@@ -31,7 +31,7 @@ class TypedEAVController < ApplicationController
   before_action :set_field, only: %i[show edit update destroy]
 
   def index
-    @fields = scoped_fields.order(:entity_type, :scope, :sort_order, :name)
+    @fields = scoped_fields.order(:entity_type, :scope, :parent_scope, :sort_order, :name)
   end
 
   def show; end
@@ -45,19 +45,20 @@ class TypedEAVController < ApplicationController
 
   def create
     type_class = resolve_type_class(params.dig(:typed_eav_field, :field_type) || params[:type])
-    ambient = ensure_scope!
+    partition = ensure_partition!
     attrs = field_params(type_class, creating: true)
-    attrs[:scope] = ambient
+    attrs[:scope] = partition[:scope]
+    attrs[:parent_scope] = partition[:parent_scope]
     attrs[:section_id] = verified_section_id(
       params.dig(:typed_eav_field, :section_id),
       attrs[:entity_type],
-      ambient
+      partition,
     )
     @field = type_class.new(attrs)
 
     if @field.save
       redirect_to edit_typed_eav_field_path(@field), status: :see_other,
-        notice: "Field created."
+                                                     notice: "Field created."
     else
       render :new, status: :unprocessable_content
     end
@@ -68,12 +69,12 @@ class TypedEAVController < ApplicationController
     attrs[:section_id] = verified_section_id(
       params.dig(:typed_eav_field, :section_id),
       @field.entity_type,
-      @field.scope
+      field_partition(@field),
     )
 
     if @field.update(attrs)
       redirect_to edit_typed_eav_field_path(@field), status: :see_other,
-        notice: "Field updated."
+                                                     notice: "Field updated."
     else
       render :edit, status: :unprocessable_content
     end
@@ -94,7 +95,7 @@ class TypedEAVController < ApplicationController
       @field.field_options.create!(
         label: params[:option_label],
         value: params[:option_value],
-        sort_order: next_order
+        sort_order: next_order,
       )
     end
     redirect_to edit_typed_eav_field_path(@field), status: :see_other
@@ -120,73 +121,77 @@ class TypedEAVController < ApplicationController
     @field = scoped_fields.find(params[:id])
   end
 
-  # Base relation filtered to the current ambient scope. Fields with
-  # scope=NULL (global fields visible to all partitions) are always
-  # included. Fail-closed semantics:
-  #   - unscoped?               -> ALL fields across every scope (admin override)
-  #   - scope present           -> fields for that scope UNION globals
-  #   - scope nil, require_scope=true  -> raise TypedEAV::ScopeRequired
-  #   - scope nil, require_scope=false -> globals only (scope=NULL); never
-  #                                       leaks other tenants' rows.
+  # Base relation filtered through TypedEAV's partition seam. Fields with the
+  # global tuple `(scope=NULL, parent_scope=NULL)` are visible to every
+  # partition. Fail-closed semantics:
+  #   - unscoped?                    -> ALL fields across every partition
+  #   - [scope, parent_scope] present -> global + scope + full-tuple fields
+  #   - no tuple, require_scope=true  -> raise TypedEAV::ScopeRequired
+  #   - no tuple, require_scope=false -> global fields only; never leaks
+  #                                     other tenants' rows.
   # Use `TypedEAV.with_scope(value) { }` or configure
-  # `TypedEAV.config.scope_resolver` to set the scope.
+  # `TypedEAV.config.scope_resolver` to set the tuple.
   def scoped_fields
-    # Inside `TypedEAV.unscoped { }` the caller has explicitly opted into
-    # cross-scope visibility (admin/migration paths). Skip the scope filter
-    # entirely so the scaffold remains usable instead of raising under
-    # require_scope=true.
-    return TypedEAV::Field::Base.all if TypedEAV.unscoped?
+    partition = current_partition!
+    return TypedEAV::Field::Base.all if partition[:mode] == :all_partitions
 
-    scope = TypedEAV.current_scope
-    return TypedEAV::Field::Base.where(scope: [scope, nil]) if scope
-
-    if TypedEAV.config.require_scope
-      raise TypedEAV::ScopeRequired,
-        "TypedEAV.current_scope is nil and require_scope is enabled; " \
-        "wrap the request in TypedEAV.with_scope(value) { } or configure " \
-        "TypedEAV.config.scope_resolver."
-    end
-
-    TypedEAV::Field::Base.where(scope: nil)
+    TypedEAV::Field::Base.where(id: visible_field_ids(partition))
   end
 
-  # Resolve the ambient scope for writes. Mirrors `scoped_fields` semantics:
-  #   - unscoped?               -> returns nil (admin override; new field is global)
-  #   - scope present           -> returns the scope value
-  #   - scope nil, require_scope=true  -> raises TypedEAV::ScopeRequired
-  #   - scope nil, require_scope=false -> returns nil (global-field creation)
-  def ensure_scope!
-    # Inside `TypedEAV.unscoped { }` we deliberately bypass the require_scope
-    # guard so admin tools can create global fields without first declaring an
-    # ambient scope. Wrap in `with_scope` to write into a specific tenant.
-    return nil if TypedEAV.unscoped?
-
-    scope = TypedEAV.current_scope
-    return scope if scope
-
-    if TypedEAV.config.require_scope
-      raise TypedEAV::ScopeRequired,
-        "TypedEAV.current_scope is nil and require_scope is enabled; " \
-        "wrap the request in TypedEAV.with_scope(value) { } or configure " \
-        "TypedEAV.config.scope_resolver."
-    end
-
-    nil
+  # Resolve the ambient tuple for writes. Mirrors `scoped_fields` semantics:
+  #   - unscoped?                    -> returns the global tuple
+  #   - [scope, parent_scope] present -> returns that tuple
+  #   - no tuple, require_scope=true  -> raises TypedEAV::ScopeRequired
+  #   - no tuple, require_scope=false -> returns the global tuple
+  def ensure_partition!
+    current_partition!.slice(:scope, :parent_scope)
   end
 
-  # Server-side verification that the requested section exists within the
-  # caller's entity_type + scope (or globals). `Section.for_entity` unions
-  # scope=NULL globals with the scoped rows, matching field visibility.
+  # Server-side verification that the requested section exists within the same
+  # partition tuple as the field being created or updated, including global
+  # sections visible to that tuple.
   # Returns nil if `id` is blank. Raises ActiveRecord::RecordNotFound (Rails
   # renders 404) if the id does not belong to a section the caller can see,
   # blocking cross-tenant assignment via a forged section_id.
-  def verified_section_id(id, entity_type, scope)
+  def verified_section_id(id, entity_type, partition)
     return nil if id.blank?
-    TypedEAV::Section.for_entity(entity_type, scope: scope).find(id).id
+
+    TypedEAV::Partition.find_visible_section!(
+      id,
+      entity_type: entity_type,
+      **partition,
+    ).id
+  end
+
+  def current_partition!
+    return { scope: nil, parent_scope: nil, mode: :all_partitions } if TypedEAV.unscoped?
+
+    tuple = TypedEAV.current_scope
+    return { scope: tuple.first, parent_scope: tuple.last, mode: :partition } if tuple
+
+    if TypedEAV.config.require_scope
+      raise TypedEAV::ScopeRequired,
+            "TypedEAV.current_scope is nil and require_scope is enabled; " \
+            "wrap the request in TypedEAV.with_scope(value) { } or configure " \
+            "TypedEAV.config.scope_resolver."
+    end
+
+    { scope: nil, parent_scope: nil, mode: :partition }
+  end
+
+  def field_partition(field)
+    { scope: field.scope, parent_scope: field.parent_scope, mode: :partition }
+  end
+
+  def visible_field_ids(partition)
+    TypedEAV::Field::Base.distinct.pluck(:entity_type).flat_map do |entity_type|
+      TypedEAV::Partition.visible_fields(entity_type: entity_type, **partition).pluck(:id)
+    end
   end
 
   def resolve_type_class(type_name)
     return TypedEAV::Field::Text if type_name.blank?
+
     TypedEAV.config.field_class_for(type_name)
   rescue ArgumentError
     TypedEAV::Field::Text
@@ -195,11 +200,12 @@ class TypedEAVController < ApplicationController
   # Data-driven permitted params based on what the field type exposes via
   # store_accessor. Much cleaner than a massive case statement per type.
   #
-  # NOTE: `scope` and `section_id` are intentionally NOT in the permit list.
-  # `scope` is derived server-side from the ambient scope in `create`; a
+  # NOTE: `scope`, `parent_scope`, and `section_id` are intentionally NOT in
+  # the permit list. `scope` and `parent_scope` are derived server-side from
+  # the ambient partition tuple in `create`; a
   # client-supplied value would let any authenticated user write into another
-  # tenant's partition. `section_id` is verified against a scoped Section
-  # lookup via `verified_section_id` on both create and update.
+  # tenant's partition. `section_id` is verified against the partition seam via
+  # `verified_section_id` on both create and update.
   def field_params(type_class, creating:)
     base = %i[name required sort_order]
     base += %i[entity_type] if creating
@@ -208,11 +214,11 @@ class TypedEAVController < ApplicationController
     option_keys = option_keys_for(type_class)
 
     # Default value is scalar for most types, array for array types
-    if type_class.method_defined?(:array_field?) && type_class.allocate.array_field?
-      permitted = base + option_keys + [default_value: []]
-    else
-      permitted = base + option_keys + %i[default_value]
-    end
+    permitted = if type_class.method_defined?(:array_field?) && type_class.allocate.array_field?
+                  base + option_keys + [{ default_value: [] }]
+                else
+                  base + option_keys + %i[default_value]
+                end
 
     params.require(:typed_eav_field).permit(*permitted).tap do |attrs|
       attrs.transform_values! do |value|
@@ -224,6 +230,7 @@ class TypedEAVController < ApplicationController
   # Introspect which option keys the field type exposes
   def option_keys_for(type_class)
     return [] unless type_class.respond_to?(:stored_attributes)
+
     (type_class.stored_attributes[:options] || []).map(&:to_sym)
   rescue StandardError
     []

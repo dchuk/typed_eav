@@ -3,8 +3,9 @@
 # TypedEAV configuration.
 #
 # `scope_resolver` is the single integration point for multi-tenancy /
-# partitioning. It's a callable that returns the current partition value
-# (a tenant id, account id, workspace id — whatever your app uses) or nil.
+# partitioning. It's a callable that returns `[scope, parent_scope]`
+# (tenant id, workspace id — whatever axes your app uses) or nil.
+# If you only use one partition axis, return `[scope, nil]`.
 #
 # Class-level queries like `Contact.where_typed_eav(...)` consult this
 # resolver when no explicit `scope:` kwarg or `TypedEAV.with_scope(...)`
@@ -21,13 +22,14 @@ TypedEAV.configure do |c|
   # no change is needed here.
 
   # --- Rails CurrentAttributes ---
-  # c.scope_resolver = -> { Current.account&.id }
+  # c.scope_resolver = -> { [Current.account&.id, nil] }
+  # c.scope_resolver = -> { [Current.account&.id, Current.workspace&.id] }
 
   # --- Custom Current-like class ---
-  # c.scope_resolver = -> { MyApp::Tenancy.current_workspace_id }
+  # c.scope_resolver = -> { [MyApp::Tenancy.current_tenant_id, MyApp::Tenancy.current_workspace_id] }
 
   # --- Subdomain / session / thread-local ---
-  # c.scope_resolver = -> { Thread.current[:org_id] }
+  # c.scope_resolver = -> { [Thread.current[:org_id], nil] }
 
   # --- Disable ambient resolution entirely (explicit `scope:` kwarg only) ---
   # c.scope_resolver = nil
