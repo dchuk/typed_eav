@@ -40,6 +40,7 @@ module TypedEAV
     #   validate_typed_value enforces inclusion.
     class Currency < Base
       value_column :decimal_value
+      storage_contract_class TypedEAV::CurrencyStorageContract
 
       operators(*%i[eq gt lt gteq lteq between currency_eq is_null is_not_null])
 
@@ -48,24 +49,12 @@ module TypedEAV
       validates :default_currency, format: { with: /\A[A-Z]{3}\z/ }, allow_nil: true
       validate :allowed_currencies_format
 
-      # Phase 05 multi-cell shape — overrides ColumnMapping.value_columns
-      # (singular default returns [value_column]). Phase 04 versioning's
-      # snapshot loop and Value#_dispatch_value_change_update both iterate
-      # this array, so this override is the single source of truth for
-      # "Currency lives across these two physical columns."
       def self.value_columns
-        %i[decimal_value string_value]
+        storage_contract_class.value_columns
       end
 
-      # Phase 05 operator_column dispatch (plan 05-01 contract).
-      # :currency_eq routes to string_value; every other supported operator
-      # routes to decimal_value. is_null / is_not_null target decimal_value
-      # (a Currency value is null when its amount is null — semantically
-      # canonical because the amount is the primary cell). Without this
-      # override, QueryBuilder would route :currency_eq to decimal_value
-      # (the default) and silently filter the wrong column.
       def self.operator_column(operator)
-        operator == :currency_eq ? :string_value : :decimal_value
+        storage_contract_class.query_column(operator)
       end
 
       # Cast Hash input → [{amount: BigDecimal, currency: String}, false]
@@ -104,48 +93,6 @@ module TypedEAV
         [{ amount: amount_bd, currency: currency_str }, false]
       end
       # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-
-      # Read both columns; compose the hash; nil when both columns are nil.
-      # Single-cell-nil case (only one of the two columns populated) is
-      # impossible after validation — but read_value defensively returns
-      # the partial hash if it occurs in raw DB data, leaving validation
-      # to surface it on the next save.
-      def read_value(value_record)
-        amount   = value_record[:decimal_value]
-        currency = value_record[:string_value]
-        return nil if amount.nil? && currency.nil?
-
-        { amount: amount, currency: currency }
-      end
-
-      # Unpack casted hash into both columns. casted is the first element
-      # of cast's return — already validated to be Hash-or-nil here. nil
-      # casted (nil/blank input) clears both columns; the validator
-      # handles required-field enforcement for callers that need it.
-      def write_value(value_record, casted)
-        if casted.nil?
-          value_record[:decimal_value] = nil
-          value_record[:string_value]  = nil
-        else
-          value_record[:decimal_value] = casted[:amount]
-          value_record[:string_value]  = casted[:currency]
-        end
-      end
-
-      # Apply field-level default. default_value is the cast result of
-      # default_value_meta["v"] (a Hash for Currency); unpack into both
-      # columns. When default_value is nil, both columns stay nil. When
-      # the hash has only one key (e.g., `{currency: 'USD'}` to set a
-      # default currency without a default amount), only that column is
-      # populated.
-      def apply_default_to(value_record)
-        d = default_value
-        return if d.nil?
-        return unless d.is_a?(Hash)
-
-        value_record[:decimal_value] = d[:amount]   || d["amount"]
-        value_record[:string_value]  = d[:currency] || d["currency"]
-      end
 
       # Co-population validation + allowed_currencies inclusion.
       # When val is a Hash, requires both :amount and :currency populated.

@@ -20,6 +20,7 @@ module TypedEAV
   autoload :SchemaPortability
   autoload :EventDispatcher
   autoload :FieldStorageContract
+  autoload :CurrencyStorageContract
   autoload :CSVMapper
   autoload :ValueVersion
   autoload :Versioned

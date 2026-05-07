@@ -574,21 +574,44 @@ multi-cell. The contract covers:
 - `changed?(value_record)` - update event gating across every storage
   cell the field owns.
 
-Custom field authors keep the field-type hooks as the extension surface.
-For multi-cell fields, override these methods on your custom field class:
+Single-cell field types inherit the default contract. For multi-cell
+fields, create a `TypedEAV::FieldStorageContract` subclass and select it
+from the field class:
 
-- `read_value(value_record)` (instance method) — return the composite
-  value from the multi-cell shape (e.g.,
-  `{amount: BigDecimal, currency: String}`).
-- `write_value(value_record, casted)` (instance method) — write the
-  casted logical value across all relevant columns.
-- `apply_default_to(value_record)` (instance method) — write the
-  configured default across all relevant columns.
-- `self.operator_column(operator)` (class method) — return which physical
-  column a given operator acts on (e.g., `:eq` → `:decimal_value` for
-  amount, `:currency_eq` → `:string_value` for currency code).
-- `self.value_columns` (class method) — return every physical column the
-  field owns.
+```ruby
+class MoneyStorageContract < TypedEAV::FieldStorageContract
+  def self.value_columns = %i[decimal_value string_value]
+  def self.query_column(operator) = operator == :currency_eq ? :string_value : :decimal_value
+
+  def read(value_record)
+    amount = value_record[:decimal_value]
+    currency = value_record[:string_value]
+    amount.nil? && currency.nil? ? nil : { amount: amount, currency: currency }
+  end
+
+  def write(value_record, casted)
+    value_record[:decimal_value] = casted&.fetch(:amount, nil)
+    value_record[:string_value] = casted&.fetch(:currency, nil)
+  end
+
+  def apply_default(value_record)
+    default = field.default_value
+    return unless default.is_a?(Hash)
+
+    value_record[:decimal_value] = default[:amount] || default["amount"]
+    value_record[:string_value] = default[:currency] || default["currency"]
+  end
+end
+
+class Fields::Money < TypedEAV::Field::Base
+  value_column :decimal_value
+  storage_contract_class MoneyStorageContract
+end
+```
+
+Compatibility helpers such as `self.value_columns` and
+`self.operator_column(operator)` may delegate to the selected contract
+when older callers still use those class methods.
 
 Defaults delegate to `value_column` for single-cell storage, so existing
 single-cell types are unchanged. The built-in `Field::Currency` is the
@@ -596,7 +619,7 @@ canonical multi-cell consumer of these extension points.
 
 ### Built-in field types
 
-- **`Currency`:** Stores `{amount: BigDecimal, currency: String}` across two typed columns (`decimal_value` for the amount; `string_value` for the ISO 4217 currency code). Operators: `:eq`, `:gt`, `:lt`, `:gteq`, `:lteq`, `:between` target the amount; `:currency_eq` targets the currency code; `:is_null` / `:is_not_null` target the amount column (a Currency value is null when its amount is null). Cast input MUST be a hash with `:amount` and/or `:currency` keys — bare numeric/string values are rejected with `:invalid` to enforce explicit currency dimension at write time. Options: `default_currency` (String ISO code, applied as fallback only when an amount is given without an explicit currency), `allowed_currencies` (Array of ISO codes; `validate_typed_value` enforces inclusion). Versioning snapshots automatically capture both columns under `value_columns` iteration (no Phase 4 subscriber changes required). The `:currency_eq` operator is registered ONLY on `Field::Currency`; the QueryBuilder operator-validation gate rejects it with a clear `ArgumentError` if invoked on any other field type.
+- **`Currency`:** Stores `{amount: BigDecimal, currency: String}` across two typed columns (`decimal_value` for the amount; `string_value` for the ISO 4217 currency code) through `CurrencyStorageContract`. Operators: `:eq`, `:gt`, `:lt`, `:gteq`, `:lteq`, `:between` target the amount; `:currency_eq` targets the currency code; `:is_null` / `:is_not_null` target the amount column (a Currency value is null when its amount is null). Cast input MUST be a hash with `:amount` and/or `:currency` keys — bare numeric/string values are rejected with `:invalid` to enforce explicit currency dimension at write time. Options: `default_currency` (String ISO code, applied as fallback only when an amount is given without an explicit currency), `allowed_currencies` (Array of ISO codes; `validate_typed_value` enforces inclusion). Versioning snapshots automatically capture both columns through the storage contract. The `:currency_eq` operator is registered ONLY on `Field::Currency`; the QueryBuilder operator-validation gate rejects it with a clear `ArgumentError` if invoked on any other field type.
 
   ```ruby
   Contact.where_typed_eav(name: "price", op: :currency_eq, value: "USD")
@@ -938,8 +961,8 @@ name:
 
 Multi-cell field types (e.g., `Currency`) produce two-key snapshots:
 `{"decimal_value": "99.99", "string_value": "USD"}`. The version row's
-snapshot iterates `Field.value_columns` (plural), so new field types
-get the right shape automatically.
+snapshot asks the field's storage contract for its cells, so new field
+types get the right shape automatically.
 
 `{}` (empty hash) and `{"<col>": null}` are distinct semantics:
 

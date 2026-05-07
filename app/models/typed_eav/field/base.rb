@@ -310,8 +310,16 @@ module TypedEAV
 
       # ── Introspection ──
 
+      def self.storage_contract_class(contract_class = nil)
+        if contract_class
+          @storage_contract_class = contract_class
+        else
+          @storage_contract_class || TypedEAV::FieldStorageContract
+        end
+      end
+
       def storage_contract
-        @storage_contract ||= TypedEAV::FieldStorageContract.new(self)
+        @storage_contract ||= self.class.storage_contract_class.new(self)
       end
 
       def field_type_name

@@ -40,6 +40,18 @@ RSpec.describe TypedEAV::FieldStorageContract, :unscoped do
     let(:value) { build(:typed_value, field: field, entity: create(:contact)) }
     let(:contract) { field.storage_contract }
 
+    it "uses the Currency-specific storage contract" do
+      expect(contract).to be_a(TypedEAV::CurrencyStorageContract)
+    end
+
+    it "keeps Currency's multi-cell instance storage details on the contract" do
+      expect(TypedEAV::Field::Currency.instance_methods(false)).not_to include(
+        :read_value,
+        :write_value,
+        :apply_default_to,
+      )
+    end
+
     it "describes Currency cells, query routing, and logical reads/writes" do
       expect(contract.value_columns).to eq(%i[decimal_value string_value])
       expect(contract.query_column(:eq)).to eq(:decimal_value)
