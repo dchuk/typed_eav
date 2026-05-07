@@ -600,28 +600,42 @@ module TypedEAV
         successes = []
         errors_by_record = {}
 
-        ActiveRecord::Base.transaction do
-          records.each do |record|
-            # `:per_record` UUID is generated BEFORE entering the savepoint
-            # so it survives the savepoint's local scope (the with_context
-            # block below pushes it onto the thread-local context stack as
-            # a belt-and-suspenders fallback). `:per_field` reuses
-            # `field_uuids` — no per-record allocation. `:none` skips both.
-            record_uuid = effective_grouping == :per_record ? SecureRandom.uuid : nil
+        # `ActiveRecord::Base.cache do ... end` enables AR's per-block
+        # query cache so identical `typed_eav_definitions` queries (one
+        # per partition tuple, issued indirectly via
+        # `record.typed_eav_attributes=` → `typed_eav_defs_by_name` →
+        # `typed_eav_definitions(scope:, parent_scope:)` per record) hit
+        # the cache after the first call. Without this, 1000 records all
+        # in `(scope: "t1", parent_scope: nil)` would issue 1000 identical
+        # SELECTs against `typed_eav_fields`. The cache wraps the
+        # transaction so reads issued inside any per-record savepoint
+        # benefit too. Nested `cache do` is a no-op (AR detects
+        # re-entrance), so it's safe even if the caller is already inside
+        # a `cache do` block.
+        ActiveRecord::Base.cache do
+          ActiveRecord::Base.transaction do
+            records.each do |record|
+              # `:per_record` UUID is generated BEFORE entering the savepoint
+              # so it survives the savepoint's local scope (the with_context
+              # block below pushes it onto the thread-local context stack as
+              # a belt-and-suspenders fallback). `:per_field` reuses
+              # `field_uuids` — no per-record allocation. `:none` skips both.
+              record_uuid = effective_grouping == :per_record ? SecureRandom.uuid : nil
 
-            # Per-record SAVEPOINT (CONTEXT-locked structure, preserved under
-            # all `version_grouping:` values — never relaxed to per-record
-            # top-level transactions). `transaction(requires_new: true)` is
-            # the gem idiom — see `Field::Base#backfill_default!` at lines
-            # 400–408 of app/models/typed_eav/field/base.rb.
-            ActiveRecord::Base.transaction(requires_new: true) do
-              apply_bulk_record_save(
-                record: record,
-                vbn: vbn,
-                effective_grouping: effective_grouping,
-                uuids: { record: record_uuid, field: field_uuids },
-                accumulator: { successes: successes, errors_by_record: errors_by_record },
-              )
+              # Per-record SAVEPOINT (CONTEXT-locked structure, preserved under
+              # all `version_grouping:` values — never relaxed to per-record
+              # top-level transactions). `transaction(requires_new: true)` is
+              # the gem idiom — see `Field::Base#backfill_default!` at lines
+              # 400–408 of app/models/typed_eav/field/base.rb.
+              ActiveRecord::Base.transaction(requires_new: true) do
+                apply_bulk_record_save(
+                  record: record,
+                  vbn: vbn,
+                  effective_grouping: effective_grouping,
+                  uuids: { record: record_uuid, field: field_uuids },
+                  accumulator: { successes: successes, errors_by_record: errors_by_record },
+                )
+              end
             end
           end
         end
