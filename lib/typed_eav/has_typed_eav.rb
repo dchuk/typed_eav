@@ -447,6 +447,181 @@ module TypedEAV
         end
       end
 
+      # Bulk write API. Sets the same `values_by_field_name` Hash on every
+      # record in `records` inside ONE outer ActiveRecord transaction with a
+      # SAVEPOINT-PER-RECORD failure-isolation envelope. Bad records roll
+      # back their savepoint and surface in `errors_by_record`; good records
+      # commit when the outer transaction commits.
+      #
+      # ## Failure isolation contract (CONTEXT-locked, 06-CONTEXT.md line 26)
+      #
+      #   outer transaction
+      #   ├── savepoint(record_1) → record.typed_eav_attributes = vbn; record.save
+      #   ├── savepoint(record_2) → ditto
+      #   └── savepoint(record_N) → ditto
+      #
+      # The savepoint-per-record-INSIDE-an-outer-transaction structure is
+      # preserved under EVERY `version_grouping:` value (none / per_record /
+      # per_field). It is NEVER relaxed to per-record TOP-LEVEL transactions
+      # — that path was rejected at CONTEXT time because per-record top-level
+      # transactions break Phase 3 hook semantics (after_commit fires on
+      # outer commit, not savepoint release; see Plan 06-05 §Discrepancy
+      # awareness).
+      #
+      # ## Why we delegate to record.typed_eav_attributes=
+      #
+      # The instance setter at lines 632–664 ALREADY enforces:
+      #   * Field-name resolution via `typed_eav_defs_by_name` (collision-
+      #     precedence-correct).
+      #   * `allowed_typed_eav_types` restriction (silently skips fields whose
+      #     type was excluded by `has_typed_eav types: [...]`).
+      #   * Cross-tenant guards via `validate_field_scope_matches_entity` on
+      #     the resulting Value rows.
+      # Bulk write reuses this path; it does NOT bypass any of these.
+      #
+      # ## Errors-by-record key choice
+      #
+      # The Hash KEY is the record itself (NOT record.id). Records that fail
+      # validation BEFORE getting an id (new records that never persist) have
+      # nil ids; using id as the key would collapse multiple unsaved-record
+      # failures into one entry and lose information. Callers can still
+      # `result[:errors_by_record].keys.map(&:id)` if they want id-keyed
+      # output.
+      #
+      # ## errors_by_record value shape
+      #
+      # `record.errors.messages.transform_keys(&:to_s)` — string field-name
+      # keys, Array<String> messages. Mirrors `CSVMapper::Result#errors` so
+      # callers can write one error-handling path that consumes both shapes.
+      # `errors.messages` is the modern AR API (the older `errors.to_h` is
+      # flagged by Rails/DeprecatedActiveModelErrorsMethods); both return the
+      # same shape `{attribute => [messages]}`.
+      #
+      # ## version_grouping default sentinel
+      #
+      # The kwarg's literal default is `:default`. The first step of the
+      # method body resolves it: `:per_record` when versioning is on, `:none`
+      # when versioning is off. Callers omitting the kwarg "just work" in
+      # both versioning environments — they don't need to branch on
+      # `TypedEAV.config.versioning`. Explicit `:per_record`/`:per_field`
+      # passed with versioning OFF raises ArgumentError loudly (the caller's
+      # intent — group versions — cannot be satisfied with versioning off,
+      # and silently no-op'ing would mask a misconfiguration). Explicit
+      # `:none` is ALWAYS valid (explicit opt-out — same payload as the
+      # default-resolved case under versioning-off).
+      #
+      # ## Snapshot mechanism for version_group_id propagation
+      #
+      # The `:per_record` and `:per_field` paths stamp `pending_version_group_id`
+      # on each affected Value object BEFORE save inside the per-record
+      # `with_context` block. The Phase 4 versioning subscriber prefers the
+      # per-Value snapshot over `context[:version_group_id]` so the UUID
+      # survives the outer-transaction `after_commit` boundary even after
+      # `with_context` has unwound. See `lib/typed_eav/versioning/subscriber.rb`
+      # line 127 for the read-side; the stamping happens below per-record.
+      # `with_context(version_group_id: ...)` is retained as a belt-and-
+      # suspenders fallback so any future after_commit-inside-savepoint
+      # dispatch path also works.
+      #
+      # ## rubocop scope
+      #
+      # The Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength,
+      # Metrics/PerceivedComplexity disables on `where_typed_eav` (line 185
+      # of this file) are still active at this point — they cover the entire
+      # ClassQueryMethods module body and re-enable only at line 629 (after
+      # `typed_eav_attributes=`). The bulk-write transaction + savepoint +
+      # error-capture + version-group-id snapshot legitimately belong
+      # together for the same reason `where_typed_eav` does — splitting
+      # hurts readability of the failure-isolation invariant.
+      def bulk_set_typed_eav_values(records, values_by_field_name, version_grouping: :default)
+        # ── Input validation (fail fast with recovery hints) ──
+        if records.nil?
+          raise ArgumentError,
+                "bulk_set_typed_eav_values requires an Enumerable of records, got nil"
+        end
+        unless values_by_field_name.is_a?(Hash)
+          raise ArgumentError,
+                "bulk_set_typed_eav_values requires a Hash of values_by_field_name, " \
+                "got #{values_by_field_name.class}"
+        end
+
+        valid_grouping = %i[default per_record per_field none]
+        unless valid_grouping.include?(version_grouping)
+          raise ArgumentError,
+                "version_grouping: #{version_grouping.inspect} is not supported. " \
+                "Supported values: #{valid_grouping.map(&:inspect).join(", ")}."
+        end
+
+        if %i[per_record per_field].include?(version_grouping) && !TypedEAV.config.versioning
+          raise ArgumentError,
+                "version_grouping: #{version_grouping.inspect} was passed but versioning is disabled. " \
+                "Set TypedEAV.config.versioning = true in your initializer, or pass " \
+                "version_grouping: :none to opt out explicitly, or omit the kwarg to silently no-op."
+        end
+
+        records = records.to_a
+        return { successes: [], errors_by_record: {} } if records.empty?
+
+        unless records.all?(self)
+          classes = records.map { |r| r.class.name }.uniq
+          raise ArgumentError,
+                "bulk_set_typed_eav_values expects records of class #{name} (or its subclasses); " \
+                "got mixed classes: #{classes.join(", ")}"
+        end
+
+        # CONTEXT-locked default resolution: omitted/`:default` kwarg
+        # resolves to `:per_record` when versioning is on, `:none` when off.
+        # All downstream branches read `effective_grouping`, never the raw
+        # `version_grouping` argument.
+        effective_grouping = if version_grouping == :default
+                               TypedEAV.config.versioning ? :per_record : :none
+                             else
+                               version_grouping
+                             end
+
+        # Normalize keys to strings — `typed_eav_attributes=` resolves field
+        # names via the string-keyed `typed_eav_defs_by_name`, and Ruby Hash
+        # keys are last-wins on duplicates so caller-side dedup is automatic.
+        vbn = values_by_field_name.transform_keys(&:to_s)
+
+        successes = []
+        errors_by_record = {}
+
+        ActiveRecord::Base.transaction do
+          records.each do |record|
+            # Per-record SAVEPOINT (CONTEXT-locked structure, preserved under
+            # all `version_grouping:` values). `transaction(requires_new: true)`
+            # is the gem idiom — see `Field::Base#backfill_default!` at
+            # lines 400–408 of app/models/typed_eav/field/base.rb.
+            ActiveRecord::Base.transaction(requires_new: true) do
+              # T2 will inject `:per_record` / `:per_field` UUID stamping here.
+              # T1 ships only the `:none` path; the variable is read but the
+              # branches for `:per_record` / `:per_field` are no-ops in T1.
+              record.typed_eav_attributes = vbn.map { |n, v| { name: n, value: v } }
+              if record.save
+                successes << record
+              else
+                # Capture errors using the AR-native errors-hash shape, with
+                # symbol keys converted to strings to match CSVMapper::Result.
+                errors_by_record[record] = record.errors.messages.transform_keys(&:to_s)
+                # `raise ActiveRecord::Rollback` rolls back the savepoint
+                # (this record only) WITHOUT propagating the exception. Other
+                # records in the loop continue and the outer transaction
+                # commits at end-of-loop with the successful records.
+                raise ActiveRecord::Rollback
+              end
+            end
+          end
+        end
+
+        # `effective_grouping` is read but currently only the `:none` branch
+        # is meaningful — silence Ruby/rubocop warnings about an unused
+        # variable while T2 has not yet wired the version_grouping branches.
+        _ = effective_grouping
+
+        { successes: successes, errors_by_record: errors_by_record }
+      end
+
       private
 
       # Resolves the scope and parent_scope kwargs into a concrete tuple for
