@@ -12,7 +12,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 - [x] Phase 2: Phase-1 pipeline completions
 - [x] Phase 3: Event system
 - [x] Phase 4: Versioning
-- [ ] Phase 5: Field type expansion
+- [x] Phase 5: Field type expansion
 - [ ] Phase 6: Bulk operations & import/export
 - [ ] Phase 7: Read optimization
 
@@ -99,7 +99,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 | 2 - Phase-1 pipeline completions | 4/4 | complete | 2026-04-29 |
 | 3 - Event system | 2/2 | complete | 2026-05-01 |
 | 4 - Versioning | 3/3 | complete | 2026-05-06 |
-| 5 - Field type expansion | 3/4 | in progress | - |
+| 5 - Field type expansion | 4/4 | uat issues | - |
 | 6 - Bulk operations & import/export | 0/0 | pending | — |
 | 7 - Read optimization | 0/0 | pending | — |
 
