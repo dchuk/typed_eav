@@ -317,6 +317,136 @@ module TypedEAV
         end
       end
 
+      # Bulk read API. Returns `{ record_id => { field_name => value } }` for
+      # an Enumerable of host records — the class-method bulk variant of
+      # `InstanceMethods#typed_eav_hash`. N+1-free regardless of record count
+      # or field count.
+      #
+      # Why this method exists: list pages and reports often need typed values
+      # for many records at once. Calling `record.typed_eav_hash` per record
+      # issues 2 queries per record (value preload + field preload) — that's
+      # 200 queries for 100 records. This method collapses to:
+      #
+      #   - 1 SELECT typed_eav_values WHERE entity_type=? AND entity_id IN (?)
+      #   - 1 SELECT typed_eav_fields WHERE id IN (?)        (via includes)
+      #   - 1 SELECT typed_eav_fields per unique partition tuple
+      #     (for `typed_eav_definitions` / `winning_ids_by_name` per tuple)
+      #
+      # Total: 2 + (unique partition tuples) queries — typically 3 or 4 in
+      # practice, INDEPENDENT of record count.
+      #
+      # We group records by `[typed_eav_scope, typed_eav_parent_scope]` BEFORE
+      # the value preload because field-collision resolution
+      # (`HasTypedEAV.definitions_by_name`) varies by partition: name "age"
+      # in tenant_1 may have a different field_id than "age" in tenant_2,
+      # and the global+scoped collision precedence must be applied per-tuple.
+      # The value preload itself is a single query regardless — `WHERE
+      # entity_type=? AND entity_id IN (?)` is a single index seek.
+      #
+      # Orphan-skip + winning-id precedence mirrored from the per-record
+      # instance method (`#typed_eav_hash`, lines 584–606). Class-query path
+      # and instance path share the same `HasTypedEAV.definitions_by_name`
+      # collision-precedence helper so the two cannot drift.
+      #
+      # Phase 7 cache integration deferred per 06-CONTEXT.md §Open Questions.
+      # This method ships preload-only; it does not call any cache primitive
+      # and does not collide with the future Phase 7 `with_all_typed_values`
+      # scope or `typed_eav_hash_cached` alias.
+      #
+      # The Metrics/* disables at the top of `where_typed_eav` (line 185)
+      # cover this method too — the partition-tuple grouping + single
+      # preload + collision-precedence loop genuinely belong together, same
+      # rationale as the where_typed_eav disable.
+      def typed_eav_hash_for(records)
+        # Input validation — fail fast with a recovery hint (CONVENTIONS §Error
+        # messages). nil is a programmer error (a real empty list is `[]`).
+        raise ArgumentError, "typed_eav_hash_for requires an Enumerable of records, got nil" if records.nil?
+
+        # Coerce to Array. Accepts AR::Relation, Array, lazy enumerable. We
+        # need to iterate twice (group_by + map(&:id) + final iteration) so
+        # materialize once.
+        records = records.to_a
+        return {} if records.empty?
+
+        # Single-class invariant: the polymorphic value query (`entity_type:
+        # name`) targets ONE class; mixed-class input would silently miss
+        # rows of the other class. The defensive check is cheap (one `all?`
+        # pass) and surfaces the misuse loudly. STI subclasses pass via
+        # `Class#===` which dispatches to `is_a?` (covariant). `all?(self)`
+        # is the rubocop-preferred form for a kind-of check.
+        unless records.all?(self)
+          classes = records.map { |r| r.class.name }.uniq
+          raise ArgumentError,
+                "typed_eav_hash_for expects records of class #{name} (or its subclasses); " \
+                "got mixed classes: #{classes.join(", ")}"
+        end
+
+        # Group by partition tuple BEFORE field-definition lookup. Ruby Hash
+        # handles nil keys cleanly, so `[nil, nil]` (the global partition) is
+        # a valid tuple — no special casing.
+        groups = records.group_by { |r| [r.typed_eav_scope, r.typed_eav_parent_scope] }
+
+        # Build per-tuple `winning_ids_by_name`. One `typed_eav_definitions`
+        # query per unique tuple; reuse the resulting map for every record in
+        # that tuple. `HasTypedEAV.definitions_by_name` is the SHARED
+        # collision-precedence function — same one `typed_eav_defs_by_name`
+        # uses on the instance side. Reusing it guarantees parity.
+        winning_ids_by_tuple = groups.keys.each_with_object({}) do |(s, ps), memo|
+          defs = typed_eav_definitions(scope: s, parent_scope: ps)
+          memo[[s, ps]] = HasTypedEAV.definitions_by_name(defs).transform_values(&:id)
+        end
+
+        # Single-shot value preload across ALL records, regardless of how
+        # many partition tuples they span. `includes(:field)` triggers a
+        # second query that batch-loads every referenced field row — Rails'
+        # standard preload pattern. Splitting this per-tuple would issue N
+        # value queries instead of 1; the SQL `WHERE entity_id IN (...)`
+        # is a single index seek.
+        #
+        # We use the explicit `entity_type: name` form rather than
+        # `where(entity: records)` because empty `records` would have made
+        # the `where(entity:)` form ambiguous earlier — but we already
+        # short-circuited on empty, so either works. Explicit form reads
+        # cleaner.
+        value_rows = TypedEAV::Value
+                     .includes(:field)
+                     .where(entity_type: name, entity_id: records.map(&:id))
+                     .to_a
+        values_by_record_id = value_rows.group_by(&:entity_id)
+
+        # Build the result hash. Records with no values produce a `{}` inner
+        # hash — present in the result so callers can uniformly index by id.
+        records.each_with_object({}) do |record, result|
+          inner = {}
+          tuple_key = [record.typed_eav_scope, record.typed_eav_parent_scope]
+          winning_ids_by_name = winning_ids_by_tuple.fetch(tuple_key, {})
+
+          values_by_record_id.fetch(record.id, []).each do |tv|
+            # Skip orphans (`tv.field` nil — definition deleted via raw SQL
+            # or a Phase 02 `:nullify` cascade). Same fail-soft contract as
+            # `#typed_eav_hash` line 591.
+            next unless tv.field
+
+            field_name = tv.field.name
+            winning_id = winning_ids_by_name[field_name]
+            effective_id = tv.field_id || tv.field&.id
+
+            # When a winner IS registered: only its row is allowed (collision
+            # precedence — scoped beats global). When no winner is registered
+            # (definition deleted while values remain), fall back to first-
+            # wins so the hash isn't lossy. Mirrors `#typed_eav_hash` lines
+            # 600–605.
+            if winning_id
+              inner[field_name] = tv.value if effective_id == winning_id
+            else
+              inner[field_name] = tv.value unless inner.key?(field_name)
+            end
+          end
+
+          result[record.id] = inner
+        end
+      end
+
       private
 
       # Resolves the scope and parent_scope kwargs into a concrete tuple for
