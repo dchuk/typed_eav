@@ -5,9 +5,9 @@
 
 ## Current Phase
 Phase: 6 of 7 (Bulk Operations)
-Plans: 0/0
+Plans: 5
 Progress: 0%
-Status: ready
+Status: planned
 
 ## Phase Status
 - **Phase 1 (Two Level Scope Partitioning):** Complete
@@ -15,7 +15,7 @@ Status: ready
 - **Phase 3 (Event System):** Complete
 - **Phase 4 (Versioning):** Complete
 - **Phase 5 (Field Type Expansion):** Complete
-- **Phase 6 (Bulk Operations):** Pending
+- **Phase 6 (Bulk Operations):** Planned
 - **Phase 7 (Read Optimization):** Pending
 
 ## Key Decisions
@@ -54,3 +54,4 @@ None
 - 2026-04-29: Planned phase 02 — 4 plans across 2 waves (commit pending)
 - 2026-05-04: Discussed phase 04 (architect mode) — 4 binding decisions captured in 04-CONTEXT.md (opt-in granularity, jsonb shape, revert_to semantics, actor_resolver nil semantics)
 - 2026-05-05: Planned phase 04 (versioning) — 3 plans across 3 waves (linear chain; file conflicts on value.rb and lib/typed_eav.rb force sequencing). 14 tasks total. Open items resolved: changed_by=string, three indexes shipped, FK ON DELETE SET NULL on value_id+field_id, generator unchanged (idempotent re-runs), value_columns plural fix bundled in plan 04-02.
+- 2026-05-06: Planned phase 06 (bulk operations) — 5 plans across 3 waves. Wave 1 parallel: 06-01 version_group_id migration + subscriber, 06-02 schema export/import, 06-03 CSV mapper. Wave 2: 06-04 bulk read (typed_eav_hash_for). Wave 3: 06-05 bulk write (bulk_set_typed_eav_values) — depends on 06-01 (migration) and 06-04 (file-level serialization on has_typed_eav.rb ClassQueryMethods). 15 tasks total.
