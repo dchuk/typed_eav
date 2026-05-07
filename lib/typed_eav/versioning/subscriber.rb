@@ -107,6 +107,14 @@ module TypedEAV
           # correct (parent row exists at after_commit time).
           version_value_id = change_type == :destroy ? nil : value.id
 
+          # Phase 06 bulk-operations correlation tag. Plan 06-03's
+          # `bulk_set_typed_eav_values` API injects a UUID via
+          # `TypedEAV.with_context(version_group_id: uuid) { ... }` so every
+          # version row produced inside the block shares a single
+          # correlation token. Non-bulk writes omit the key, the value
+          # falls through as nil, and the column (added in
+          # `db/migrate/20260506000001`) stays NULL — backward-compatible:
+          # unchanged subscribers and unchanged callers continue to work.
           TypedEAV::ValueVersion.create!(
             value_id: version_value_id,
             field_id: value.field_id,
@@ -116,6 +124,7 @@ module TypedEAV
             before_value: before_value,
             after_value: after_value,
             context: context.to_h, # frozen → unfrozen jsonb-serializable hash
+            version_group_id: context[:version_group_id],
             change_type: change_type.to_s,
             changed_at: Time.current,
           )
