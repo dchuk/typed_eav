@@ -1,0 +1,10 @@
+{
+  "pid": "",
+  "key": "dev-01",
+  "role": "dev",
+  "team_name": "vbw-phase-06",
+  "started_at": "2026-05-07T05:24:19Z",
+  "last_event_at": "2026-05-07T05:24:19Z",
+  "last_event": "idle",
+  "idle_count": 1
+}
