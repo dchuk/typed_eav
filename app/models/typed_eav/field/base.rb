@@ -407,6 +407,126 @@ module TypedEAV
         end
       end
 
+      # ── Schema export / import ──
+      #
+      # Phase 06 schema portability API: round-trip a partition's field +
+      # section definitions (NOT typed Value rows) through a JSON-serializable
+      # Hash. The use-case is moving a tenant's schema between environments
+      # (staging → prod), seeding a new partition from a known-good template,
+      # or version-controlling field definitions outside the database.
+      #
+      # The `"schema_version" => 1` envelope is the migration handshake: every
+      # exported hash carries the version, every import validates it first.
+      # Future schema_version 2 might rename a key, add a column, or change a
+      # value's storage shape — version 1 callers will fail loudly with a
+      # remediation message rather than silently mis-importing under v2 rules.
+      #
+      # `default_value_meta` is exported as the WHOLE jsonb hash (not just the
+      # `"v"` key) so import can re-assign the column verbatim and bypass the
+      # `default_value=` re-cast. This preserves both the value and any future
+      # schema additions to `default_value_meta` (e.g., a `"default_format"`
+      # key) without requiring this code to enumerate them.
+      #
+      # `options_data` (the per-field allowed-values list for Select /
+      # MultiSelect) is only present for fields where `optionable?` is true.
+      # Option rows are an association on a separate table — they are NOT a
+      # column on `typed_eav_fields`. Emitting them only for the field types
+      # that actually use them keeps the export schema tight; non-optionable
+      # fields don't carry an empty `"options_data"` key.
+      #
+      # The export uses the literal `type` column string (e.g.,
+      # `"TypedEAV::Field::Integer"`) rather than the symbol form
+      # `Config.field_class_for(:integer)` round-trip would produce. STI's
+      # `type` column is the canonical AR discriminator and accepts the full
+      # class name verbatim — `Field::Base.create!(type: "...")` resolves the
+      # subclass automatically. Going through the symbol form would be lossy
+      # for any custom user-registered field types whose symbol mapping isn't
+      # registered at import time.
+      #
+      # The query is partition-tuple-precise: `where(entity_type:, scope:,
+      # parent_scope:)` — no `for_entity` widening. Schema export must NOT
+      # leak rows from adjacent partitions (the global partition's fields
+      # are not part of a tenant's tenant-scoped schema).
+      def self.export_schema(entity_type:, scope: nil, parent_scope: nil)
+        fields = where(entity_type: entity_type, scope: scope, parent_scope: parent_scope)
+                   .includes(:field_options)
+                   .order(:sort_order)
+                   .map { |field| _export_field_entry(field) }
+
+        sections = TypedEAV::Section
+                     .where(entity_type: entity_type, scope: scope, parent_scope: parent_scope)
+                     .order(:sort_order)
+                     .map { |section| _export_section_entry(section) }
+
+        {
+          "schema_version" => 1,
+          "entity_type" => entity_type,
+          "scope" => scope,
+          "parent_scope" => parent_scope,
+          "fields" => fields,
+          "sections" => sections,
+        }
+      end
+
+      # Projects a Field AR record into the canonical export-entry Hash.
+      # Used by both `export_schema` (to build the array) and the import-side
+      # equality short-circuit (to compare an existing AR row with an
+      # incoming hash on the same projection).
+      #
+      # The select/multi_select case adds `"options_data"` — an array of
+      # option hashes ordered by sort_order. The order matters for the
+      # equality short-circuit: an export of `[a,b]` vs `[b,a]` represents
+      # different display orderings even with the same value set, so they
+      # must compare unequal here.
+      def self._export_field_entry(field)
+        entry = {
+          "name" => field.name,
+          "type" => field.type,
+          "entity_type" => field.entity_type,
+          "scope" => field.scope,
+          "parent_scope" => field.parent_scope,
+          "required" => field.required,
+          "sort_order" => field.sort_order,
+          "field_dependent" => field.field_dependent,
+          "options" => field.options,
+          "default_value_meta" => field.default_value_meta,
+        }
+        if field.optionable?
+          # Use the loaded association when available (export preloads via
+          # `includes(:field_options)`); fall back to a sorted query
+          # otherwise. The in-memory branch sorts by [sort_order || 0,
+          # label] to mirror Option.sorted's tie-break, ensuring the same
+          # order whether loaded or queried.
+          options_rows = if field.field_options.loaded?
+                           field.field_options.sort_by { |o| [o.sort_order || 0, o.label.to_s, o.id] }
+                         else
+                           field.field_options.sorted
+                         end
+          entry["options_data"] = options_rows.map do |o|
+            { "label" => o.label, "value" => o.value, "sort_order" => o.sort_order }
+          end
+        end
+        entry
+      end
+
+      # Projects a Section AR record into the canonical export-entry Hash.
+      # Sections have no nested associations to serialize — fields belong to
+      # sections via `section_id`, but that linkage is intentionally not
+      # round-tripped (sections and fields are exported as parallel arrays;
+      # the partition tuple is the join key).
+      def self._export_section_entry(section)
+        {
+          "name" => section.name,
+          "code" => section.code,
+          "entity_type" => section.entity_type,
+          "scope" => section.scope,
+          "parent_scope" => section.parent_scope,
+          "sort_order" => section.sort_order,
+          "active" => section.active,
+        }
+      end
+      private_class_method :_export_field_entry, :_export_section_entry
+
       # ── Per-type value validation (polymorphic dispatch from Value) ──
       #
       # Default no-op. Subclasses override to enforce their constraints
