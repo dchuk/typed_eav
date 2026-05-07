@@ -558,20 +558,40 @@ end
 ### Multi-cell field types
 
 External field types may store their logical value across multiple typed
-columns. To support this, override three methods on your custom field
-class:
+columns. Storage behavior is exposed through `field.storage_contract`,
+which keeps callers from knowing whether a field is single-cell or
+multi-cell. The contract covers:
+
+- `value_columns` - the native typed cells used for storage, snapshots,
+  reverting, and update change detection.
+- `read(value_record)` / `write(value_record, casted)` - logical value
+  reads and writes.
+- `apply_default(value_record)` - default application across the field's
+  storage cells.
+- `query_column(operator)` - query routing for each supported operator.
+- `before_snapshot(value_record, change_type)` /
+  `after_snapshot(value_record, change_type)` - version row jsonb shape.
+- `changed?(value_record)` - update event gating across every storage
+  cell the field owns.
+
+Custom field authors keep the field-type hooks as the extension surface.
+For multi-cell fields, override these methods on your custom field class:
 
 - `read_value(value_record)` (instance method) — return the composite
   value from the multi-cell shape (e.g.,
   `{amount: BigDecimal, currency: String}`).
+- `write_value(value_record, casted)` (instance method) — write the
+  casted logical value across all relevant columns.
 - `apply_default_to(value_record)` (instance method) — write the
   configured default across all relevant columns.
 - `self.operator_column(operator)` (class method) — return which physical
   column a given operator acts on (e.g., `:eq` → `:decimal_value` for
   amount, `:currency_eq` → `:string_value` for currency code).
+- `self.value_columns` (class method) — return every physical column the
+  field owns.
 
-Defaults delegate to `value_column` for all three, so existing single-
-cell types are unchanged. The built-in `Field::Currency` is the
+Defaults delegate to `value_column` for single-cell storage, so existing
+single-cell types are unchanged. The built-in `Field::Currency` is the
 canonical multi-cell consumer of these extension points.
 
 ### Built-in field types

@@ -18,6 +18,7 @@ module TypedEAV
   autoload :QueryBuilder
   autoload :SchemaPortability
   autoload :EventDispatcher
+  autoload :FieldStorageContract
   autoload :CSVMapper
   autoload :ValueVersion
   autoload :Versioned

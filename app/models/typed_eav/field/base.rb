@@ -310,6 +310,10 @@ module TypedEAV
 
       # ── Introspection ──
 
+      def storage_contract
+        @storage_contract ||= TypedEAV::FieldStorageContract.new(self)
+      end
+
       def field_type_name
         self.class.name.demodulize.underscore
       end

@@ -77,14 +77,12 @@ module TypedEAV
         private
 
         def write_version_row(value, change_type, context)
-          # Build before_value / after_value snapshots from value_columns
-          # (plural — Phase 05 Currency forward-compat). For all 17
-          # current single-cell types, value_columns returns a one-
-          # element Array.
-          columns = value.field.class.value_columns
-
-          before_value = build_before_snapshot(value, change_type, columns)
-          after_value  = build_after_snapshot(value, change_type, columns)
+          # Build before_value / after_value snapshots through the field
+          # storage contract. Single-cell types produce one-key snapshots;
+          # multi-cell types like Currency produce one key per typed cell.
+          storage = value.field.storage_contract
+          before_value = storage.before_snapshot(value, change_type)
+          after_value  = storage.after_snapshot(value, change_type)
 
           # CRITICAL: for :destroy events, write `value_id: nil`.
           # By the time `after_commit on: :destroy` fires, the parent row
@@ -147,42 +145,6 @@ module TypedEAV
             change_type: change_type.to_s,
             changed_at: Time.current,
           )
-        end
-
-        def build_before_snapshot(value, change_type, columns)
-          case change_type
-          when :create
-            # No "before" exists — empty hash is the locked semantic for
-            # "no recorded value" (distinct from {col: nil} = "recorded
-            # nil"). 04-CONTEXT.md §"Version row jsonb shape".
-            {}
-          when :update
-            # `attribute_before_last_save(col)` returns the value as it
-            # was BEFORE the just-committed save. For columns that didn't
-            # change in this save, returns the current value (no diff —
-            # that's fine for the snapshot). For Phase 05 Currency
-            # multi-cell, both columns appear in the snapshot regardless
-            # of which one changed (snapshot is the full pre-state of the
-            # value's typed columns).
-            columns.to_h { |col| [col.to_s, value.attribute_before_last_save(col.to_s)] }
-          when :destroy
-            # The Value record is destroyed but still in-memory at this
-            # point (Phase 03 P04 live-validation confirmed value.id and
-            # value attributes are readable in after_commit on: :destroy).
-            # Snapshot the current values as the "before destroy" state.
-            columns.to_h { |col| [col.to_s, value[col]] }
-          end
-        end
-
-        def build_after_snapshot(value, change_type, columns)
-          case change_type
-          when :create, :update
-            columns.to_h { |col| [col.to_s, value[col]] }
-          when :destroy
-            # No "after" exists — empty hash, mirror of :create's empty
-            # before. Distinct from {col: nil}.
-            {}
-          end
         end
 
         def resolve_actor

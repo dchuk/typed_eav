@@ -86,7 +86,7 @@ module TypedEAV
     def value
       return nil unless field
 
-      field.read_value(self)
+      field.storage_contract.read(self)
     end
 
     def value=(val)
@@ -114,7 +114,7 @@ module TypedEAV
         # decimal_value, raising TypeMismatch at save time.
         # Rails will further cast each column on save via its column type.
         casted, invalid = field.cast(val)
-        field.write_value(self, casted)
+        field.storage_contract.write(self, casted)
         @cast_was_invalid = invalid
       else
         # Field not yet assigned - stash for later
@@ -276,7 +276,7 @@ module TypedEAV
       #      Currency in Phase 05). Reconstructing that shape from
       #      before_value's per-column hash adds complexity for zero benefit
       #      since the per-column values are exactly what we need.
-      field.class.value_columns.each do |col|
+      field.storage_contract.value_columns.each do |col|
         self[col] = version.before_value[col.to_s]
       end
 
@@ -382,7 +382,7 @@ module TypedEAV
     # populate multiple columns from a composite default. The dispatch
     # preserves the bypass-Value#value= contract end-to-end.
     def apply_field_default
-      field.apply_default_to(self)
+      field.storage_contract.apply_default(self)
     end
 
     def validate_value
@@ -540,7 +540,7 @@ module TypedEAV
       # code) cell would silently be missed by the dispatch gate, and
       # Phase 04 versioning would never see it (Scout §3 / Discrepancy D3
       # from plan 04-01).
-      return unless field.class.value_columns.any? { |col| saved_change_to_attribute?(col) }
+      return unless field.storage_contract.changed?(self)
 
       TypedEAV::EventDispatcher.dispatch_value_change(self, :update)
     end

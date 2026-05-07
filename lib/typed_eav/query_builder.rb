@@ -50,7 +50,7 @@ module TypedEAV
         # (Phase 05 Currency) route operators like `:eq` (amount) and
         # `:currency_eq` (currency code) to different columns. See
         # ColumnMapping#operator_column.
-        col = field.class.operator_column(operator)
+        col = field.storage_contract.query_column(operator)
         arel_col = values_table[col]
 
         base = value_scope(field)

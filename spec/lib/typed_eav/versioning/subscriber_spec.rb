@@ -326,6 +326,8 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
 
       field_class_double = class_double(TypedEAV::Field::Integer, value_columns: [:integer_value])
       field_double = instance_double(TypedEAV::Field::Integer, class: field_class_double)
+      storage_contract = TypedEAV::FieldStorageContract.new(field_double)
+      allow(field_double).to receive(:storage_contract).and_return(storage_contract)
       value_double = instance_double(
         TypedEAV::Value,
         id: 1, field_id: 1, entity_type: "Contact", entity_id: 1,
