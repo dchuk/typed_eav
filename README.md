@@ -555,7 +555,7 @@ TypedEAV.configure do |c|
 end
 ```
 
-### Multi-cell field types (Phase 5)
+### Multi-cell field types
 
 External field types may store their logical value across multiple typed
 columns. To support this, override three methods on your custom field
@@ -571,19 +571,19 @@ class:
   amount, `:currency_eq` → `:string_value` for currency code).
 
 Defaults delegate to `value_column` for all three, so existing single-
-cell types are unchanged. The built-in `Field::Currency` (Phase 5) is
-the canonical multi-cell consumer of these extension points.
+cell types are unchanged. The built-in `Field::Currency` is the
+canonical multi-cell consumer of these extension points.
 
-### Built-in Phase-5 field types
+### Built-in field types
 
-- **`Currency` (Phase 5):** Stores `{amount: BigDecimal, currency: String}` across two typed columns (`decimal_value` for the amount; `string_value` for the ISO 4217 currency code). Operators: `:eq`, `:gt`, `:lt`, `:gteq`, `:lteq`, `:between` target the amount; `:currency_eq` targets the currency code; `:is_null` / `:is_not_null` target the amount column (a Currency value is null when its amount is null). Cast input MUST be a hash with `:amount` and/or `:currency` keys — bare numeric/string values are rejected with `:invalid` to enforce explicit currency dimension at write time. Options: `default_currency` (String ISO code, applied as fallback only when an amount is given without an explicit currency), `allowed_currencies` (Array of ISO codes; `validate_typed_value` enforces inclusion). Versioning snapshots automatically capture both columns under `value_columns` iteration (no Phase 4 subscriber changes required). The `:currency_eq` operator is registered ONLY on `Field::Currency`; the QueryBuilder operator-validation gate rejects it with a clear `ArgumentError` if invoked on any other field type.
+- **`Currency`:** Stores `{amount: BigDecimal, currency: String}` across two typed columns (`decimal_value` for the amount; `string_value` for the ISO 4217 currency code). Operators: `:eq`, `:gt`, `:lt`, `:gteq`, `:lteq`, `:between` target the amount; `:currency_eq` targets the currency code; `:is_null` / `:is_not_null` target the amount column (a Currency value is null when its amount is null). Cast input MUST be a hash with `:amount` and/or `:currency` keys — bare numeric/string values are rejected with `:invalid` to enforce explicit currency dimension at write time. Options: `default_currency` (String ISO code, applied as fallback only when an amount is given without an explicit currency), `allowed_currencies` (Array of ISO codes; `validate_typed_value` enforces inclusion). Versioning snapshots automatically capture both columns under `value_columns` iteration (no Phase 4 subscriber changes required). The `:currency_eq` operator is registered ONLY on `Field::Currency`; the QueryBuilder operator-validation gate rejects it with a clear `ArgumentError` if invoked on any other field type.
 
   ```ruby
   Contact.where_typed_eav(name: "price", op: :currency_eq, value: "USD")
   Contact.where_typed_eav(name: "price", op: :between,     value: [50, 150])
   ```
 
-- **`Percentage` (Phase 5):** A `Field::Decimal` subclass storing the underlying fraction in 0..1 (inclusive). The `:percent` representation is a format-time concern — call `field.format(value)` with `display_as: :percent` to render `0.75` as `"75.0%"`. Options: `decimal_places` (Integer >= 0, default 2; format-time precision only — does NOT alter what's stored in `decimal_value`), `display_as` (`:fraction` default, or `:percent`). Validation: out-of-range values (e.g., `1.5`) fail with the message `"must be between 0.0 and 1.0"`. Storage and operator semantics inherit from `Field::Decimal`.
+- **`Percentage`:** A `Field::Decimal` subclass storing the underlying fraction in 0..1 (inclusive). The `:percent` representation is a format-time concern — call `field.format(value)` with `display_as: :percent` to render `0.75` as `"75.0%"`. Options: `decimal_places` (Integer >= 0, default 2; format-time precision only — does NOT alter what's stored in `decimal_value`), `display_as` (`:fraction` default, or `:percent`). Validation: out-of-range values (e.g., `1.5`) fail with the message `"must be between 0.0 and 1.0"`. Storage and operator semantics inherit from `Field::Decimal`.
 
   ```ruby
   pf = TypedEAV::Field::Percentage.create!(
@@ -593,7 +593,7 @@ the canonical multi-cell consumer of these extension points.
   pf.format(BigDecimal("0.755")) # => "75.5%"
   ```
 
-- **`Image` (Phase 5):** Active Storage-backed field type. Stores the attached blob's `signed_id` (a String) in `string_value`. Operators: `:eq`, `:is_null`, `:is_not_null`. Options: `allowed_content_types` (Array of strings; supports exact matches like `"image/png"` and `image/*` family wildcards), `max_size_bytes` (Integer; nil disables the cap). The single `:attachment` has_one_attached association is declared on `TypedEAV::Value` at engine boot when Active Storage is loaded; otherwise `Field::Image#cast` raises `NotImplementedError` with an actionable install message. The `:attachment` association is shared with `Field::File` — Image vs File is a class-identity distinction (used by the `on_image_attached` hook), not a separate association.
+- **`Image`:** Active Storage-backed field type. Stores the attached blob's `signed_id` (a String) in `string_value`. Operators: `:eq`, `:is_null`, `:is_not_null`. Options: `allowed_content_types` (Array of strings; supports exact matches like `"image/png"` and `image/*` family wildcards), `max_size_bytes` (Integer; nil disables the cap). The single `:attachment` has_one_attached association is declared on `TypedEAV::Value` at engine boot when Active Storage is loaded; otherwise `Field::Image#cast` raises `NotImplementedError` with an actionable install message. The `:attachment` association is shared with `Field::File` — Image vs File is a class-identity distinction (used by the `on_image_attached` hook), not a separate association.
 
   ```ruby
   field = TypedEAV::Field::Image.create!(
@@ -606,11 +606,11 @@ the canonical multi-cell consumer of these extension points.
   value.value # => the signed_id String
   ```
 
-- **`File` (Phase 5):** Same shape as `Field::Image` but without image-specific semantics. Stores `signed_id` in `string_value`; same operator set; same options (`allowed_content_types`, `max_size_bytes`). The Image vs File distinction is by `value.field.class` at runtime — apps that want strict image-only validation set `allowed_content_types: ["image/*"]` on `Field::Image`; `Field::File` is a general-purpose attachment slot.
+- **`File`:** Same shape as `Field::Image` but without image-specific semantics. Stores `signed_id` in `string_value`; same operator set; same options (`allowed_content_types`, `max_size_bytes`). The Image vs File distinction is by `value.field.class` at runtime — apps that want strict image-only validation set `allowed_content_types: ["image/*"]` on `Field::Image`; `Field::File` is a general-purpose attachment slot.
 
-- **Active Storage dependency (Phase 5):** Lazy soft-detect via `defined?(::ActiveStorage::Blob)`. The gem does NOT add Active Storage as a hard dependency — apps that never use Image/File never need to install it. To use Image or File fields, add `gem "activestorage"` to your Gemfile (already included in Rails 7.1+ via the `rails` meta-gem) and run `bin/rails active_storage:install` to create the `active_storage_blobs` / `active_storage_attachments` / `active_storage_variant_records` tables. The mirror precedent is `acts_as_tenant`, which is also soft-detected (see `Config::DEFAULT_SCOPE_RESOLVER`).
+- **Active Storage dependency:** Lazy soft-detect via `defined?(::ActiveStorage::Blob)`. The gem does NOT add Active Storage as a hard dependency — apps that never use Image/File never need to install it. To use Image or File fields, add `gem "activestorage"` to your Gemfile (already included in Rails 7.1+ via the `rails` meta-gem) and run `bin/rails active_storage:install` to create the `active_storage_blobs` / `active_storage_attachments` / `active_storage_variant_records` tables. The mirror precedent is `acts_as_tenant`, which is also soft-detected (see `Config::DEFAULT_SCOPE_RESOLVER`).
 
-- **`on_image_attached` hook (Phase 5):** Fires from `after_commit` on `TypedEAV::Value` when a `Field::Image`-typed Value's attachment is added or replaced. Receives `(value, blob)`. Configure via `TypedEAV.configure { |c| c.on_image_attached = ->(v, b) { ... } }`. Hook ordering: runs AFTER versioning (Phase 4) and AFTER `on_value_change` (Phase 3) so it sees the persisted version row and the user-callback context. File attachments do NOT fire this hook — the name is image-specific by design. Use `on_value_change` for a generic value-mutation signal that covers File-typed Values too.
+- **`on_image_attached` hook:** Fires from `after_commit` on `TypedEAV::Value` when a `Field::Image`-typed Value's attachment is added or replaced. Receives `(value, blob)`. Configure via `TypedEAV.configure { |c| c.on_image_attached = ->(v, b) { ... } }`. Hook ordering: runs AFTER versioning (Phase 4) and AFTER `on_value_change` (Phase 3) so it sees the persisted version row and the user-callback context. File attachments do NOT fire this hook — the name is image-specific by design. Use `on_value_change` for a generic value-mutation signal that covers File-typed Values too.
 
   ```ruby
   TypedEAV.configure do |c|
@@ -620,7 +620,7 @@ the canonical multi-cell consumer of these extension points.
   end
   ```
 
-- **`Reference` (Phase 5):** Foreign-key field type. Stores the target record's integer ID in `integer_value`. Operators: `:eq`, `:is_null`, `:is_not_null`, `:references` (explicit narrowing — does NOT inherit `:integer_value`'s `:gt`/`:lt`/`:between` defaults; arithmetic comparisons on FKs don't carry useful semantics). The `:references` operator accepts AR record instances OR Integer IDs at query time, normalizing via `field.cast` (a class-mismatched record routes to `base.none` rather than `:is_null`). Options: `target_entity_type` (REQUIRED — String class name of the target model, validated to constantize at field save), `target_scope` (OPTIONAL — when set, the field is REJECTED at save time if `target_entity_type` is not registered with `has_typed_eav scope_method:` (Gating Decision 2); when set with a scoped target, value-time validation rejects writes whose target's `typed_eav_scope` does not match `target_scope` via a `target_partition_matches?` helper structurally parallel to Phase 1's `entity_partition_axis_matches?` but on the target axis). Cross-scope safety mirrors the existing `Value#validate_field_scope_matches_entity` guard pattern applied to the target rather than the source.
+- **`Reference`:** Foreign-key field type. Stores the target record's integer ID in `integer_value`. Operators: `:eq`, `:is_null`, `:is_not_null`, `:references` (explicit narrowing — does NOT inherit `:integer_value`'s `:gt`/`:lt`/`:between` defaults; arithmetic comparisons on FKs don't carry useful semantics). The `:references` operator accepts AR record instances OR Integer IDs at query time, normalizing via `field.cast` (a class-mismatched record routes to `base.none` rather than `:is_null`). Options: `target_entity_type` (REQUIRED — String class name of the target model, validated to constantize at field save), `target_scope` (OPTIONAL — when set, the field is REJECTED at save time if `target_entity_type` is not registered with `has_typed_eav scope_method:` (Gating Decision 2); when set with a scoped target, value-time validation rejects writes whose target's `typed_eav_scope` does not match `target_scope` via a `target_partition_matches?` helper structurally parallel to Phase 1's `entity_partition_axis_matches?` but on the target axis). Cross-scope safety mirrors the existing `Value#validate_field_scope_matches_entity` guard pattern applied to the target rather than the source.
 
   ```ruby
   rf = TypedEAV::Field::Reference.create!(
@@ -633,7 +633,7 @@ the canonical multi-cell consumer of these extension points.
   Contact.where_typed_eav(name: "manager", op: :references, value: 42)  # filter by FK
   ```
 
-- **Phase 5 summary:** Five field types ship in Phase 5 — **Image, File, Reference, Currency, Percentage**. All five preserve the cast-tuple contract (`[casted, invalid?]`), the operator-dispatch model (`supported_operators` + `operator_column` for multi-cell types), and the no-hardcoded-attribute-references foundational principle. The infrastructure introduced in plan 05-01 (`read_value`, `apply_default_to`, `operator_column`, plus `write_value` from plan 05-02) is the canonical extension surface for any future external multi-cell field type.
+- **Summary:** The built-in field types **Image, File, Reference, Currency, Percentage** all preserve the cast-tuple contract (`[casted, invalid?]`), the operator-dispatch model (`supported_operators` + `operator_column` for multi-cell types), and the no-hardcoded-attribute-references foundational principle. The multi-cell extension surface (`read_value`, `apply_default_to`, `operator_column`, and `write_value`) is the canonical way to build any future external multi-cell field type.
 
 ## Validation Behavior
 
@@ -916,10 +916,10 @@ name:
 | `select` | `{"string_value": "..."}` |
 | `multi_select`, `*_array`, `json` | `{"json_value": [...]}` |
 
-Multi-cell field types (Phase 5 Currency, when it lands) produce
-two-key snapshots: `{"decimal_value": "99.99", "string_value": "USD"}`.
-The version row's snapshot iterates `Field.value_columns` (plural), so
-new field types get the right shape automatically.
+Multi-cell field types (e.g., `Currency`) produce two-key snapshots:
+`{"decimal_value": "99.99", "string_value": "USD"}`. The version row's
+snapshot iterates `Field.value_columns` (plural), so new field types
+get the right shape automatically.
 
 `{}` (empty hash) and `{"<col>": null}` are distinct semantics:
 
