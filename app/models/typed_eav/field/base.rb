@@ -527,6 +527,223 @@ module TypedEAV
       end
       private_class_method :_export_field_entry, :_export_section_entry
 
+      # Imports a hash produced by `export_schema`. Idempotent under the
+      # equality-no-op rule: a hash whose entries match existing rows
+      # bit-for-bit (same projection as `_export_field_entry` /
+      # `_export_section_entry`, excluding timestamps) short-circuits to
+      # zero AR writes regardless of `on_conflict:` policy.
+      #
+      # Conflict-policy decision tree (per field/section entry):
+      #
+      #   1. `schema_version` validation (raises ArgumentError if not 1).
+      #   2. STI type-swap detection (raises ArgumentError UNCONDITIONALLY,
+      #      regardless of `on_conflict:` — a type change is a data-loss
+      #      hazard the gem cannot safely migrate across *_value columns).
+      #   3. Equality short-circuit: if the existing row matches the
+      #      incoming entry on the export projection, increment `unchanged`
+      #      and skip. NO AR write under any policy. (Locked at
+      #      06-CONTEXT.md §Schema-import conflict policy.)
+      #   4. Divergent existing row, dispatch on `on_conflict`:
+      #        :error     → raise ArgumentError
+      #        :skip      → increment `skipped`, leave row + options alone
+      #        :overwrite → assign non-key attrs + save!; for select /
+      #                     multi_select, DELETE then RECREATE field_options
+      #                     (in-place update would trip the per-(field_id,
+      #                     value) uniqueness validator mid-edit).
+      #   5. No existing row → `Field::Base.create!(entry.except("options_data"))`.
+      #      AR resolves the STI subclass from the `"type"` column string
+      #      automatically; for select / multi_select, options are then
+      #      created from `entry["options_data"]`.
+      #
+      # The whole import runs inside a single `ActiveRecord::Base.transaction`
+      # so any failure mid-import (a type-swap raise on field 17 of 50, an
+      # `:error`-policy collision, a `validate_default_value` failure on
+      # `:overwrite`) rolls back ALL prior writes from this call. Callers
+      # see an all-or-nothing import.
+      #
+      # rubocop:disable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity -- conflict-policy decision tree + type-swap guard + section import in one place; splitting hurts readability of the idempotence-key logic.
+      def self.import_schema(hash, on_conflict: :error)
+        unless hash["schema_version"] == 1
+          raise ArgumentError,
+                "Unsupported schema_version: #{hash['schema_version'].inspect}. " \
+                "Expected 1. Re-export from a current typed_eav version."
+        end
+
+        valid_policies = %i[error skip overwrite]
+        unless valid_policies.include?(on_conflict)
+          raise ArgumentError,
+                "Unsupported on_conflict: #{on_conflict.inspect}. " \
+                "Supported: #{valid_policies.map { |p| ":#{p}" }.join(', ')}."
+        end
+
+        result = { "created" => 0, "updated" => 0, "skipped" => 0, "unchanged" => 0, "errors" => [] }
+
+        transaction do
+          Array(hash["fields"]).each do |entry|
+            _import_field_entry(entry, on_conflict, result)
+          end
+
+          Array(hash["sections"]).each do |entry|
+            _import_section_entry(entry, on_conflict, result)
+          end
+        end
+
+        result
+      end
+      # rubocop:enable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+
+      # Per-field import dispatch. Extracted from `import_schema` for readability;
+      # the shape of the decision tree is documented on `import_schema`.
+      # rubocop:disable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity -- type-swap raise + equality short-circuit + on_conflict dispatch + STI create are all conditional branches off a single existing/incoming pair; splitting further would scatter the field-vs-section symmetry across multiple files.
+      def self._import_field_entry(entry, on_conflict, result)
+        existing = find_by(
+          name: entry["name"],
+          entity_type: entry["entity_type"],
+          scope: entry["scope"],
+          parent_scope: entry["parent_scope"],
+        )
+
+        if existing
+          # Type-swap guard runs FIRST and unconditionally. Even an
+          # equality short-circuit doesn't apply: by definition, a type
+          # swap is a divergence, and the data-loss hazard outranks every
+          # `on_conflict:` policy.
+          if existing.type != entry["type"]
+            raise ArgumentError,
+                  "Cannot change field '#{entry['name']}' from #{existing.type} to #{entry['type']}: " \
+                  "data-loss guard. The gem cannot infer a safe migration of existing typed values " \
+                  "across *_value columns. Manually destroy and recreate the field if the type change " \
+                  "is intentional."
+          end
+
+          # Equality short-circuit applies BEFORE the on_conflict dispatch.
+          # Bit-equal existing rows are a no-op under any policy (locked
+          # at 06-CONTEXT.md §Schema-import conflict policy).
+          if _field_export_row_equal?(existing, entry)
+            result["unchanged"] += 1
+            return
+          end
+
+          case on_conflict
+          when :error
+            raise ArgumentError,
+                  "Field '#{entry['name']}' already exists for #{entry['entity_type']} " \
+                  "(scope=#{entry['scope'].inspect}, parent_scope=#{entry['parent_scope'].inspect}) " \
+                  "and its attributes diverge from the incoming schema. " \
+                  "Pass on_conflict: :skip or :overwrite to import over the existing field, " \
+                  "or re-export from the source environment to confirm the divergence is intentional."
+          when :skip
+            result["skipped"] += 1
+          when :overwrite
+            existing.assign_attributes(
+              required: entry["required"],
+              sort_order: entry["sort_order"],
+              field_dependent: entry["field_dependent"],
+              options: entry["options"],
+            )
+            # Direct jsonb hash assignment bypasses the `default_value=`
+            # re-cast — the export already round-tripped the whole hash.
+            existing.default_value_meta = entry["default_value_meta"]
+            existing.save!
+
+            if existing.optionable?
+              # DELETE-then-RECREATE: an in-place update would trip the
+              # per-(field_id, value) uniqueness validator mid-edit.
+              existing.field_options.destroy_all
+              Array(entry["options_data"]).each do |opt|
+                existing.field_options.create!(
+                  label: opt["label"],
+                  value: opt["value"],
+                  sort_order: opt["sort_order"],
+                )
+              end
+            end
+            result["updated"] += 1
+          end
+        else
+          # No existing row → create. AR resolves the STI subclass from
+          # the `type` column string automatically.
+          field = create!(entry.except("options_data"))
+          if field.optionable?
+            Array(entry["options_data"]).each do |opt|
+              field.field_options.create!(
+                label: opt["label"],
+                value: opt["value"],
+                sort_order: opt["sort_order"],
+              )
+            end
+          end
+          result["created"] += 1
+        end
+      end
+      # rubocop:enable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+      private_class_method :_import_field_entry
+
+      # Per-section import dispatch. Same decision-tree shape as
+      # `_import_field_entry` but with no nested options table — sections
+      # have no `options_data` to delete-and-recreate.
+      def self._import_section_entry(entry, on_conflict, result)
+        existing = TypedEAV::Section.find_by(
+          code: entry["code"],
+          entity_type: entry["entity_type"],
+          scope: entry["scope"],
+          parent_scope: entry["parent_scope"],
+        )
+
+        if existing
+          if _section_export_row_equal?(existing, entry)
+            result["unchanged"] += 1
+            return
+          end
+
+          case on_conflict
+          when :error
+            raise ArgumentError,
+                  "Section '#{entry['code']}' already exists for #{entry['entity_type']} " \
+                  "(scope=#{entry['scope'].inspect}, parent_scope=#{entry['parent_scope'].inspect}) " \
+                  "and its attributes diverge from the incoming schema. " \
+                  "Pass on_conflict: :skip or :overwrite to import over the existing section, " \
+                  "or re-export from the source environment to confirm the divergence is intentional."
+          when :skip
+            result["skipped"] += 1
+          when :overwrite
+            existing.update!(
+              name: entry["name"],
+              sort_order: entry["sort_order"],
+              active: entry["active"],
+            )
+            result["updated"] += 1
+          end
+        else
+          TypedEAV::Section.create!(entry)
+          result["created"] += 1
+        end
+      end
+      private_class_method :_import_section_entry
+
+      # Row-equality helper for fields. Serializes the existing AR record
+      # via the SAME projection used by `export_schema`, then compares
+      # key-for-key with the incoming Hash. Timestamps (created_at,
+      # updated_at) are NOT in the projection, so they don't participate
+      # in the comparison.
+      #
+      # Hash#== is order-insensitive (it compares key-value pairs), so a
+      # hash with keys in a different order still compares equal. The
+      # `options_data` array IS order-sensitive — different sort_order
+      # arrangements represent meaningfully different schemas (e.g., the
+      # display order of select options) and must compare unequal.
+      def self._field_export_row_equal?(existing, incoming)
+        _export_field_entry(existing) == incoming
+      end
+      private_class_method :_field_export_row_equal?
+
+      # Row-equality helper for sections. Symmetric to
+      # `_field_export_row_equal?` over the section projection.
+      def self._section_export_row_equal?(existing, incoming)
+        _export_section_entry(existing) == incoming
+      end
+      private_class_method :_section_export_row_equal?
+
       # ── Per-type value validation (polymorphic dispatch from Value) ──
       #
       # Default no-op. Subclasses override to enforce their constraints
