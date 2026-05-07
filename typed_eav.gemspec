@@ -32,4 +32,13 @@ Gem::Specification.new do |spec|
   end
 
   spec.add_dependency "rails", ">= 7.1"
+
+  # `csv` was a default gem in Ruby ≤ 3.3 but was removed from default gems
+  # starting in Ruby 3.4 (see Ruby 3.4.0 release notes — bundled-gems list).
+  # `TypedEAV::CSVMapper` (Phase 6, Plan 06-03) calls `require "csv"`, so
+  # we declare it as a runtime dependency to keep the gem usable across
+  # the supported Ruby range (`required_ruby_version = ">= 3.1"`). Without
+  # this declaration, bundler on Ruby 3.4+ raises `LoadError` at the
+  # `require "csv"` site even though the stdlib file is present on disk.
+  spec.add_dependency "csv", "~> 3.3"
 end
