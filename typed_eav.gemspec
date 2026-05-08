@@ -5,7 +5,7 @@ require_relative "lib/typed_eav/version"
 Gem::Specification.new do |spec|
   spec.name        = "typed_eav"
   spec.version     = TypedEAV::VERSION
-  spec.authors     = ["Darrin Chuk"]
+  spec.authors     = ["dchuk"]
   spec.email       = ["me@dchuk.com"]
   spec.summary     = "Typed custom fields for ActiveRecord models"
   spec.description = <<~DESC.tr("\n", " ").strip
