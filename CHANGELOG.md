@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- `TypedEAV::Partition.find_visible_section!` is **documented-public**
+  going forward. Apps building admin UIs that need to authorize a
+  section lookup before editing, rendering, or destroying it should
+  call this rather than `Section.find(id)`. Method shape and behavior
+  do not change — this is a documentation clarification that promotes
+  an existing, already-shipping method into the documented surface
+  area, alongside the sibling `Partition` methods (`visible_fields`,
+  `effective_fields_by_name`, `definitions_by_name`,
+  `definitions_multimap_by_name`, `visible_sections`). G5 (issue #20).
+
 ### Fixed
 
 - `InstanceMethods#initialize_typed_values` no longer builds duplicate

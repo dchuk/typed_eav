@@ -88,6 +88,49 @@ module TypedEAV
         TypedEAV::Section.for_entity(entity_type, scope: scope, parent_scope: parent_scope)
       end
 
+      # Looks up a single {TypedEAV::Section} by `id` constrained to the
+      # caller's partition tuple. Documented-public surface: apps building
+      # admin UIs that need to authorize a section lookup before editing,
+      # rendering, or destroying it should call this rather than
+      # `Section.find(id)`, which would happily return a section belonging
+      # to another tenant's partition.
+      #
+      # Visibility merge matches {visible_sections}: rows whose
+      # `(entity_type, scope, parent_scope)` is either the requested tuple
+      # or the global `(scope: nil, parent_scope: nil)` partition are
+      # eligible. The most-specific-wins precedence used for field
+      # collision resolution does not apply here — section lookup is by
+      # primary key, not by name.
+      #
+      # Sibling documented-public methods on this module that share the
+      # same partition-visibility surface: {visible_fields},
+      # {effective_fields_by_name}, {definitions_by_name},
+      # {definitions_multimap_by_name}, {visible_sections}.
+      #
+      # @param id [Integer, String] the section's primary key. Blank input
+      #   is the caller's responsibility to guard upstream; this method
+      #   does not silently swallow `nil` / `""` — it forwards to
+      #   `ActiveRecord::Relation#find`, which raises
+      #   `ActiveRecord::RecordNotFound` on blank.
+      # @param entity_type [String] the host AR class name the section
+      #   belongs to (matches `Section#entity_type`).
+      # @param scope [Object, nil] the resolved scope value from the
+      #   caller's partition. `nil` means the global partition only.
+      # @param parent_scope [Object, nil] the resolved parent_scope value.
+      #   Must be `nil` when `scope` is blank (the orphan-parent invariant
+      #   shared with {visible_sections}).
+      # @param mode [Symbol] `:partition` (default) restricts to the
+      #   caller's tuple plus the global tuple. `:all_partitions` is the
+      #   deliberate admin bypass that ignores the tuple entirely —
+      #   distinct from `scope: nil`, which means "global partition only."
+      # @return [TypedEAV::Section] the section record when it belongs to
+      #   the caller's partition or the global tuple.
+      # @raise [ActiveRecord::RecordNotFound] when the section's
+      #   `(scope, parent_scope)` falls outside the visibility merge for
+      #   the requested tuple, or when no section with `id` exists.
+      # @raise [ArgumentError] when `parent_scope` is present and `scope`
+      #   is blank (orphan-parent), or when `mode` is neither
+      #   `:partition` nor `:all_partitions`.
       def find_visible_section!(id, entity_type:, scope: nil, parent_scope: nil, mode: :partition)
         visible_sections(entity_type: entity_type, scope: scope, parent_scope: parent_scope, mode: mode).find(id)
       end
