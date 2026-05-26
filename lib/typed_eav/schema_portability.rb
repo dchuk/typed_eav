@@ -27,6 +27,63 @@ module TypedEAV
         }
       end
 
+      # Lean, restore-oriented projection of the field schema for a partition
+      # tuple. Sibling to {.export_schema} — same partition filter, narrower
+      # per-field surface, no sections, no partition-identity keys.
+      #
+      # The envelope is:
+      #
+      #   {
+      #     "snapshot_schema_version" => 1,
+      #     "fields" => [ <snapshot_field_entry>, ... ]   # ordered by sort_order
+      #   }
+      #
+      # The `snapshot_schema_version` integer will be bumped explicitly when
+      # the inner per-field shape evolves in a non-additive way — it is NOT
+      # frozen forever. Consumers should branch on the version to handle
+      # cross-version snapshots.
+      #
+      # Each per-field entry is a strict subset of the full
+      # {.export_field_entry} shape:
+      #
+      #   {
+      #     "name" => field.name,
+      #     "field_type_name" => field.field_type_name,
+      #     "required" => field.required,
+      #     "sort_order" => field.sort_order,
+      #     "options" => field.options,
+      #     "options_data" => [...]   # ONLY present when field.optionable?
+      #   }
+      #
+      # Omitted vs the full schema export: `entity_type`, `scope`,
+      # `parent_scope`, `type` (the AR STI class name), `field_dependent`,
+      # and `default_value_meta`. Non-optionable fields omit `options_data`
+      # entirely (absent, not nil, not an empty array).
+      #
+      # The `field_type_name` value is the documented field-type dispatch
+      # identifier — robust to namespace relocations of the field class
+      # because it strips the namespace via `demodulize` before
+      # `underscore`-ing. It is NOT robust to renames of the leaf class
+      # itself: `Field::Select` → `"select"`, but renaming the class to
+      # `Field::Status` would change the dispatch identifier to `"status"`.
+      #
+      # @param entity_type [String] host AR model class name (e.g. "Contact")
+      # @param scope [String, nil] first partition axis
+      # @param parent_scope [String, nil] second partition axis
+      # @return [Hash] versioned snapshot envelope
+      def export_snapshot_schema(entity_type:, scope: nil, parent_scope: nil)
+        fields = TypedEAV::Field::Base
+                 .where(entity_type: entity_type, scope: scope, parent_scope: parent_scope)
+                 .includes(:field_options)
+                 .order(:sort_order)
+                 .map { |field| export_snapshot_field_entry(field) }
+
+        {
+          "snapshot_schema_version" => 1,
+          "fields" => fields,
+        }
+      end
+
       def import_schema(hash, on_conflict: :error)
         validate_schema_version!(hash)
         validate_conflict_policy!(on_conflict)
@@ -79,6 +136,35 @@ module TypedEAV
         entry
       end
       # rubocop:enable Metrics/AbcSize
+
+      # Lean per-field projection used by {.export_snapshot_schema}. Mirrors
+      # the option-row ordering rule from {.export_field_entry} — sort
+      # loaded-association rows by `[sort_order || 0, label, id]`, and
+      # delegate to the `field_options.sorted` scope on the unloaded path.
+      def export_snapshot_field_entry(field)
+        entry = {
+          "name" => field.name,
+          "field_type_name" => field.field_type_name,
+          "required" => field.required,
+          "sort_order" => field.sort_order,
+          "options" => field.options,
+        }
+
+        if field.optionable?
+          options_rows = if field.field_options.loaded?
+                           field.field_options.sort_by do |option|
+                             [option.sort_order || 0, option.label.to_s, option.id]
+                           end
+                         else
+                           field.field_options.sorted
+                         end
+          entry["options_data"] = options_rows.map do |option|
+            { "label" => option.label, "value" => option.value, "sort_order" => option.sort_order }
+          end
+        end
+
+        entry
+      end
 
       def export_section_entry(section)
         {

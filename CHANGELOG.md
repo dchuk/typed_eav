@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `TypedEAV::SchemaPortability.export_snapshot_schema(entity_type:,
+  scope: nil, parent_scope: nil)` — sibling to `export_schema` that
+  returns a lean, restore-oriented projection in a versioned envelope:
+  `{ "snapshot_schema_version" => 1, "fields" => [...] }`. Per-field
+  entries carry only `name`, `field_type_name`, `required`,
+  `sort_order`, `options`, and (for optionable types) `options_data`
+  — `entity_type`, `scope`, `parent_scope`, `type` (AR STI class name),
+  `field_dependent`, and `default_value_meta` are omitted. Non-optionable
+  fields omit the `options_data` key entirely (absent, not nil). The
+  `snapshot_schema_version` integer will be bumped explicitly when the
+  inner shape evolves — it is not frozen forever. Fields are ordered by
+  `sort_order` and `options_data` mirrors the loaded/unloaded ordering
+  rule used by `export_schema`. G4 (PRD #15).
+
 ### Fixed
 
 - `InstanceMethods#initialize_typed_values` no longer builds duplicate
