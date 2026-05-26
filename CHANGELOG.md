@@ -5,24 +5,114 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-05-25
+
+Pre-1.0 architecture cleanup arc (issues #9–#13). No public-API breakage
+for host AR models or registered custom field types; behavior changes are
+limited to two latent-bug fixes (now raised at field-save) and one
+internal helper relocation (see "Changed" below). Anchored by ADRs
+0001–0005.
+
+### Added
+
+- New `TypedEAV::Field::TypedStorage` concern (auto-included on
+  `Field::Base`) collapses the prior storage stack into three paired
+  override points: `read_value(record)`, `write_value(record, casted)`,
+  `apply_default(record)`. Custom multi-cell field types now extend
+  `Field::Base` directly and override only these methods. See README
+  §"Multi-cell field types" and ADR-0001 (issue #9).
+- New top-level `TypedEAV::ScopeTuple` module exposes the
+  `[scope, parent_scope]` normalization surface: `normalize_permissive`,
+  `normalize_strict`, and `invariant_satisfied?`. Used by `Partition`,
+  `TypedEAV.with_scope`, `Config#resolve_scope`, and the query path
+  (issue #10).
+- New top-level query objects extracted from `HasTypedEAV`:
+  `TypedEAV::EntityQuery` (class-method orchestration on host AR models),
+  `TypedEAV::FilterQuery` (multi-filter SQL composition for
+  `where_typed_eav` / `with_field`), and `TypedEAV::BulkRead` (bulk
+  per-record reads via `eav_values_for`). See ADR-0002 (issue #11).
+- New field family intermediate bases collapse per-leaf duplication:
+  - `TypedEAV::Field::ValidatedString` — min/max-length + regex-pattern
+    validation surface for `string_value`-backed types (parent of
+    `Email` and `Url`).
+  - `TypedEAV::Field::RangeBounded` — min/max-bound validation helpers
+    for comparable single-value types (parent of `Integer`, `Decimal`,
+    `Date`, `DateTime`).
+  - `TypedEAV::Field::Optionable` — concern (not parent) for types that
+    draw values from a `Field::Option` set; included by `Select` and
+    `MultiSelect`.
+
+  See README §"Family intermediate bases (extension points)" and
+  ADR-0004 (issue #12).
 
 ### Changed
 
-- **Internal** `TypedEAV::HasTypedEAV.definitions_by_name` and
-  `TypedEAV::HasTypedEAV.definitions_multimap_by_name` moved to
-  `TypedEAV::Partition.definitions_by_name` and
+- **Internal helper move.** `TypedEAV::HasTypedEAV.definitions_by_name`
+  and `TypedEAV::HasTypedEAV.definitions_multimap_by_name` moved to
+  `TypedEAV::Partition.definitions_by_name` /
   `TypedEAV::Partition.definitions_multimap_by_name`. These helpers were
-  technically callable from application code but not documented; partition-
-  tuple precedence is a partition concept and the new home reflects that.
-  External callers (if any) should update the call site. See ADR-0002.
-- `TypedEAV::HasTypedEAV` split into a slim macro module
-  (`lib/typed_eav/has_typed_eav.rb`) + a per-instance methods file
-  (`lib/typed_eav/has_typed_eav/instance_methods.rb`) + a new top-level
-  `TypedEAV::EntityQuery` module (class-method orchestration) +
-  `TypedEAV::FilterQuery` (multi-filter SQL composition) +
-  `TypedEAV::BulkRead` (bulk per-record reads). Public class-method and
-  instance-method signatures on host AR models are unchanged. See ADR-0002.
+  technically callable from application code but not documented;
+  partition-tuple precedence is a partition concept and the new home
+  reflects that. External callers (if any) should update the call site.
+  See ADR-0002 (issue #11).
+- `TypedEAV::HasTypedEAV` is now a slim macro module
+  (`lib/typed_eav/has_typed_eav.rb`) that delegates to a per-instance
+  methods file (`lib/typed_eav/has_typed_eav/instance_methods.rb`) plus
+  the new `EntityQuery` / `FilterQuery` / `BulkRead` objects. Public
+  class-method and instance-method signatures on host AR models are
+  unchanged. See ADR-0002 (issue #11).
+- Field validation now runs paired-bound checks at field-save time, not
+  only at value-write time:
+  - `Field::Email` / `Field::Url` (via `ValidatedString`) reject
+    `max_length < min_length` when the field record is saved.
+  - `Field::Date` / `Field::DateTime` (via `RangeBounded` leaves) reject
+    inverted `min_date`/`max_date` (and `min_datetime`/`max_datetime`)
+    bounds when the field record is saved.
+
+  Both were latent bugs prior to v0.3.0 — the bound mismatch was only
+  surfaced when a `Value` was written. Authors of custom field types
+  that store inverted bounds will now see the validation fail earlier.
+  See ADR-0004 (issue #12).
+
+### Removed
+
+- `TypedEAV::Field::FieldStorageContract`,
+  `TypedEAV::Field::CurrencyStorageContract`, and
+  `TypedEAV::Field::ColumnMapping` are deleted; their surface lives on
+  `Field::TypedStorage`. ADR-0001 (issue #9).
+- `TypedEAV::Partition.validate_tuple!` is deleted; callers use
+  `TypedEAV::ScopeTuple.normalize_strict` directly. Issue #10.
+
+### Internal
+
+- `TypedEAV::EventDispatcher` is retained as the synchronous broker
+  between `TypedEAV::Hooks` and `ActiveSupport::Notifications`. The
+  cleanup arc explicitly considered collapsing it and rejected that:
+  the broker is the seam where event-name normalization and the
+  `notifications: false` opt-out live. See ADR-0003.
+- The Phase-6 modules — `TypedEAV::BulkWrite`,
+  `TypedEAV::Importers::CSVMapper`, and
+  `TypedEAV::SchemaPortability::*` — remain independent top-level
+  modules. The cleanup arc explicitly considered consolidating them
+  under a single `TypedEAV::Operations` namespace and rejected that:
+  the modules share no internal contract and the namespace would be
+  cosmetic. See ADR-0005.
+- Cyclomatic-complexity rubocop disables that previously masked the
+  `HasTypedEAV` mega-module are gone — the split files clear the
+  default complexity thresholds.
+
+### References
+
+- Issue #9 — `Field::TypedStorage` concern.
+- Issue #10 — `ScopeTuple` extraction.
+- Issue #11 — `EntityQuery` / `FilterQuery` / `BulkRead` split.
+- Issue #12 — Field family intermediate bases.
+- Issue #13 — release coordination.
+- ADR-0001 — collapse field storage stack.
+- ADR-0002 — split `HasTypedEAV` into query objects.
+- ADR-0003 — retain `EventDispatcher` as broker.
+- ADR-0004 — field family intermediate bases.
+- ADR-0005 — keep Phase-6 modules independent.
 
 ## [0.2.1] - 2026-05-08
 
@@ -115,6 +205,7 @@ worked examples.
 
 Initial release.
 
+[0.3.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.3.0
 [0.2.1]: https://github.com/dchuk/typed_eav/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.1.0
