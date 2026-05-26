@@ -27,15 +27,31 @@ module TypedEAV
   # already-resolved scope value. `parent_scope:` is `String | nil`. Scope
   # resolution and sentinel handling live in `EntityQuery#resolve_scope`;
   # this class works on resolved tuples only.
+  #
+  # ## `include_missing:` (Reading A)
+  #
+  # Opt-in kwarg (default `false`). Only meaningful when
+  # `operator == :is_null`; silently ignored otherwise (`:is_not_null` becomes
+  # a no-op; other operators are unaffected). When `true`, the `:is_null`
+  # predicate is composed as a **set complement** against `:is_not_null`:
+  # matches hosts that have **no non-NULL value** for the field — including
+  # hosts with no `typed_eav_values` row at all.
+  #
+  # On the multimap (`ALL_SCOPES`) branch, "no non-NULL value" reads across
+  # ALL matching field definitions for the name: a host matches iff none of
+  # the per-tenant field defs have a non-NULL value for it (Reading A —
+  # NOT "no row anywhere"). See ADR-0006 for why composition happens at this
+  # altitude rather than via a LEFT JOIN in `QueryBuilder`.
   class FilterQuery
     FILTER_KEYS = %w[name n op operator value v].freeze
     private_constant :FILTER_KEYS
 
-    def initialize(model:, filters:, scope:, parent_scope:)
-      @model        = model
-      @raw_filters  = filters
-      @scope        = scope
-      @parent_scope = parent_scope
+    def initialize(model:, filters:, scope:, parent_scope:, include_missing: false)
+      @model           = model
+      @raw_filters     = filters
+      @scope           = scope
+      @parent_scope    = parent_scope
+      @include_missing = include_missing
     end
 
     def to_relation
@@ -106,8 +122,17 @@ module TypedEAV
       filters.inject(model.all) do |query, filter|
         spec  = parse_filter(filter)
         field = fields_by_name[spec[:name]] || raise_unknown_field(spec[:name], fields_by_name.keys)
-        matching_ids = TypedEAV::QueryBuilder.entity_ids(field, spec[:operator], spec[:value])
-        query.where(id: matching_ids)
+
+        if invert_is_null?(spec[:operator])
+          # Reading A: "no non-NULL value." Set-complement against the
+          # scope-winning field's `:is_not_null` subquery — includes both
+          # NULL-column rows and entities with no row at all. ADR-0006.
+          non_missing_ids = TypedEAV::QueryBuilder.entity_ids(field, :is_not_null, nil)
+          query.where.not(id: non_missing_ids)
+        else
+          matching_ids = TypedEAV::QueryBuilder.entity_ids(field, spec[:operator], spec[:value])
+          query.where(id: matching_ids)
+        end
       end
     end
 
@@ -117,9 +142,29 @@ module TypedEAV
         fields  = fields_multimap[spec[:name]]
         raise_unknown_field(spec[:name], fields_multimap.keys) unless fields&.any?
 
-        union_ids = union_entity_ids(fields, spec[:operator], spec[:value])
-        query.where(id: union_ids)
+        if invert_is_null?(spec[:operator])
+          # Reading A across all matching field defs: a host matches iff NO
+          # field def has a non-NULL value for it. Union the non-missing
+          # entity_ids across all per-tenant field defs, then complement at
+          # the host level. ADR-0006.
+          non_missing_ids = fields.flat_map do |f|
+            TypedEAV::QueryBuilder.entity_ids(f, :is_not_null, nil).pluck(:entity_id)
+          end.uniq
+          query.where.not(id: non_missing_ids)
+        else
+          union_ids = union_entity_ids(fields, spec[:operator], spec[:value])
+          query.where(id: union_ids)
+        end
       end
+    end
+
+    # `include_missing: true` only modifies the `:is_null` branch (Reading A:
+    # "no non-NULL value"). For every other operator — including
+    # `:is_not_null`, which already returns the natural complement — the
+    # kwarg is silently ignored, so filter UIs can pass it uniformly without
+    # branching per operator.
+    def invert_is_null?(operator)
+      @include_missing && operator == :is_null
     end
 
     # OR-across all field_ids that share the same name (across tenants),
