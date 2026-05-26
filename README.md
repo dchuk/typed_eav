@@ -1307,8 +1307,8 @@ Single-record reads (`typed_eav_value`, `typed_eav_hash`) live on `InstanceMetho
 `lib/typed_eav/has_typed_eav/instance_methods.rb` (~250 LOC) holds the per-record API:
 
 - `typed_eav_value(name)` / `typed_eav_hash` — reads
-- `set_typed_eav_value(name, value)` / `typed_eav_attributes=` — writes
-- `typed_eav_changes` — dirty tracking
+- `set_typed_eav_value(name, value)` / `typed_eav_attributes=` (aliased as `typed_eav=`) — writes
+- `typed_eav_definitions` — resolved field-definitions map for the host record
 - `typed_eav_scope` / `typed_eav_parent_scope` — scope resolution per record
 
 Every method uses `TypedEAV::Partition.definitions_by_name` so the collision-precedence rules for ambient/explicit/parent scopes are computed in one place.
