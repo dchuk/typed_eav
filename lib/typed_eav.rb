@@ -14,6 +14,9 @@ module TypedEAV
   autoload :Config
   autoload :Registry
   autoload :HasTypedEAV
+  autoload :EntityQuery
+  autoload :FilterQuery
+  autoload :BulkRead
   autoload :BulkWrite
   autoload :Partition
   autoload :QueryBuilder

@@ -35,10 +35,47 @@ module TypedEAV
       def effective_fields_by_name(entity_type:, scope: nil, parent_scope: nil, mode: :partition)
         fields = visible_fields(entity_type: entity_type, scope: scope, parent_scope: parent_scope, mode: mode)
         if mode == :all_partitions
-          TypedEAV::HasTypedEAV.definitions_multimap_by_name(fields)
+          definitions_multimap_by_name(fields)
         else
-          TypedEAV::HasTypedEAV.definitions_by_name(fields)
+          definitions_by_name(fields)
         end
+      end
+
+      # Indexes field definitions by name with deterministic three-way
+      # collision resolution: when global (scope=NULL, parent_scope=NULL),
+      # scope-only (scope set, parent_scope=NULL), and full-triple (both set)
+      # fields share a name, the most-specific row wins.
+      #
+      # Sort key `[scope.nil? ? 0 : 1, parent_scope.nil? ? 0 : 1]` orders rows:
+      #   [0, 0] global              (least specific) -> comes first
+      #   [1, 0] scope-only          (middle)
+      #   [1, 1] full triple         (most specific)  -> comes last
+      #
+      # `index_by(&:name)` keeps the LAST entry on duplicate keys (Rails
+      # convention via `Array#to_h`), so most-specific wins. The two-key sort
+      # extends the prior "scoped beats global" rule into "two-key beats
+      # one-key beats global" without changing the index_by-last-wins
+      # mechanism. The `(scope=NULL, parent_scope=NOT NULL)` slot is
+      # unreachable by construction (orphan-parent invariant in Field::Base),
+      # so the ordering is exhaustive across the three valid shapes.
+      #
+      # Shared by the class-query path (FilterQuery / BulkRead / EntityQuery)
+      # and the instance path (HasTypedEAV::InstanceMethods#typed_eav_defs_by_name)
+      # so the two cannot drift. Lives on Partition because partition-tuple
+      # precedence is a partition concept.
+      def definitions_by_name(defs)
+        defs.to_a
+            .sort_by { |d| [d.scope.nil? ? 0 : 1, d.parent_scope.nil? ? 0 : 1] }
+            .index_by(&:name)
+      end
+
+      # Indexes field definitions by name into a multi-map (one name ->
+      # array of fields). Used by the class-query path under
+      # `TypedEAV.unscoped { }`, where the same field name may legitimately
+      # exist across multiple tenant partitions and we must OR-across all
+      # matching field_ids per filter rather than collapse to a single row.
+      def definitions_multimap_by_name(defs)
+        defs.to_a.group_by(&:name)
       end
 
       # All sections visible from the same tuple as field definitions.

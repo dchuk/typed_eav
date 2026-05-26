@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Internal** `TypedEAV::HasTypedEAV.definitions_by_name` and
+  `TypedEAV::HasTypedEAV.definitions_multimap_by_name` moved to
+  `TypedEAV::Partition.definitions_by_name` and
+  `TypedEAV::Partition.definitions_multimap_by_name`. These helpers were
+  technically callable from application code but not documented; partition-
+  tuple precedence is a partition concept and the new home reflects that.
+  External callers (if any) should update the call site. See ADR-0002.
+- `TypedEAV::HasTypedEAV` split into a slim macro module
+  (`lib/typed_eav/has_typed_eav.rb`) + a per-instance methods file
+  (`lib/typed_eav/has_typed_eav/instance_methods.rb`) + a new top-level
+  `TypedEAV::EntityQuery` module (class-method orchestration) +
+  `TypedEAV::FilterQuery` (multi-filter SQL composition) +
+  `TypedEAV::BulkRead` (bulk per-record reads). Public class-method and
+  instance-method signatures on host AR models are unchanged. See ADR-0002.
+
 ## [0.2.1] - 2026-05-08
 
 Metadata-only release.

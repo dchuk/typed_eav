@@ -7,7 +7,7 @@ require "spec_helper"
 # Phase 6 Plan 05: Bulk write API.
 #
 # `Entity.bulk_set_typed_eav_values(records, values_by_field_name, version_grouping:)`
-# is a class method on `ClassQueryMethods` that sets the same field-value
+# is a class method on `TypedEAV::EntityQuery` that sets the same field-value
 # pairs on every record in `records` inside ONE outer ActiveRecord
 # transaction with a savepoint-per-record failure-isolation envelope.
 #
