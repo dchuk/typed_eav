@@ -794,7 +794,7 @@ exactly three method overrides.
   Contact.where_typed_eav(name: "manager", op: :references, value: 42)  # filter by FK
   ```
 
-- **Summary:** The built-in field types **Image, File, Reference, Currency, Percentage** all preserve the cast-tuple contract (`[casted, invalid?]`), the operator-dispatch model (`supported_operators` + `operator_column` for multi-cell types), and the no-hardcoded-attribute-references foundational principle. The multi-cell extension surface (`read_value`, `apply_default_to`, `operator_column`, and `write_value`) is the canonical way to build any future external multi-cell field type.
+- **Summary:** The built-in field types **Image, File, Reference, Currency, Percentage** all preserve the cast-tuple contract (`[casted, invalid?]`), the operator-dispatch model (`supported_operators` + `operator_column` for multi-cell types), and the no-hardcoded-attribute-references foundational principle. The multi-cell extension surface (`read_value`, `write_value`, `apply_default`, and `operator_column`) is the canonical way to build any future external multi-cell field type.
 
 ## Validation Behavior
 

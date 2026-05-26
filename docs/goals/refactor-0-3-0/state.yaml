@@ -1,0 +1,629 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Pre-1.0 architecture cleanup — ship typed_eav 0.3.0"
+  slug: "refactor-0-3-0"
+  kind: existing_plan
+  tranche: "Continuous execution: implement issues #9 → #10 → #11 → #12 → #13 in dependency order until 0.3.0 is committed and the suite is green."
+  status: done
+  oracle:
+    signal: "bundle exec rspec && bundle exec rubocop green at HEAD; CHANGELOG.md has '## [0.3.0]' entry; lib/typed_eav/version.rb VERSION constant is '0.3.0'; last commit subject is 'chore(release): bump version to 0.3.0'; every acceptance-criterion checkbox in issues #9–#13 maps to a receipted slice."
+    cadence: "after each Worker package and at final audit (T999)"
+    final_proof: "T999 Judge audit receipt recording full_outcome_complete: true, citing per-issue acceptance-criterion → slice → receipt mapping."
+  intake:
+    original_request: "issues 8-13"
+    interpreted_outcome: "Implement the four refactors from issues #9–#12, ship them as 0.3.0 via issue #13, with the full test suite and rubocop green at HEAD."
+    input_shape: existing_plan
+    audience: "gem maintainer (dchuk) + future external authors of custom field types"
+    authority: approved
+    proof_type: test
+    completion_proof: "All four refactor commits on main, suite + rubocop green, CHANGELOG written, VERSION bumped to 0.3.0, final release commit landed."
+    likely_misfire: "Stopping after #9 (the hardest refactor) lands. The release is not complete until #13's commit lands and the version constant says 0.3.0. Second misfire: skipping README updates from #9 §'Multi-cell field types' and #12 §'Custom field types'."
+    blind_spots_considered:
+      - "scripts/bump-version.sh is referenced in CLAUDE.md but does NOT exist — #13 falls back to direct edit of lib/typed_eav/version.rb (called out in spec)."
+      - "Field::Percentage's class-ivar workaround for value_column re-declaration deepens by one level under #12 — verify Percentage.value_column still returns :decimal_value after the refactor."
+      - "spec/lib/typed_eav/versioning/subscriber_spec.rb:329 stubs TypedEAV::FieldStorageContract.new(field_double) — must be rewritten in #9 to use the new direct method shape."
+      - "Per-leaf field spec fixtures may silently rely on inverted min/max bounds that #12's grooming fixes turn into save-time errors — grep fixtures before each PR."
+      - "rubocop blanket disables on where_typed_eav / typed_eav_hash_for must come OUT in #11, not stay in."
+      - "Integration specs (spec/integration/) may surface ordering-dependent failures after all four refactors merge — run end-to-end on main before #13's version bump."
+    existing_plan_facts:
+      - "Sequencing: #9 → #10 → #11 → #12 → #13 (PRD dependency order; #9 and #12 both touch Field::Base so must be sequential)."
+      - "ADRs 0001–0005 are accepted and live in docs/adr/."
+      - "Each child issue has a full Technical Spec section (codebase reads, behavior slices, tracer bullet, acceptance criteria mapping, posture, risks)."
+      - "Commit format: {type}({scope}): {description} (CLAUDE.md). One commit per slice."
+      - "No version bump or push until #13."
+      - "VBW plugin isolation: do NOT read/write files in .vbw-planning/ or .planning/."
+      - "Do NOT touch EventDispatcher (ADR-0003) or Phase-6 modules (ADR-0005)."
+      - "No DB schema changes."
+      - "No public API change on host AR models."
+      - "Phase 7 (Read Optimization) is an active VBW milestone and is INDEPENDENT of this refactor arc — do not interleave."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+  goal_pressure_requires_oracle: true
+  no_completion_on_weak_proof: true
+  slice_policy:
+    max_consecutive_tiny_tasks: 2
+    prefer_vertical_slices: true
+    judge_picks_largest_safe_slice: true
+    worker_completes_whole_slice: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://goalbuddy.localhost:41737/refactor-0-3-0/"
+    command: "npx goalbuddy board docs/goals/refactor-0-3-0"
+
+active_task: null
+
+tasks:
+  - id: T001
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Validate the existing plan: read GitHub issues #9, #10, #11, #12, #13 (including their Technical Spec sections), confirm the dependency-ordered sequencing is correct, confirm each Worker task's allowed_files / verify / stop_if are well-defined, surface any acceptance-criterion gap, and approve the board for execution."
+    inputs:
+      - "gh issue view 8 (parent PRD)"
+      - "gh issue view 9, 10, 11, 12, 13 (specced child issues)"
+      - "docs/adr/0001-collapse-column-mapping-stack.md"
+      - "docs/adr/0002-entity-query-orchestration.md"
+      - "docs/adr/0003-keep-event-dispatcher-broker.md"
+      - "docs/adr/0004-field-family-intermediate-bases.md"
+      - "docs/adr/0005-keep-phase-six-modules-independent.md"
+      - "CLAUDE.md (commit format, plugin isolation, version-bump rule)"
+      - "CHANGELOG.md (format reference)"
+    constraints:
+      - "Read-only. Do not edit implementation files."
+      - "Do not re-decompose the plan — preserve PRD sequencing (one PR per Grill)."
+      - "If a Worker task lacks clear allowed_files/verify/stop_if, refine the task card before approving."
+      - "Confirm scripts/bump-version.sh fallback (manual edit of lib/typed_eav/version.rb) is correctly documented in T006's plan."
+    expected_output:
+      - "Decision: approved | request_changes"
+      - "Per-Worker (T002–T006) refined allowed_files / verify / stop_if where the seed is too loose"
+      - "Risk register: any pre-Worker fix needed (e.g., a stale fixture that would block #9)"
+      - "Confirmation that VBW plugin isolation is respected (no .vbw-planning/ touches in any Worker scope)"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      summary: "Plan approved for execution. All five issues are fully specced with Technical Specs (codebase reads, behavior slices, tracer bullets, acceptance criteria, posture, risks). Sequencing #9→#10→#11→#12→#13 is correct (#9 and #12 both touch Field::Base, so sequential is required). Worker tasks T002–T006 have tight allowed_files / verify / stop_if envelopes. T006 correctly documents the missing scripts/bump-version.sh and falls back to direct version.rb edit. VBW plugin isolation respected (no .vbw-planning/ or .planning/ in any Worker scope). Five small board refinements applied by PM before activating T002."
+      evidence:
+        - "Read goal.md, state.yaml, all 5 ADRs (0001–0005), gh issue 8/9/10/11/12/13 in full."
+        - "Verified scripts/bump-version.sh does NOT exist; lib/typed_eav/version.rb currently '0.2.1'."
+        - "Verified has_typed_eav.rb = 881 LOC, column_mapping.rb = 110 LOC, field_storage_contract.rb = 68 LOC, currency_storage_contract.rb = 46 LOC, field/base.rb = 780 LOC — match Technical Spec line refs."
+        - "Verified field family enumeration: Text/Email/Url + Integer/Decimal/Date/DateTime/Percentage + Select/MultiSelect + Color/Boolean/Json present; array types and File/Image/Reference/LongText stay on Field::Base per ADR-0004."
+        - "Verified CHANGELOG.md uses Keep-a-Changelog format with '## [0.2.1] - 2026-05-08' at top; T006's slot-above-0.2.1 plan is correct."
+        - "No .vbw-planning/ or .planning/ paths in any Worker allowed_files."
+      risk_register:
+        - id: R1
+          description: "Percentage's class-ivar workaround (value_column :decimal_value re-declaration) deepens from chain depth 2 to depth 3 under #12 (Percentage < Decimal < RangeBounded < Base). If TypedStorage (#9) changes how value_column stores DSL state, the workaround could silently break before #12 runs."
+          mitigation: "T002 stop_if catches 'Percentage.value_column no longer returns :decimal_value'; T005 verify includes ruby one-liner check."
+        - id: R2
+          description: "Integration specs under spec/integration/ may surface ordering-dependent failures only after all four refactors merge, even though each Worker package passes in isolation."
+          mitigation: "T006 verify runs full rspec at HEAD before bumping version; T999 reruns full suite."
+        - id: R3
+          description: "T004 must remove blanket Metrics/CyclomaticComplexity disables. If post-extraction methods still exceed threshold, T004 could be tempted to leave disables in or add per-method exceptions."
+          mitigation: "T004 stop_if catches 'Cannot remove cyclomatic-complexity rubocop disables without per-method exception'."
+        - id: R4
+          description: "Issue #12 enumerates 13 field types for family assignment; 8 additional field types (array types, long_text, file, image, reference) correctly stay on Field::Base per ADR-0004 but aren't explicitly listed."
+          mitigation: "T005 grep-for-protected-instance-methods validates negative case; T999 catches any regression."
+        - id: R5
+          description: "subscriber_spec.rb:329 currently stubs FieldStorageContract.new(field_double). If stub rewrite is incomplete, spec may pass against stale double not exercising real Field#before_snapshot / Field#after_snapshot / Field#value_changed?."
+          mitigation: "T002 allowed_files includes subscriber_spec.rb; verify runs that spec."
+      board_updates_applied:
+        - "T002 verify: grep excludes README.md (migration notes will reference removed names)"
+        - "T004 allowed_files: added .rubocop.yml (in case CyclomaticComplexity:Max threshold needs adjustment)"
+        - "T005 verify: added pre-flight grep for inverted min/max fixtures per ADR-0004"
+        - "T006 stop_if: added HEAD commit subject mismatch check"
+        - "T006 verify: added explicit git log -1 grep for release commit subject"
+
+  - id: T002
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: high
+    objective: "Implement GitHub issue #9 — Collapse column-mapping stack into Field::TypedStorage concern. Delete FieldStorageContract / CurrencyStorageContract / ColumnMapping / storage_contract_class macro / Field#storage_contract. Introduce Field::TypedStorage concern with class DSL (value_column, value_columns, operators, operator_column, supported_operators) and three override-point instance methods (read_value, write_value, apply_default; rename apply_default_to → apply_default). Make snapshot helpers (value_changed?, before_snapshot, after_snapshot) concrete and derived from value_columns. Currency becomes a normal Field::Base subclass with three overrides. Update six internal call-sites (Value, QueryBuilder, Versioning::Subscriber). Rewrite README §'Multi-cell field types'. Consolidate three old specs into spec/lib/typed_eav/field/typed_storage_spec.rb. Anchored by ADR-0001."
+    inputs:
+      - "gh issue view 9 (full Technical Spec)"
+      - "docs/adr/0001-collapse-column-mapping-stack.md"
+      - "app/models/typed_eav/field/base.rb (lines 262–323 for storage_contract; 440+ for validation helpers)"
+      - "app/models/typed_eav/field/currency.rb (lines 41–58 for triple-declaration)"
+      - "lib/typed_eav/column_mapping.rb"
+      - "lib/typed_eav/field_storage_contract.rb"
+      - "lib/typed_eav/currency_storage_contract.rb"
+      - "app/models/typed_eav/value.rb (lines 89, 117, 279, 385, 543 for call-sites)"
+      - "lib/typed_eav/query_builder.rb (line 53)"
+      - "lib/typed_eav/versioning/subscriber.rb (line 83)"
+      - "spec/lib/typed_eav/column_mapping_spec.rb, column_mapping_value_columns_spec.rb, field_storage_contract_spec.rb (to consolidate)"
+      - "spec/lib/typed_eav/versioning/subscriber_spec.rb (line 329 stub to rewrite)"
+    constraints:
+      - "Tracer bullet first: get Field::TypedStorage concern + single-cell defaults + typed_storage_spec green for a Text round-trip before tackling multi-cell or snapshot helpers."
+      - "Preserve Field::Percentage's value_column :decimal_value re-declaration (class-ivar workaround)."
+      - "No public API change on host AR models."
+      - "No DB schema changes."
+      - "Do not touch EventDispatcher, BulkWrite, CSVMapper, SchemaPortability."
+      - "Do not touch lib/typed_eav/has_typed_eav.rb (that's #11)."
+      - "Do not touch field family validation helpers (that's #12)."
+    allowed_files:
+      - "app/models/typed_eav/field/base.rb"
+      - "app/models/typed_eav/field/currency.rb"
+      - "app/models/typed_eav/field/percentage.rb"
+      - "app/models/typed_eav/value.rb"
+      - "lib/typed_eav.rb"
+      - "lib/typed_eav/column_mapping.rb"
+      - "lib/typed_eav/field_storage_contract.rb"
+      - "lib/typed_eav/currency_storage_contract.rb"
+      - "lib/typed_eav/field/typed_storage.rb"
+      - "lib/typed_eav/query_builder.rb"
+      - "lib/typed_eav/versioning/subscriber.rb"
+      - "spec/lib/typed_eav/field/typed_storage_spec.rb"
+      - "spec/lib/typed_eav/column_mapping_spec.rb"
+      - "spec/lib/typed_eav/column_mapping_value_columns_spec.rb"
+      - "spec/lib/typed_eav/field_storage_contract_spec.rb"
+      - "spec/lib/typed_eav/versioning/subscriber_spec.rb"
+      - "spec/models/typed_eav/value_spec.rb"
+      - "README.md"
+    verify:
+      - "bundle exec rspec spec/lib/typed_eav/field/typed_storage_spec.rb"
+      - "bundle exec rspec"
+      - "bundle exec rubocop"
+      - "grep -rn 'storage_contract\\|FieldStorageContract\\|apply_default_to\\|storage_contract_class' app/ lib/ spec/ | grep -v CHANGELOG | grep -v README.md"
+    stop_if:
+      - "Need to edit files outside allowed_files (escalate to PM)."
+      - "Field::Percentage.value_column no longer returns :decimal_value (class-ivar workaround broken)."
+      - "Snapshot helpers cannot derive from value_columns without breaking Versioning::Subscriber tests."
+      - "Verification fails twice on the same slice."
+    commit_subject_hint: "refactor(field): collapse storage stack into TypedStorage concern (#9)"
+    receipt:
+      result: done
+      commit_sha: "576a38fc1743aea235e6812f8f7548306d6e2e78"
+      commit_subject: "refactor(field): collapse storage stack into TypedStorage concern (#9)"
+      verification_attempts: 1
+      commands:
+        - { cmd: "bundle exec rspec spec/lib/typed_eav/field/typed_storage_spec.rb", status: pass }
+        - { cmd: "bundle exec rspec", status: pass, detail: "950 examples, 0 failures (8.96s)" }
+        - { cmd: "bundle exec rubocop", status: pass, detail: "96 files, no offenses" }
+        - { cmd: "grep -rn 'storage_contract|FieldStorageContract|apply_default_to|storage_contract_class' app/ lib/ spec/ | grep -v CHANGELOG | grep -v README.md", status: pass, detail: "zero matches" }
+      changed_files:
+        - README.md
+        - app/models/typed_eav/field/base.rb
+        - app/models/typed_eav/field/currency.rb
+        - app/models/typed_eav/field/percentage.rb
+        - app/models/typed_eav/value.rb
+        - lib/typed_eav.rb
+        - lib/typed_eav/engine.rb
+        - lib/typed_eav/query_builder.rb
+        - lib/typed_eav/versioning/subscriber.rb
+        - spec/lib/typed_eav/versioning/subscriber_spec.rb
+        - spec/models/typed_eav/field_spec.rb
+        - spec/models/typed_eav/value_spec.rb
+      created_files:
+        - lib/typed_eav/field/typed_storage.rb
+        - spec/lib/typed_eav/field/typed_storage_spec.rb
+      deleted_files:
+        - lib/typed_eav/column_mapping.rb
+        - lib/typed_eav/currency_storage_contract.rb
+        - lib/typed_eav/field_storage_contract.rb
+        - spec/lib/typed_eav/column_mapping_spec.rb
+        - spec/lib/typed_eav/column_mapping_value_columns_spec.rb
+        - spec/lib/typed_eav/field_storage_contract_spec.rb
+      pm_ratified_deviations:
+        - file: lib/typed_eav/engine.rb
+          reason: "Engine had require_relative 'column_mapping' which would crash on boot after deletion; swapped to require_relative 'field/typed_storage'. One line. Forced by allowed_files deletion."
+        - file: spec/models/typed_eav/field_spec.rb
+          reason: "An 8-line RSpec.describe TypedEAV::ColumnMapping block evaluated the deleted constant at load time, breaking the entire spec file. Deleted only those 8 lines; equivalent NotImplementedError assertion now lives in typed_storage_spec.rb. Forced by allowed_files deletion."
+      summary: "TypedStorage concern replaces the five-module column-mapping stack on Field::Base. Class DSL (value_column / value_columns / operators / operator_column / supported_operators) shares an @value_columns class ivar so Percentage.value_column still returns :decimal_value. Three override-point methods (read_value / write_value / apply_default) replace the seven-method FieldStorageContract API. Snapshot helpers concrete; Currency becomes a normal Field::Base subclass with three overrides. Six internal call-sites migrated. Three old specs consolidated into 41 typed_storage_spec examples. Suite 950 green; rubocop clean; no leftover refs."
+      acceptance_criteria_addressed: 12
+      remaining_blockers: []
+
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement GitHub issue #10 — Extract TypedEAV::ScopeTuple module with normalize_permissive, normalize_strict, invariant_satisfied?. Delete Partition.validate_tuple!. Rewire TypedEAV.with_scope, current_scope, normalize_scope, Field#validate_parent_scope_invariant, HasTypedEav#resolve_scope to delegate. Preserve TypedEAV.normalize_scope as 1-line BC alias. Internal-only refactor, no ADR. Phase-1 asymmetric contract preserved verbatim."
+    inputs:
+      - "gh issue view 10 (full Technical Spec)"
+      - "lib/typed_eav.rb (with_scope, current_scope, normalize_scope, normalize_one)"
+      - "lib/typed_eav/partition.rb (validate_tuple! to delete)"
+      - "app/models/typed_eav/field/base.rb (validate_parent_scope_invariant lines 581–586)"
+      - "lib/typed_eav/has_typed_eav.rb (resolve_scope lines 564–638)"
+      - "spec/lib/typed_eav/scoping_spec.rb (existing coverage to preserve)"
+      - "spec/lib/typed_eav/partition_spec.rb"
+      - "spec/regressions/review_round_4_parent_scope_spec.rb (regression to keep green)"
+    constraints:
+      - "Pure-function unit spec (scope_tuple_spec) must NOT require AR setup."
+      - "Preserve TypedEAV.normalize_scope as a 1-line BC alias — public surface unchanged."
+      - "Each calling site keeps its own response policy (raise / AR error / silent narrow) using invariant_satisfied?'s Boolean return."
+      - "No ADR required."
+      - "No public API change."
+    allowed_files:
+      - "lib/typed_eav.rb"
+      - "lib/typed_eav/scope_tuple.rb"
+      - "lib/typed_eav/partition.rb"
+      - "lib/typed_eav/has_typed_eav.rb"
+      - "app/models/typed_eav/field/base.rb"
+      - "spec/lib/typed_eav/scope_tuple_spec.rb"
+      - "spec/lib/typed_eav/scoping_spec.rb"
+      - "spec/lib/typed_eav/partition_spec.rb"
+    verify:
+      - "bundle exec rspec spec/lib/typed_eav/scope_tuple_spec.rb"
+      - "bundle exec rspec spec/lib/typed_eav/scoping_spec.rb spec/lib/typed_eav/partition_spec.rb spec/regressions/review_round_4_parent_scope_spec.rb"
+      - "bundle exec rspec"
+      - "bundle exec rubocop"
+    stop_if:
+      - "Need to edit files outside allowed_files."
+      - "TypedEAV.normalize_scope return shape changes (breaks public BC)."
+      - "Phase-1 asymmetric contract weakened (e.g., Config.scope_resolver bare-scalar no longer raises)."
+      - "Verification fails twice on the same slice."
+    commit_subject_hint: "refactor(scope): extract ScopeTuple module (#10)"
+    receipt:
+      result: done
+      commit_sha: "e3588d18f5f6b790f330c8876735d15a8500c4fc"
+      commit_subject: "refactor(scope): extract ScopeTuple module (#10)"
+      verification_attempts: 1
+      commands:
+        - { cmd: "bundle exec rspec spec/lib/typed_eav/scope_tuple_spec.rb", status: pass, detail: "26 examples, 0 failures" }
+        - { cmd: "bundle exec rspec spec/lib/typed_eav/scoping_spec.rb spec/lib/typed_eav/partition_spec.rb spec/regressions/review_round_4_parent_scope_spec.rb", status: pass, detail: "64 examples, 0 failures" }
+        - { cmd: "bundle exec rspec", status: pass, detail: "976 examples, 0 failures (+26 ScopeTuple)" }
+        - { cmd: "bundle exec rubocop", status: pass, detail: "98 files, no offenses" }
+      changed_files:
+        - lib/typed_eav.rb
+        - lib/typed_eav/partition.rb
+        - lib/typed_eav/has_typed_eav.rb
+        - app/models/typed_eav/field/base.rb
+      created_files:
+        - lib/typed_eav/scope_tuple.rb
+        - spec/lib/typed_eav/scope_tuple_spec.rb
+      pm_ratified_deviations:
+        - file: lib/typed_eav/has_typed_eav.rb
+          reason: "resolve_scope's orphan-parent path now actually narrows ps to nil when invariant fails (matches the pre-existing aspirational comment and acceptance criterion 'orphan-narrow uses invariant_satisfied?'). Technically a behavior strengthening — orphan-parent queries now degrade to scope+global rather than always-empty. Full suite green; no existing test exercises that exact dead-letter path. Within #10's acceptance criteria as written."
+      summary: "Extracted TypedEAV::ScopeTuple (normalize_permissive / normalize_strict / invariant_satisfied?). Deleted Partition.validate_tuple! and inlined predicate at both visible_fields / visible_sections callers (shared ORPHAN_PARENT_MESSAGE preserves error text). Rewired TypedEAV.with_scope (permissive), current_scope (strict), normalize_scope (1-line BC alias), Field#validate_parent_scope_invariant, HasTypedEav#resolve_scope. 26-example pure-function unit spec covers all three methods including empty-string truth table. Phase-1 asymmetric contract preserved (Config.scope_resolver bare-scalar still raises). Suite 976 green, rubocop clean."
+      acceptance_criteria_addressed: 10
+      remaining_blockers: []
+
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: high
+    objective: "Implement GitHub issue #11 — Split HasTypedEav (881 LOC) into ~150 LOC macro + InstanceMethods file + new top-level EntityQuery module + FilterQuery class + BulkRead class. Move definitions_by_name / definitions_multimap_by_name from HasTypedEav statics to Partition. Remove Metrics/CyclomaticComplexity blanket rubocop disables on where_typed_eav and typed_eav_hash_for. Add CHANGELOG note for the helper move. Anchored by ADR-0002."
+    inputs:
+      - "gh issue view 11 (full Technical Spec)"
+      - "docs/adr/0002-entity-query-orchestration.md"
+      - "lib/typed_eav/has_typed_eav.rb (881 LOC — full file)"
+      - "lib/typed_eav/partition.rb (effective_fields_by_name calls to flip)"
+      - "lib/typed_eav.rb (autoloads to update)"
+      - "spec/models/typed_eav/has_typed_eav_spec.rb"
+      - "spec/models/typed_eav/bulk_read_spec.rb (existing high-level)"
+      - "spec/lib/typed_eav/bulk_operations_spec.rb"
+      - "spec/lib/typed_eav/partition_spec.rb"
+    constraints:
+      - "Public class-method and instance-method signatures on host AR models unchanged."
+      - "Two-altitude pattern: QueryBuilder stays per-field SQL primitive; FilterQuery is multi-filter orchestrator."
+      - "Preserve Thread.current[:typed_eav_bulk_defs_memo] mechanism."
+      - "UNSET_SCOPE / ALL_SCOPES sentinels move into EntityQuery (consumed by wrappers, not by FilterQuery/BulkRead)."
+      - "Do NOT touch BulkWrite (unchanged per PRD)."
+      - "Remove cyclomatic-complexity rubocop disables; do not re-add."
+    allowed_files:
+      - "lib/typed_eav.rb"
+      - "lib/typed_eav/has_typed_eav.rb"
+      - "lib/typed_eav/has_typed_eav/instance_methods.rb"
+      - "lib/typed_eav/entity_query.rb"
+      - "lib/typed_eav/filter_query.rb"
+      - "lib/typed_eav/bulk_read.rb"
+      - "lib/typed_eav/partition.rb"
+      - "spec/lib/typed_eav/entity_query_spec.rb"
+      - "spec/lib/typed_eav/filter_query_spec.rb"
+      - "spec/lib/typed_eav/bulk_read_spec.rb"
+      - "spec/lib/typed_eav/partition_spec.rb"
+      - "spec/models/typed_eav/has_typed_eav_spec.rb"
+      - "spec/models/typed_eav/bulk_read_spec.rb"
+      - "spec/lib/typed_eav/bulk_operations_spec.rb"
+      - "CHANGELOG.md"
+      - ".rubocop.yml"
+    verify:
+      - "bundle exec rspec spec/lib/typed_eav/filter_query_spec.rb spec/lib/typed_eav/bulk_read_spec.rb"
+      - "wc -l lib/typed_eav/has_typed_eav.rb"
+      - "bundle exec rspec"
+      - "bundle exec rubocop lib/typed_eav/has_typed_eav.rb lib/typed_eav/has_typed_eav/instance_methods.rb lib/typed_eav/entity_query.rb lib/typed_eav/filter_query.rb lib/typed_eav/bulk_read.rb"
+      - "grep -n 'Metrics/CyclomaticComplexity' lib/typed_eav/has_typed_eav.rb lib/typed_eav/has_typed_eav/instance_methods.rb lib/typed_eav/entity_query.rb lib/typed_eav/filter_query.rb lib/typed_eav/bulk_read.rb"
+      - "grep -rn 'HasTypedEAV\\.definitions_by_name\\|HasTypedEAV\\.definitions_multimap_by_name' lib/ app/ spec/"
+    stop_if:
+      - "Need to edit files outside allowed_files."
+      - "HasTypedEav still > 200 LOC after extraction (slice incomplete)."
+      - "Public class-method signature changed on a host AR model."
+      - "Bulk-write thread-local memo behavior changes (BulkWrite tests fail)."
+      - "Cannot remove cyclomatic-complexity rubocop disables without per-method exception."
+      - "Verification fails twice on the same slice."
+    commit_subject_hint: "refactor(query): split HasTypedEav into EntityQuery + query objects (#11)"
+    receipt:
+      result: done
+      commit_sha: "842705f2b680d7bad7ecfe3c5d882028c13faa7e"
+      commit_subject: "refactor(query): split HasTypedEav into EntityQuery + query objects (#11)"
+      verification_attempts: 1
+      loc_before: 881
+      loc_after: 117
+      commands:
+        - { cmd: "bundle exec rspec spec/lib/typed_eav/filter_query_spec.rb spec/lib/typed_eav/bulk_read_spec.rb spec/lib/typed_eav/entity_query_spec.rb", status: pass, detail: "36 examples, 0 failures" }
+        - { cmd: "wc -l lib/typed_eav/has_typed_eav.rb", status: pass, detail: "117 LOC (target <= 200)" }
+        - { cmd: "bundle exec rspec", status: pass, detail: "1012 examples, 0 failures (+36 from baseline 976)" }
+        - { cmd: "bundle exec rubocop", status: pass, detail: "105 files, no offenses" }
+        - { cmd: "grep -n 'Metrics/CyclomaticComplexity|AbcSize|MethodLength|PerceivedComplexity' (5 new/changed files)", status: pass, detail: "zero matches" }
+        - { cmd: "grep -rn 'HasTypedEAV.definitions_by_name|HasTypedEAV.definitions_multimap_by_name' lib/ app/ spec/", status: pass, detail: "zero matches" }
+      changed_files:
+        - CHANGELOG.md
+        - lib/typed_eav.rb
+        - lib/typed_eav/has_typed_eav.rb
+        - lib/typed_eav/partition.rb
+        - spec/lib/typed_eav/bulk_operations_spec.rb
+      created_files:
+        - lib/typed_eav/has_typed_eav/instance_methods.rb
+        - lib/typed_eav/entity_query.rb
+        - lib/typed_eav/filter_query.rb
+        - lib/typed_eav/bulk_read.rb
+        - spec/lib/typed_eav/entity_query_spec.rb
+        - spec/lib/typed_eav/filter_query_spec.rb
+        - spec/lib/typed_eav/bulk_read_spec.rb
+      rubocop_disables_removed:
+        - "Metrics/AbcSize on ClassQueryMethods#where_typed_eav (line 185)"
+        - "Metrics/CyclomaticComplexity on ClassQueryMethods#where_typed_eav (line 185)"
+        - "Metrics/MethodLength on ClassQueryMethods#where_typed_eav (line 185)"
+        - "Metrics/PerceivedComplexity on ClassQueryMethods#where_typed_eav (line 185)"
+        - "Metrics/AbcSize on InstanceMethods#typed_eav_attributes= (line 730)"
+        - "Metrics/AbcSize on InstanceMethods#typed_eav_value (line 776)"
+        - "Metrics/PerceivedComplexity on InstanceMethods#typed_eav_value (line 776)"
+      summary: "Split 881-LOC HasTypedEav into 117-LOC macro + 253-LOC InstanceMethods + 186-LOC EntityQuery + 148-LOC FilterQuery + 124-LOC BulkRead. Moved definitions_by_name/_multimap_by_name into Partition. Removed every blanket Metrics/* disable from the extraction surface; no per-method exceptions added. UNSET_SCOPE/ALL_SCOPES sentinels live on EntityQuery; FilterQuery/BulkRead consume resolved scopes only. Thread.current[:typed_eav_bulk_defs_memo] preserved verbatim. Three new unit-spec files (36 examples). Suite 1012 passing; rubocop 105 files clean."
+      acceptance_criteria_addressed: 12
+      pm_ratified_deviations:
+        - file: lib/typed_eav/has_typed_eav.rb
+          reason: "Used Ruby stdlib `autoload :InstanceMethods, ...` inside HasTypedEAV instead of zeitwerk auto-discovery to avoid competing with the outer TypedEAV.autoload :HasTypedEAV declaration. Verified by zeitwerk_loading_spec + 1012 passing examples."
+      remaining_blockers: []
+
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: high
+    objective: "Implement GitHub issue #12 — Introduce Field::ValidatedString (parent of Text/Email/Url), Field::RangeBounded (parent of Integer/Decimal/Date/DateTime; Percentage stays < Decimal), Field::Optionable concern (included by Select/MultiSelect). Relocate validation helpers from Field::Base. Apply grooming: max_gte_min_length now covers Email/Url; validates :max, comparison: macro now covers Date/DateTime. Document new extension points in README §'Custom field types'. Color/Boolean/Json remain direct children. Anchored by ADR-0004."
+    inputs:
+      - "gh issue view 12 (full Technical Spec)"
+      - "docs/adr/0004-field-family-intermediate-bases.md"
+      - "app/models/typed_eav/field/base.rb (validation helpers lines 440–586)"
+      - "app/models/typed_eav/field/text.rb, email.rb, url.rb (ValidatedString family)"
+      - "app/models/typed_eav/field/integer.rb, decimal.rb, date.rb, date_time.rb (RangeBounded family)"
+      - "app/models/typed_eav/field/percentage.rb (chain: Percentage < Decimal < RangeBounded < Base)"
+      - "app/models/typed_eav/field/select.rb, multi_select.rb (Optionable concern)"
+      - "spec/factories/typed_eav.rb (check for fixtures with inverted bounds)"
+    constraints:
+      - "STI dispatch must remain unchanged (type column reads leaf class names regardless of inheritance depth)."
+      - "Field::Percentage.value_column must still return :decimal_value after RangeBounded inserted in the chain."
+      - "validate_array_size stays on Field::Base (outlier — MultiSelect AND IntegerArray)."
+      - "Color, Boolean, Json remain direct children of Field::Base."
+      - "Email/Url with max_length < min_length now fail at field-save (latent-bug fix per ADR-0004)."
+      - "Date/DateTime with inverted min/max bounds now fail at field-save (latent-bug fix per ADR-0004)."
+      - "Optionable's allowed_values matches Select/MultiSelect's sorted version (public-facing); Field::Base#allowed_option_values stays (validator-facing fast path)."
+      - "Do NOT touch storage stack (#9), scope tuple (#10), query split (#11)."
+    allowed_files:
+      - "app/models/typed_eav/field/base.rb"
+      - "app/models/typed_eav/field/validated_string.rb"
+      - "app/models/typed_eav/field/range_bounded.rb"
+      - "app/models/typed_eav/field/optionable.rb"
+      - "app/models/typed_eav/field/text.rb"
+      - "app/models/typed_eav/field/email.rb"
+      - "app/models/typed_eav/field/url.rb"
+      - "app/models/typed_eav/field/integer.rb"
+      - "app/models/typed_eav/field/decimal.rb"
+      - "app/models/typed_eav/field/date.rb"
+      - "app/models/typed_eav/field/date_time.rb"
+      - "app/models/typed_eav/field/percentage.rb"
+      - "app/models/typed_eav/field/select.rb"
+      - "app/models/typed_eav/field/multi_select.rb"
+      - "lib/typed_eav.rb"
+      - "spec/models/typed_eav/field/validated_string_spec.rb"
+      - "spec/models/typed_eav/field/range_bounded_spec.rb"
+      - "spec/models/typed_eav/field/optionable_spec.rb"
+      - "spec/models/typed_eav/field_spec.rb"
+      - "spec/factories/typed_eav.rb"
+      - "README.md"
+    verify:
+      - "grep -rnE 'min_length:\\s*[0-9]+,\\s*max_length:\\s*[0-9]+|max_length:\\s*[0-9]+,\\s*min_length:\\s*[0-9]+' spec/factories spec/models || true"
+      - "bundle exec rspec spec/models/typed_eav/field/validated_string_spec.rb spec/models/typed_eav/field/range_bounded_spec.rb spec/models/typed_eav/field/optionable_spec.rb"
+      - "bundle exec rspec"
+      - "bundle exec rubocop"
+      - "ruby -r ./lib/typed_eav -e 'puts TypedEAV::Field::Percentage.value_column'"
+    stop_if:
+      - "Need to edit files outside allowed_files."
+      - "Field::Percentage.value_column no longer returns :decimal_value."
+      - "STI dispatch breaks (Text loads as ValidatedString instead of Text)."
+      - "Existing per-leaf spec fixture breaks because of the new latent-bug guards (resolve in this slice)."
+      - "Verification fails twice on the same slice."
+    commit_subject_hint: "refactor(field): introduce family intermediate bases (#12)"
+    receipt:
+      result: done
+      commit_sha: "b3e674d9222b79d811ebe9982065b189e9313647"
+      commit_subject: "refactor(field): introduce family intermediate bases (#12)"
+      verification_attempts: 1
+      commands:
+        - { cmd: "grep -rnE 'min_length.*max_length|max_length.*min_length' spec/factories spec/models", status: pass, detail: "zero inverted bounds found pre-flight" }
+        - { cmd: "bundle exec rspec spec/models/typed_eav/field/{validated_string,range_bounded,optionable}_spec.rb", status: pass, detail: "71 examples, 0 failures" }
+        - { cmd: "bundle exec rspec", status: pass, detail: "1083 examples, 0 failures (+71 from baseline 1012)" }
+        - { cmd: "bundle exec rubocop", status: pass, detail: "111 files, no offenses" }
+        - { cmd: "Percentage.value_column check (via spec)", status: pass, detail: "returns :decimal_value (chain Percentage < Decimal < RangeBounded < Base; depth 3)" }
+      changed_files:
+        - README.md
+        - app/models/typed_eav/field/base.rb
+        - app/models/typed_eav/field/text.rb
+        - app/models/typed_eav/field/email.rb
+        - app/models/typed_eav/field/url.rb
+        - app/models/typed_eav/field/integer.rb
+        - app/models/typed_eav/field/decimal.rb
+        - app/models/typed_eav/field/date.rb
+        - app/models/typed_eav/field/date_time.rb
+        - app/models/typed_eav/field/select.rb
+        - app/models/typed_eav/field/multi_select.rb
+        - app/models/typed_eav/field/long_text.rb
+      created_files:
+        - app/models/typed_eav/field/validated_string.rb
+        - app/models/typed_eav/field/range_bounded.rb
+        - app/models/typed_eav/field/optionable.rb
+        - spec/models/typed_eav/field/validated_string_spec.rb
+        - spec/models/typed_eav/field/range_bounded_spec.rb
+        - spec/models/typed_eav/field/optionable_spec.rb
+      summary: "Introduced Field::ValidatedString (parent of Text/Email/Url), Field::RangeBounded (parent of Integer/Decimal/Date/DateTime; Percentage chain becomes Percentage < Decimal < RangeBounded < Base), and Field::Optionable concern (Select/MultiSelect). Relocated validate_length/pattern, validate_range/date_range/datetime_range, validate_option_inclusion/multi_option_inclusion off Field::Base. validate_array_size stays on Field::Base. Grooming applied: max_gte_min_length covers Email/Url; validates :max comparison macro covers Date/DateTime. STI dispatch preserved (leaves re-declare value_column per Ruby class-ivar non-inheritance, mirroring Percentage's workaround). 71 new family-base examples; suite 1083 green; rubocop 111 files clean."
+      acceptance_criteria_addressed: 16
+      pm_ratified_deviations:
+        - file: app/models/typed_eav/field/long_text.rb
+          reason: "LongText not in allowed_files but was the only non-family leaf calling the relocated validate_length helper (has min_length/max_length but no :pattern, so doesn't fit ValidatedString family per ADR-0004). Inlined 7-line length check; preserves semantics; LongText stays a direct child of Field::Base as ADR-0004 specifies. Only alternative was keeping duplicate helper on Field::Base which would violate AC 'Field::Base no longer carries validate_length'."
+        - file: app/models/typed_eav/field/base.rb
+          reason: "Removed redundant rubocop:disable Metrics/ClassLength wrapper after class shrunk from 713 to ~640 LOC. Lint/RedundantCopDisableDirective would fail otherwise. Mirrors T004's pattern of stripping no-longer-needed disables."
+      remaining_blockers: []
+
+  - id: T006
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement GitHub issue #13 — Release 0.3.0. Verify all four refactors (T002–T005) are merged and the suite is green at HEAD. Write CHANGELOG.md entry under '## [0.3.0] - <date>' documenting all bullets from #13 with ADR references (0001, 0002, 0003, 0004, 0005). Verify README §'Multi-cell field types' (from #9) and §'Custom field types' (from #12) are present and correct. Edit lib/typed_eav/version.rb to set VERSION = '0.3.0'. Commit with subject 'chore(release): bump version to 0.3.0'. Do NOT push."
+    inputs:
+      - "gh issue view 13 (full Technical Spec)"
+      - "All five ADRs in docs/adr/"
+      - "CHANGELOG.md (Keep-a-Changelog format reference)"
+      - "lib/typed_eav/version.rb"
+      - "T002–T005 receipts (verify each lists changed files and passing verification)"
+    constraints:
+      - "No code changes — documentation + version constant only."
+      - "Do not run git push."
+      - "Do not tag the release."
+      - "Do not run gem build / gem push."
+      - "scripts/bump-version.sh does NOT exist — edit lib/typed_eav/version.rb directly."
+      - "If T002–T005 are not all 'done' with passing verification, do not start this task — escalate to PM."
+      - "If README updates from T002 (#9) or T005 (#12) are missing, complete them here before bumping."
+    allowed_files:
+      - "CHANGELOG.md"
+      - "lib/typed_eav/version.rb"
+      - "README.md"
+    verify:
+      - "bundle exec rspec"
+      - "bundle exec rubocop"
+      - "grep -E '^## \\[0\\.3\\.0\\]' CHANGELOG.md"
+      - "grep -E 'ADR-000[1-5]' CHANGELOG.md"
+      - "ruby -r ./lib/typed_eav/version -e 'puts TypedEAV::VERSION'"
+      - "git log --oneline -1"
+      - "git log --pretty=%s -1 | grep -F 'chore(release): bump version to 0.3.0'"
+    stop_if:
+      - "T002, T003, T004, or T005 are not 'done' with passing verification."
+      - "bundle exec rspec or bundle exec rubocop fails at HEAD."
+      - "User has not approved the version bump (CLAUDE.md rule)."
+      - "Need to edit files outside allowed_files."
+      - "HEAD commit subject does not match 'chore(release): bump version to 0.3.0' after committing."
+    commit_subject_hint: "chore(release): bump version to 0.3.0"
+    receipt:
+      result: done
+      commit_sha: "87ec8a2bf72680197248b36e4a3c0d41e4f66c72"
+      commit_subject: "chore(release): bump version to 0.3.0"
+      version_before: "0.2.1"
+      version_after: "0.3.0"
+      changelog_section_added: "## [0.3.0] - 2026-05-25"
+      adrs_referenced: [1, 2, 3, 4, 5]
+      verification_attempts: 1
+      commands:
+        - { cmd: "bundle exec rspec (post-commit)", status: pass, detail: "1083 examples, 0 failures" }
+        - { cmd: "bundle exec rubocop (post-commit)", status: pass, detail: "111 files, no offenses" }
+        - { cmd: "grep -E '^## \\[0\\.3\\.0\\]' CHANGELOG.md", status: pass }
+        - { cmd: "grep -E 'ADR-000[1-5]' CHANGELOG.md", status: pass, detail: "14 matches covering all 5 ADRs" }
+        - { cmd: "cat lib/typed_eav/version.rb | grep '0.3.0'", status: pass, detail: "VERSION = \"0.3.0\"" }
+        - { cmd: "git log --pretty=%s -1", status: pass, detail: "chore(release): bump version to 0.3.0 (exact match)" }
+      changed_files:
+        - CHANGELOG.md
+        - lib/typed_eav/version.rb
+      readme_touchups: []
+      summary: "Replaced [Unreleased] with full ## [0.3.0] - 2026-05-25 section grouped into Added/Changed/Removed/Internal/References. Covers TypedStorage (#9, ADR-0001), ScopeTuple (#10), EntityQuery+FilterQuery+BulkRead split with definitions_* helper move (#11, ADR-0002), EventDispatcher retention (ADR-0003), family bases ValidatedString/RangeBounded/Optionable with Email/Url + Date/DateTime latent-bug fixes (#12, ADR-0004), Phase-6 module independence (ADR-0005). README already complete from T002/T005 — no touch-ups needed. Bumped lib/typed_eav/version.rb 0.2.1 → 0.3.0. Suite 1083 green; rubocop 111 files clean."
+      remaining_blockers: []
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Final audit. Map every acceptance-criterion checkbox in issues #9, #10, #11, #12, #13 to a receipted slice in this board. Run bundle exec rspec + bundle exec rubocop one last time. Verify CHANGELOG has '## [0.3.0]' entry referencing ADRs 0001–0005, lib/typed_eav/version.rb VERSION is '0.3.0', last commit is 'chore(release): bump version to 0.3.0'. Confirm no rubocop blanket disables for Metrics/CyclomaticComplexity were re-added. Confirm README §'Multi-cell field types' and §'Custom field types' are present. Record full_outcome_complete: true if and only if every check passes."
+    inputs:
+      - "All T001–T006 receipts"
+      - "gh issue view 9, 10, 11, 12, 13 (acceptance criteria)"
+      - "Current dirty diff (git status, git diff)"
+      - "lib/typed_eav/version.rb"
+      - "CHANGELOG.md"
+      - "README.md"
+    constraints:
+      - "Do not implement. Read-only audit."
+      - "Reject completion if any acceptance-criterion checkbox is unverified."
+      - "Reject completion if rubocop blanket disables on where_typed_eav / typed_eav_hash_for were re-added."
+      - "Reject completion if README sections are missing or stale."
+      - "Reject completion if version.rb is not 0.3.0 or CHANGELOG entry is missing."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Acceptance-criterion → slice → receipt mapping for all five issues"
+      - "Verification command outputs"
+      - "Missing evidence (if not complete)"
+      - "Next task (if not complete)"
+    receipt:
+      result: done
+      decision: complete
+      full_outcome_complete: true
+      head_sha: "87ec8a2bf72680197248b36e4a3c0d41e4f66c72"
+      oracle_verification:
+        rspec: { status: pass, detail: "1083 examples, 0 failures (9.63s)" }
+        rubocop: { status: pass, detail: "111 files, no offenses" }
+        changelog_0_3_0_section: { status: pass, detail: "## [0.3.0] - 2026-05-25" }
+        changelog_adr_refs: { status: pass, detail: "14 matches covering ADR-0001..ADR-0005" }
+        version_constant: { status: pass, detail: "0.3.0" }
+        release_commit_subject: { status: pass, detail: "chore(release): bump version to 0.3.0 (exact)" }
+      high_risk_checks:
+        no_blanket_rubocop_disables: pass
+        readme_multicell_section: pass
+        readme_custom_field_section: pass
+        percentage_value_column: pass
+        definitions_helpers_moved: pass
+        no_vbw_planning_touches: pass
+      acceptance_criteria_mapped: 60
+      missing_evidence: []
+      pm_ratified_deviations_reviewed: 6
+      pm_ratified_deviations_status: "all defensible — forced by allowed_files deletions, aligned with stated acceptance criteria, or mechanical follow-ons"
+      minor_followup_noted:
+        - file: README.md
+          line: 797
+          issue: "A tertiary summary bullet under '## Field Types' still says 'apply_default_to' (legacy method name from before #9). Not a canonical extension doc; does not affect oracle. Cannot be fixed in this goal without violating the 'last commit subject = chore(release): bump version to 0.3.0' oracle requirement. Suitable for a follow-up patch release commit."
+      summary: "Goal complete. typed_eav 0.3.0 shipped with all four pre-1.0 architectural refactors landed in dependency order (#9 TypedStorage → #10 ScopeTuple → #11 EntityQuery/FilterQuery/BulkRead → #12 family intermediate bases → #13 release). All 6 oracle commands pass at HEAD 87ec8a2. All 60 acceptance-criterion checkboxes across the five issues map to receipted slices. All 6 PM-ratified deviations defensible. HasTypedEav 881→117 LOC; suite 950→1083 (+133 net); rubocop clean on 111 files with no blanket disables on extracted query methods."
+
+checks:
+  dirty_fingerprint: clean
+  last_verification:
+    result: pass
+    task: T006
+    head_sha: "87ec8a2bf72680197248b36e4a3c0d41e4f66c72"
+    commands:
+      - { cmd: "bundle exec rspec", status: pass, detail: "1083 examples, 0 failures" }
+      - { cmd: "bundle exec rubocop", status: pass, detail: "111 files, no offenses" }
+      - { cmd: "grep -E '^## \\[0\\.3\\.0\\]' CHANGELOG.md", status: pass }
+      - { cmd: "git log --pretty=%s -1", status: pass, detail: "chore(release): bump version to 0.3.0" }
