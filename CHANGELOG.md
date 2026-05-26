@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-05-25
+
+Documentation-only release. No code or behavior changes.
+
+### Added
+
+- README §"Architecture" — full overview of the post-0.3.0 internal
+  module layout: macro entry (`HasTypedEav`), the two-altitude query
+  pattern (`EntityQuery` → `FilterQuery` → `QueryBuilder`), `BulkRead`
+  and `BulkWrite` siblings, `InstanceMethods`, `Field::TypedStorage`
+  concern, family intermediate bases (`ValidatedString`, `RangeBounded`,
+  `Optionable`), `ScopeTuple`, `Partition`, `EventDispatcher`, and the
+  Phase-6 modules (`SchemaPortability`, `CSVMapper`). Anchored to ADRs
+  0001–0005 throughout.
+
+### Removed
+
+- `TEST_PLAN.md` — pre-0.3.0 test-sweep planning artifact (2026-04-08).
+  Described specs for modules deleted in #9. Git history preserves it.
+- `typed_eav-enhancement-plan.md` — pre-0.3.0 phased roadmap. References
+  v0.1.0 line numbers and Phase-1 work that has since shipped. Git
+  history preserves it.
+
 ## [0.3.0] - 2026-05-25
 
 Pre-1.0 architecture cleanup arc (issues #9–#13). No public-API breakage
@@ -205,6 +228,7 @@ worked examples.
 
 Initial release.
 
+[0.3.1]: https://github.com/dchuk/typed_eav/releases/tag/v0.3.1
 [0.3.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.3.0
 [0.2.1]: https://github.com/dchuk/typed_eav/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.2.0
