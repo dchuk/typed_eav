@@ -1,14 +1,16 @@
 # frozen_string_literal: true
 
-require "timeout"
-
 module TypedEAV
   module Field
-    # rubocop:disable Metrics/ClassLength -- Field::Base is the central STI parent: associations,
-    # validations, cascade dispatch, partition-aware ordering helpers, default-value handling,
-    # and the partition-aware backfill all live here together because they share the (entity_type,
-    # scope, parent_scope) partition contract. Splitting into concerns would scatter that contract
-    # and obscure the cross-cutting invariants the validators and helpers enforce together.
+    # Field::Base is the central STI parent: associations, validations,
+    # cascade dispatch, partition-aware ordering helpers, default-value
+    # handling, and the partition-aware backfill all live here together
+    # because they share the (entity_type, scope, parent_scope) partition
+    # contract. Validation helpers that were previously co-located (length /
+    # pattern / range / option-inclusion) have moved down to the new family
+    # bases (`Field::ValidatedString`, `Field::RangeBounded`,
+    # `Field::Optionable`) per ADR-0004; `validate_array_size` stays here
+    # because its callers span unrelated families.
     class Base < ApplicationRecord
       self.table_name = "typed_eav_fields"
 
@@ -376,8 +378,14 @@ module TypedEAV
       #
       # Default no-op. Subclasses override to enforce their constraints
       # (length, range, pattern, option inclusion, array size, etc.) and
-      # add errors to `record.errors`. Shared helpers below (validate_length,
-      # validate_pattern, validate_range, etc.) are available to subclasses.
+      # add errors to `record.errors`. Family-specific helpers live on the
+      # appropriate family base / concern (`ValidatedString` provides
+      # `validate_length` / `validate_pattern`; `RangeBounded` provides
+      # `validate_range` / `validate_date_range` / `validate_datetime_range`;
+      # `Optionable` provides `validate_option_inclusion` /
+      # `validate_multi_option_inclusion`). `validate_array_size` stays
+      # here because its callers (MultiSelect via Optionable AND
+      # IntegerArray directly) don't share a family.
       def validate_typed_value(record, val)
         # no-op by default
       end
@@ -386,77 +394,6 @@ module TypedEAV
 
       def options_hash
         options&.with_indifferent_access || {}
-      end
-
-      def validate_length(record, val)
-        opts = options_hash
-        str = val.to_s
-        if opts[:min_length] && str.length < opts[:min_length].to_i
-          record.errors.add(:value, :too_short, count: opts[:min_length])
-        end
-        return unless opts[:max_length] && str.length > opts[:max_length].to_i
-
-        record.errors.add(:value, :too_long, count: opts[:max_length])
-      end
-
-      def validate_pattern(record, val)
-        opts = options_hash
-        pattern = opts[:pattern]
-        return if pattern.blank?
-
-        matched = Timeout.timeout(1) { Regexp.new(pattern).match?(val.to_s) }
-        record.errors.add(:value, :invalid) unless matched
-      rescue RegexpError
-        record.errors.add(:value, "has an invalid pattern configured")
-      rescue Timeout::Error
-        record.errors.add(:value, "pattern validation timed out")
-      end
-
-      def validate_range(record, val)
-        opts = options_hash
-        record.errors.add(:value, :greater_than_or_equal_to, count: opts[:min]) if opts[:min] && val < opts[:min].to_d
-        return unless opts[:max] && val > opts[:max].to_d
-
-        record.errors.add(:value, :less_than_or_equal_to, count: opts[:max])
-      end
-
-      def validate_date_range(record, val)
-        opts = options_hash
-        if opts[:min_date]
-          min = ::Date.parse(opts[:min_date])
-          record.errors.add(:value, :greater_than_or_equal_to, count: opts[:min_date]) if val < min
-        end
-        if opts[:max_date]
-          max = ::Date.parse(opts[:max_date])
-          record.errors.add(:value, :less_than_or_equal_to, count: opts[:max_date]) if val > max
-        end
-      rescue ::Date::Error
-        record.errors.add(:base, "field has invalid date configuration")
-      end
-
-      def validate_datetime_range(record, val)
-        opts = options_hash
-        if opts[:min_datetime]
-          min = ::Time.zone.parse(opts[:min_datetime])
-          record.errors.add(:value, :greater_than_or_equal_to, count: opts[:min_datetime]) if val < min
-        end
-        if opts[:max_datetime]
-          max = ::Time.zone.parse(opts[:max_datetime])
-          record.errors.add(:value, :less_than_or_equal_to, count: opts[:max_datetime]) if val > max
-        end
-      rescue ArgumentError
-        record.errors.add(:base, "field has invalid datetime configuration")
-      end
-
-      def validate_option_inclusion(record, val)
-        return if allowed_option_values.include?(val&.to_s)
-
-        record.errors.add(:value, :inclusion)
-      end
-
-      def validate_multi_option_inclusion(record, val)
-        invalid = Array(val).map(&:to_s) - allowed_option_values
-        record.errors.add(:value, :inclusion) if invalid.any?
       end
 
       def validate_array_size(record, val)
@@ -708,6 +645,5 @@ module TypedEAV
         TypedEAV::EventDispatcher.dispatch_field_change(self, change_type)
       end
     end
-    # rubocop:enable Metrics/ClassLength
   end
 end

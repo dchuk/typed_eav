@@ -2,20 +2,23 @@
 
 module TypedEAV
   module Field
+    # Multi-choice option-set field. Stores the chosen values as a JSON
+    # array in `json_value`. Inherits `optionable? = true`, the
+    # public-facing sorted `allowed_values` helper, and the protected
+    # `validate_multi_option_inclusion` helper from `Field::Optionable`.
+    # Stays a direct child of `Field::Base` — Optionable is a concern
+    # (mixin), not an intermediate STI class, because Select and
+    # MultiSelect don't share a `value_column`.
+    #
+    # `validate_array_size` is called directly from `Field::Base`
+    # (cross-family outlier; also used by `Field::IntegerArray`).
     class MultiSelect < Base
+      include Optionable
+
       value_column :json_value
       operators :any_eq, :all_eq, :is_null, :is_not_null
 
-      def optionable? = true
       def array_field? = true
-
-      def allowed_values
-        if field_options.loaded?
-          field_options.sort_by { |o| [o.sort_order || 0, o.label.to_s] }.map(&:value)
-        else
-          field_options.sorted.pluck(:value)
-        end
-      end
 
       def cast(raw)
         return [nil, false] if raw.nil?

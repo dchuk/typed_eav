@@ -2,7 +2,12 @@
 
 module TypedEAV
   module Field
-    class Integer < Base
+    # Integer-typed field with optional min/max guards. Declares its own
+    # `integer_value` storage and `:min`/`:max` `store_accessor`; the
+    # `validate :max, comparison:` macro guards against inverted bounds
+    # at field-save. `validate_range` is inherited from
+    # `Field::RangeBounded`.
+    class Integer < RangeBounded
       value_column :integer_value
 
       store_accessor :options, :min, :max

@@ -2,7 +2,15 @@
 
 module TypedEAV
   module Field
-    class Decimal < Base
+    # Decimal-typed field with optional min/max guards and optional
+    # `precision_scale` rounding. Declares its own `decimal_value`
+    # storage and `:min`/`:max`/`:precision_scale` `store_accessor`; the
+    # `validate :max, comparison:` macro guards against inverted bounds
+    # at field-save. `validate_range` is inherited from
+    # `Field::RangeBounded`. `Field::Percentage` extends this class to
+    # add the 0..1 invariant (chain depth becomes
+    # `Percentage < Decimal < RangeBounded < Base`).
+    class Decimal < RangeBounded
       value_column :decimal_value
 
       store_accessor :options, :min, :max, :precision_scale

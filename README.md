@@ -555,6 +555,103 @@ TypedEAV.configure do |c|
 end
 ```
 
+### Family intermediate bases (extension points)
+
+`Field::Base` is the universal parent, but three intermediate family
+bases collapse the most common per-leaf duplication. Pick the right
+parent and you inherit the family's validation surface for free.
+
+- **`TypedEAV::Field::ValidatedString`** — subclass when your custom
+  type stores in `string_value` and wants a min/max-length + regex-pattern
+  validation surface. Inherits `value_column :string_value`,
+  `store_accessor :options, :min_length, :max_length, :pattern`,
+  numericality validators on `min_length` / `max_length`, a
+  `max_gte_min_length` guard that rejects inverted bounds at field-save,
+  and a `validate_pattern_syntax` guard that rejects bad regexes at
+  field-save. The default `validate_typed_value(record, val)` runs
+  `validate_length` plus `validate_pattern if pattern.present?`. Override
+  it and call `super` to layer on a format-specific check (the built-in
+  `Field::Email` / `Field::Url` are the canonical pattern).
+
+  ```ruby
+  class Fields::Slug < TypedEAV::Field::ValidatedString
+    SLUG_FORMAT = /\A[a-z0-9-]+\z/
+
+    def cast(raw)
+      [raw&.to_s&.strip&.downcase, false]
+    end
+
+    def validate_typed_value(record, val)
+      super  # length + pattern from the family base
+      record.errors.add(:value, "is not a valid slug") unless SLUG_FORMAT.match?(val.to_s)
+    end
+  end
+  ```
+
+- **`TypedEAV::Field::RangeBounded`** — subclass when your custom type
+  stores a single comparable value (numeric or temporal) constrained by
+  a min/max bound. Each leaf still declares its own `value_column` and
+  its own `store_accessor` (key names vary by family member: `:min`/`:max`
+  for numeric; `:min_date`/`:max_date` for date;
+  `:min_datetime`/`:max_datetime` for datetime). The family base
+  provides protected `validate_range` / `validate_date_range` /
+  `validate_datetime_range` helpers. Each leaf should pair its
+  `store_accessor` with the macro
+  `validates :max, comparison: { greater_than_or_equal_to: :min }, allow_nil: true, if: :min`
+  (or the analogous form for the leaf's key names) so inverted bounds
+  fail at field-save.
+
+  ```ruby
+  class Fields::Score < TypedEAV::Field::RangeBounded
+    value_column :integer_value
+
+    store_accessor :options, :min, :max
+    validates :max, comparison: { greater_than_or_equal_to: :min }, allow_nil: true, if: :min
+
+    def cast(raw)
+      raw.nil? ? [nil, false] : [Integer(raw.to_s, exception: false), raw.to_s.empty? ? false : true]
+    end
+
+    def validate_typed_value(record, val)
+      validate_range(record, val)
+    end
+  end
+  ```
+
+- **`TypedEAV::Field::Optionable`** — `include` this concern when your
+  custom type's valid values are drawn from a `Field::Option` set.
+  Provides `optionable? = true`, a public-facing sorted
+  `allowed_values` helper, and protected
+  `validate_option_inclusion` / `validate_multi_option_inclusion`
+  helpers. Mixin (not inheritance) because option-set field types may
+  use different `value_column`s — the built-in `Field::Select` stores in
+  `string_value` while `Field::MultiSelect` stores in `json_value`, and
+  both stay as direct children of `Field::Base`.
+
+  ```ruby
+  class Fields::Tag < TypedEAV::Field::Base
+    include TypedEAV::Field::Optionable
+
+    value_column :string_value
+    operators :eq, :not_eq, :is_null, :is_not_null
+
+    def cast(raw)
+      [raw&.to_s, false]
+    end
+
+    def validate_typed_value(record, val)
+      validate_option_inclusion(record, val)
+    end
+  end
+  ```
+
+The rule of thumb: subclass an intermediate family base when the new
+field type shares its storage and validation surface with the family;
+include `Optionable` when it draws values from an option set; subclass
+`Field::Base` directly (as the `Phone` example above does) when none of
+the family surfaces fit. `validate_array_size` lives on `Field::Base`
+itself — its callers span unrelated families.
+
 ### Multi-cell field types
 
 External field types may store their logical value across multiple typed
