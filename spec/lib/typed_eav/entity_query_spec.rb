@@ -54,6 +54,55 @@ RSpec.describe TypedEAV::EntityQuery do
     end
   end
 
+  describe "include_missing: kwarg threading (G3)", :unscoped do
+    # Verifies both wrappers thread `include_missing:` through to FilterQuery
+    # and that the kwarg is opt-in (default false preserves prior `:is_null`
+    # semantic byte-for-byte).
+    let!(:status_field)  { create(:text_field, name: "status", entity_type: "Contact") }
+    let!(:with_null_row) { create(:contact, name: "WithNullRow") }
+    let!(:populated)     { create(:contact, name: "Populated") }
+    let!(:no_row)        { create(:contact, name: "NoRow") }
+
+    before do
+      TypedEAV::Value.create!(entity: with_null_row, field: status_field) # NULL string_value
+      TypedEAV::Value.create!(entity: populated, field: status_field).tap do |v|
+        v.value = "active"
+        v.save!
+      end
+    end
+
+    it "Entity.with_field default :is_null matches only NULL-column rows (regression guard)" do
+      expect(Contact.with_field("status", :is_null)).to contain_exactly(with_null_row)
+    end
+
+    it "Entity.with_field threads include_missing: true to FilterQuery" do
+      expect(
+        Contact.with_field("status", :is_null, include_missing: true),
+      ).to contain_exactly(with_null_row, no_row)
+    end
+
+    it "Entity.where_typed_eav threads include_missing: true to FilterQuery" do
+      expect(
+        Contact.where_typed_eav({ name: "status", op: :is_null }, include_missing: true),
+      ).to contain_exactly(with_null_row, no_row)
+    end
+
+    it "Entity.where_typed_eav accepts include_missing: independently of with_field" do
+      relation = Contact.where_typed_eav(
+        [{ name: "status", op: :is_null }],
+        include_missing: true,
+      )
+      expect(relation).to contain_exactly(with_null_row, no_row)
+    end
+
+    it "Entity.with_field with :is_not_null ignores include_missing: true (no-op)" do
+      base       = Contact.with_field("status", :is_not_null)
+      with_kwarg = Contact.with_field("status", :is_not_null, include_missing: true)
+      expect(base).to contain_exactly(populated)
+      expect(with_kwarg).to contain_exactly(populated)
+    end
+  end
+
   describe ".typed_eav_definitions (wrapper)" do
     it "returns visible fields for the explicit scope override" do
       age_field = create(:integer_field, name: "age", entity_type: "Contact")

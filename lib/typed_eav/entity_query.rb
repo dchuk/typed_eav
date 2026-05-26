@@ -35,7 +35,19 @@ module TypedEAV
     #   - omitted        -> resolve from ambient (`with_scope` -> resolver -> raise/nil)
     #   - passed a value -> use verbatim (explicit override; admin/test path)
     #   - passed nil     -> filter to global-only on that axis (prior behavior)
-    def where_typed_eav(*filters, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
+    #
+    # `include_missing:` behavior (opt-in, default `false`):
+    #   - Only meaningful when paired with `:is_null`. When `true`, the
+    #     `:is_null` predicate broadens to the user-intuitive "is empty"
+    #     semantic: matches hosts with **no non-NULL value** for the field —
+    #     including hosts that have no `typed_eav_values` row at all
+    #     (Reading A from ADR-0006).
+    #   - With `:is_not_null`, the kwarg is a no-op (lets filter UIs pass
+    #     it uniformly without branching per operator).
+    #   - With any other operator (`:eq`, `:gt`, `:contains`, `:between`,
+    #     `:starts_with`, `:references`, etc.), the kwarg is silently
+    #     ignored.
+    def where_typed_eav(*filters, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE, include_missing: false)
       resolved = resolve_scope(scope, parent_scope)
       effective_scope, effective_parent = scope_pair(resolved)
 
@@ -44,6 +56,7 @@ module TypedEAV
         filters: filters,
         scope: effective_scope,
         parent_scope: effective_parent,
+        include_missing: include_missing,
       ).to_relation
     end
 
@@ -56,14 +69,20 @@ module TypedEAV
     # Accepts both `scope:` and `parent_scope:` kwargs with the same
     # ambient/explicit/nil semantics as `where_typed_eav`. Single-scope
     # callers (no `parent_scope:`) are unaffected.
-    def with_field(name, operator_or_value = nil, value = nil, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
+    #
+    # `include_missing:` (opt-in, default `false`) is forwarded to
+    # `where_typed_eav` unchanged. See its RDoc for full semantics — in
+    # short: meaningful only with `:is_null` (Reading A "no non-NULL
+    # value," includes no-row hosts), no-op with `:is_not_null`, silently
+    # ignored otherwise.
+    def with_field(name, operator_or_value = nil, value = nil, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE, include_missing: false)
       filter = if value.nil? && !operator_or_value.is_a?(Symbol)
                  # Two-arg form: with_field("name", "value") implies :eq
                  { name: name, op: :eq, value: operator_or_value }
                else
                  { name: name, op: operator_or_value, value: value }
                end
-      where_typed_eav(filter, scope: scope, parent_scope: parent_scope)
+      where_typed_eav(filter, scope: scope, parent_scope: parent_scope, include_missing: include_missing)
     end
 
     # Returns field definitions for this entity type.

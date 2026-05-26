@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Entity.with_field` and `Entity.where_typed_eav` accept an opt-in
+  `include_missing:` keyword (default `false`). Threaded through to
+  `FilterQuery#initialize`. When paired with `:is_null`, the operator
+  matches hosts with **no non-NULL value** for the field — including
+  hosts that have no `typed_eav_values` row at all (Reading A: the
+  user-intuitive "is empty" semantic). Implemented as a set-complement
+  against `:is_not_null` at the `FilterQuery` altitude; `QueryBuilder`
+  is not modified. With `:is_not_null` the kwarg is a no-op; with any
+  other operator (`:eq`, `:gt`, `:contains`, `:references`, `:between`,
+  `:starts_with`, etc.) it is silently ignored — filter UIs can pass
+  the kwarg uniformly without branching per operator. On the multimap
+  (`ALL_SCOPES`) branch, "no non-NULL value" reads across all matching
+  field definitions for the name: a host matches iff none of the
+  per-tenant field defs have a non-NULL value for it. G3 (issue #19).
+  See ADR-0006.
+
 - `TypedEAV::SchemaPortability.export_snapshot_schema(entity_type:,
   scope: nil, parent_scope: nil)` — sibling to `export_schema` that
   returns a lean, restore-oriented projection in a versioned envelope:
