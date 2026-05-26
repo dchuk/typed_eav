@@ -142,6 +142,76 @@ RSpec.describe TypedEAV::HasTypedEAV, type: :model do
       values = contact.initialize_typed_values
       expect(values.size).to eq(2)
     end
+
+    it "does not duplicate values built via nested attributes on a new record" do
+      new_contact = Contact.new(name: "Nina")
+      new_contact.typed_values_attributes = [{ field_id: field_a.id, value: "from form" }]
+
+      values = new_contact.initialize_typed_values
+
+      expect(values.size).to eq(2)
+      expect(values.count { |v| v.field_id == field_a.id }).to eq(1)
+    end
+
+    it "does not duplicate values set via typed_eav_attributes= on a new record" do
+      new_contact = Contact.new(name: "Nina")
+      new_contact.typed_eav_attributes = [{ name: "bio", value: "from script" }]
+
+      values = new_contact.initialize_typed_values
+
+      expect(values.size).to eq(2)
+      expect(values.count { |v| (v.field_id || v.field&.id) == field_a.id }).to eq(1)
+    end
+
+    it "falls back to field.id when field_id is nil on an in-memory build" do
+      new_contact = Contact.new(name: "Nina")
+      # Construct an in-memory build whose field_id is nil but the field
+      # association is loaded. Clear field_id first via the FK, then reassign
+      # the association — AR's belongs_to setter writes both attributes, but
+      # writing the FK afterwards leaves the association object cached.
+      tv = new_contact.typed_values.build(value: "x")
+      tv.field = field_a
+      tv.write_attribute(:field_id, nil)
+      tv.association(:field).target = field_a
+      expect(tv.field_id).to be_nil
+      expect(tv.field).to eq(field_a)
+
+      values = new_contact.initialize_typed_values
+
+      expect(values.count { |v| (v.field_id || v.field&.id) == field_a.id }).to eq(1)
+    end
+
+    it "does not duplicate in-memory builds on a persisted record with a loaded association" do
+      contact.typed_values.load # force loaded? => true
+      expect(contact.typed_values.loaded?).to be true
+      contact.typed_values.build(field: field_a, value: "fresh")
+
+      values = contact.initialize_typed_values
+
+      expect(values.count { |v| v.field_id == field_a.id }).to eq(1)
+    end
+
+    it "does not duplicate in-memory builds on a persisted record with an unloaded association" do
+      # Reload the record so the association proxy is fresh and unloaded.
+      reloaded = Contact.find(contact.id)
+      expect(reloaded.typed_values.loaded?).to be false
+      reloaded.typed_values.build(field: field_a, value: "fresh")
+      # `add_to_target` does not flip @loaded — verify the latent case.
+      expect(reloaded.typed_values.loaded?).to be false
+
+      values = reloaded.initialize_typed_values
+
+      expect(values.count { |v| (v.field_id || v.field&.id) == field_a.id }).to eq(1)
+    end
+
+    it "keeps the persisted-no-builds fast path: pluck only, no association load" do
+      reloaded = Contact.find(contact.id)
+      expect(reloaded.typed_values.loaded?).to be false
+
+      reloaded.initialize_typed_values
+
+      expect(reloaded.typed_values.loaded?).to be false
+    end
   end
 
   describe "#typed_eav_attributes=" do

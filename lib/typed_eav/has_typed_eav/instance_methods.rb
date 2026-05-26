@@ -46,7 +46,7 @@ module TypedEAV
       # render two inputs for the same name — but only the scoped one
       # round-trips on save (it wins in `typed_eav_defs_by_name`).
       def initialize_typed_values
-        existing_field_ids = typed_values.loaded? ? typed_values.map(&:field_id) : typed_values.pluck(:field_id)
+        existing_field_ids = existing_typed_value_field_ids
 
         typed_eav_defs_by_name.each_value do |field|
           next if existing_field_ids.include?(field.id)
@@ -140,6 +140,31 @@ module TypedEAV
       end
 
       private
+
+      # Field ids already represented in `typed_values`, accounting for both
+      # persisted rows and in-memory builds. Three branches:
+      #
+      # - **new_record? or loaded?** — walk the in-memory collection, with a
+      #   `field_id || field&.id` fallback so callers who bypass the
+      #   belongs_to FK setter (e.g. assigning via `association(:field).target=`)
+      #   still get dedup-correct results.
+      # - **persisted + unloaded** — combine a cheap `pluck` of persisted rows
+      #   with any in-memory builds in `typed_values.target`. AR's
+      #   `add_to_target` (called by `build`) does not flip `@loaded`, so
+      #   target-resident builds are otherwise invisible to `pluck`. The
+      #   persisted-no-builds happy path is unaffected: `target` is empty,
+      #   `pluck` runs once, no extra association load.
+      def existing_typed_value_field_ids
+        return walk_in_memory_typed_value_field_ids if new_record? || typed_values.loaded?
+
+        persisted = typed_values.pluck(:field_id)
+        in_memory = typed_values.target.reject(&:persisted?).filter_map { |tv| tv.field_id || tv.field&.id }
+        (persisted + in_memory).uniq
+      end
+
+      def walk_in_memory_typed_value_field_ids
+        typed_values.filter_map { |tv| tv.field_id || tv.field&.id }
+      end
 
       # Selects the candidate value for `typed_eav_value`. On a collision,
       # prefer the row attached to the winning field_id; otherwise fall back

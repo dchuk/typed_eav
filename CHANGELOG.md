@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `InstanceMethods#initialize_typed_values` no longer builds duplicate
+  rows on entities that already have in-memory `typed_values` builds
+  (form path with `field_id`, scripting path via `typed_eav_attributes=`,
+  or direct `typed_values.build(...)` on a persisted record). Covers
+  three cases: (1) new record + nested attributes, (2) new record +
+  scripting setter, (3) persisted record + unloaded association + a
+  build that lives in `target` without flipping `@loaded`. The
+  persisted-no-builds fast path still uses `pluck` only — no extra
+  association load. Dedup also tolerates an in-memory build whose
+  `field_id` is nil but whose `field` association is set
+  (`field_id || field&.id` fallback). G2 (PRD #15).
+
 ## [0.3.2] - 2026-05-25
 
 Documentation-only release. No code or behavior changes.
