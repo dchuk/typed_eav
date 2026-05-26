@@ -20,6 +20,7 @@ module TypedEAV
   autoload :SchemaPortability
   autoload :EventDispatcher
   autoload :CSVMapper
+  autoload :ScopeTuple
   autoload :ValueVersion
   autoload :Versioned
   autoload :Versioning
@@ -90,31 +91,16 @@ module TypedEAV
 
       stack = Thread.current[THREAD_SCOPE_STACK]
       # The stack stores tuples already (with_scope normalized on push), so
-      # reads bypass normalize_scope entirely — no risk of double-coercion.
+      # reads bypass coercion entirely — no risk of double-normalization.
       return stack.last if stack.present?
 
-      # Resolver-callable strict-contract path. We deliberately do NOT pass
-      # the raw return value through `normalize_scope`, because that helper
-      # is permissive (`scalar` → `[scalar, nil]`) for `with_scope` block BC.
-      # Routing the resolver through it would silently swallow a contract
-      # violation by a custom resolver returning a bare scalar.
-      raw = Config.scope_resolver&.call
-      return nil if raw.nil?
-
-      unless raw.is_a?(Array) && raw.size == 2
-        raise ArgumentError,
-              "TypedEAV.config.scope_resolver must return a 2-element " \
-              "[scope, parent_scope] Array (or nil). Got: #{raw.inspect}. " \
-              "v0.1.x resolvers returning a bare scalar must be updated — " \
-              "see CHANGELOG and the README migration note."
-      end
-
-      # Tuple shape verified — normalize each slot through the same scalar
-      # coercion that `normalize_scope` uses on the with_scope path. We pass
-      # the verified 2-element Array through normalize_scope (which is one
-      # of its accepted input shapes) to produce the canonical
-      # `[String|nil, String|nil]` tuple.
-      normalize_scope(raw)
+      # Resolver-callable strict-contract path. We route through
+      # `ScopeTuple.normalize_strict`, which raises `ArgumentError` on any
+      # shape other than `nil` or a 2-element Array — most importantly on
+      # the v0.1.x bare-scalar shape. The strict raise is the chokepoint
+      # that makes a misshaped resolver fail loudly; the BC-shim
+      # (silent coercion) alternative was rejected during Phase 1 design.
+      ScopeTuple.normalize_strict(Config.scope_resolver&.call)
     end
 
     # Run the block with `value` as the ambient scope, restoring the prior
@@ -141,7 +127,7 @@ module TypedEAV
     # the resolver-callable contract rejects bare scalars.
     def with_scope(value)
       stack = (Thread.current[THREAD_SCOPE_STACK] ||= [])
-      stack.push(normalize_scope(value))
+      stack.push(ScopeTuple.normalize_permissive(value))
       yield
     ensure
       stack&.pop
@@ -205,48 +191,20 @@ module TypedEAV
     end
 
     # BC-permissive normalizer for `with_scope` block input and explicit
-    # tuple inputs. Always returns either `nil` or a 2-element tuple
+    # tuple inputs. 1-line alias to `ScopeTuple.normalize_permissive` —
+    # the implementation moved during the 0.3.0 ScopeTuple extraction
+    # (issue #10), but the public method/return-shape stays as a v0.2.x BC
+    # surface. Always returns either `nil` or a 2-element tuple
     # `[scope, parent_scope]` where each element is a `String` or `nil`.
-    #
-    # Accepted inputs:
-    #
-    # - `nil`                          → `nil` (sentinel: nothing resolved).
-    # - `[a, b]` (2-element Array)     → `[normalize_one(a), normalize_one(b)]`.
-    #   This is the canonical Phase-1 input shape; callers that already have
-    #   a tuple (a custom resolver, a future `with_scope([s, ps])`) pass it
-    #   through unchanged. `[scope, nil]` is the canonical "scope-only" tuple.
-    #   `[nil, "ps1"]` (orphan-parent) is intentionally accepted at this
-    #   layer — orphan-parent rejection happens in the model validator
-    #   added by plans 03/04, NOT here. Keeping normalize permissive lets
-    #   tests construct invalid states intentionally.
-    # - any other value (scalar / AR record) → `[normalize_one(value), nil]`.
-    #   This is the BC path for `with_scope(scalar)` — single-arg block usage
-    #   continues to mean "scope=scalar, parent_scope=nil".
     #
     # ## NOT a contract chokepoint for resolver returns
     #
     # `current_scope` deliberately does NOT route a custom-resolver return
-    # value through this helper, because the bare-scalar passthrough above
-    # would silently coerce a contract violation. Resolver shape is checked
-    # in `current_scope` BEFORE this helper is called. This split — strict
-    # on the resolver-callable surface, permissive on the with_scope block
-    # surface — is the Phase 1 design.
-    def normalize_scope(value)
-      return nil if value.nil?
-      return [normalize_one(value[0]), normalize_one(value[1])] if value.is_a?(Array) && value.size == 2
-
-      [normalize_one(value), nil]
-    end
-
-    private
-
-    # Coerce a single scope slot (scalar or AR record) into a String or nil.
-    # The previous v0.1.x scalar-coercion lives here unchanged — we just
-    # apply it per-slot now that scope is a tuple.
-    def normalize_one(value)
-      return nil if value.nil?
-
-      value.respond_to?(:id) ? value.id.to_s : value.to_s
-    end
+    # through this helper — it routes through `ScopeTuple.normalize_strict`
+    # instead — because the bare-scalar passthrough here would silently
+    # coerce a contract violation. This split (strict on the resolver-
+    # callable surface, permissive on the with_scope block surface) is the
+    # Phase-1 asymmetric contract.
+    def normalize_scope(value) = ScopeTuple.normalize_permissive(value)
   end
 end

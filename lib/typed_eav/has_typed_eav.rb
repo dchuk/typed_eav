@@ -574,27 +574,31 @@ module TypedEAV
         explicit_given = !explicit_scope.equal?(UNSET_SCOPE) || !explicit_parent_scope.equal?(UNSET_SCOPE)
 
         if explicit_given
-          # Per-slot normalize: an explicit kwarg passes through `normalize_scope`
-          # to coerce scalars/AR-records to strings, with UNSET_SCOPE collapsing
-          # to nil for the corresponding slot. We pass `[value, nil]` to extract
-          # the first slot and `[nil, value]` to extract the second so the
-          # public `normalize_scope` BC contract (used by with_scope) handles
-          # the per-slot coercion uniformly.
+          # Per-slot normalize via `ScopeTuple.normalize_permissive` to coerce
+          # scalars/AR-records to strings, with UNSET_SCOPE collapsing to nil
+          # for the corresponding slot. We pass `[value, nil]` to extract the
+          # first slot and `[nil, value]` to extract the second so the same
+          # BC-permissive coercer used by `TypedEAV.with_scope` handles the
+          # per-slot normalization uniformly.
           s = if explicit_scope.equal?(UNSET_SCOPE)
                 nil
               else
-                TypedEAV.normalize_scope([explicit_scope, nil]).first
+                TypedEAV::ScopeTuple.normalize_permissive([explicit_scope, nil])&.first
               end
           ps = if explicit_parent_scope.equal?(UNSET_SCOPE)
                  nil
                else
-                 TypedEAV.normalize_scope([nil, explicit_parent_scope]).last
+                 TypedEAV::ScopeTuple.normalize_permissive([nil, explicit_parent_scope])&.last
                end
           # Orphan-parent invariant at the read layer: a request for parent_scope
           # without scope is dead-letter (no rows can match — the Field-level
           # validator forbids `(scope=NULL, parent_scope=NOT NULL)` rows). Don't
-          # raise here — just narrow the predicate. The Field-level invariant
-          # (plan 03) prevents the corresponding write.
+          # raise here — silently NARROW the predicate by dropping parent_scope
+          # so the resulting query degrades to "global + scope-only" rather than
+          # always-empty-set. The Field-level invariant (plan 03) prevents the
+          # corresponding write. Uses `ScopeTuple.invariant_satisfied?` as the
+          # named predicate; per-caller response policy stays local here.
+          ps = nil unless TypedEAV::ScopeTuple.invariant_satisfied?(s, ps)
           return [s, ps]
         end
 

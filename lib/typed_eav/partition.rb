@@ -8,6 +8,14 @@ module TypedEAV
   # values. Ambient resolution (`TypedEAV.current_scope`, `with_scope`,
   # `unscoped`) stays with the adapters that know their calling context.
   module Partition
+    # Frozen orphan-parent ArgumentError message. Kept as a module constant
+    # so both `visible_fields` and `visible_sections` raise the same string
+    # without re-allocating per call. The string is the wire-stable BC error
+    # message that `partition_spec` matches against; do not change it
+    # without coordinating with downstream rescue clauses.
+    ORPHAN_PARENT_MESSAGE = "parent_scope cannot be set when scope is blank"
+    private_constant :ORPHAN_PARENT_MESSAGE
+
     class << self
       # All field definitions visible from a tuple: pure global rows,
       # scope-only rows, and full-tuple rows. Passing mode: :all_partitions is
@@ -17,7 +25,8 @@ module TypedEAV
         validate_mode!(mode)
         return TypedEAV::Field::Base.where(entity_type: entity_type) if mode == :all_partitions
 
-        validate_tuple!(scope, parent_scope)
+        raise ArgumentError, ORPHAN_PARENT_MESSAGE unless ScopeTuple.invariant_satisfied?(scope, parent_scope)
+
         TypedEAV::Field::Base.for_entity(entity_type, scope: scope, parent_scope: parent_scope)
       end
 
@@ -37,7 +46,8 @@ module TypedEAV
         validate_mode!(mode)
         return TypedEAV::Section.where(entity_type: entity_type) if mode == :all_partitions
 
-        validate_tuple!(scope, parent_scope)
+        raise ArgumentError, ORPHAN_PARENT_MESSAGE unless ScopeTuple.invariant_satisfied?(scope, parent_scope)
+
         TypedEAV::Section.for_entity(entity_type, scope: scope, parent_scope: parent_scope)
       end
 
@@ -51,13 +61,6 @@ module TypedEAV
         return if %i[partition all_partitions].include?(mode)
 
         raise ArgumentError, "Unknown partition mode: #{mode.inspect}. Expected :partition or :all_partitions."
-      end
-
-      def validate_tuple!(scope, parent_scope)
-        return if parent_scope.blank?
-        return if scope.present?
-
-        raise ArgumentError, "parent_scope cannot be set when scope is blank"
       end
     end
   end

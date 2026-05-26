@@ -513,8 +513,7 @@ module TypedEAV
       # the same incoherent state as a literal NULL. Same reasoning for
       # `scope.present?`.
       def validate_parent_scope_invariant
-        return if parent_scope.blank?
-        return if scope.present?
+        return if TypedEAV::ScopeTuple.invariant_satisfied?(scope, parent_scope)
 
         errors.add(:parent_scope, "cannot be set when scope is blank")
       end
