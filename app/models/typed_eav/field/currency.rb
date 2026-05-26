@@ -5,21 +5,21 @@ module TypedEAV
     # Two-cell field type: stores `{amount: BigDecimal, currency: String}`
     # across decimal_value (amount) + string_value (currency ISO 4217 code).
     #
-    # Phase 05 contract:
-    # - value_columns: [:decimal_value, :string_value] — propagates through
-    #   versioning's snapshot loop (Phase 04) and the Value
-    #   _dispatch_value_change_update filter so a change to either cell
+    # Multi-cell contract:
+    # - `value_columns :decimal_value, :string_value` — both cells propagate
+    #   through versioning's snapshot loop and the Value
+    #   `_dispatch_value_change_update` filter so a change to either cell
     #   correctly fires the :update event.
-    # - operator_column: :currency_eq → :string_value; everything else →
-    #   :decimal_value. Routed via QueryBuilder.filter (plan 05-01).
-    # - read_value / write_value / apply_default_to: paired overrides
-    #   that compose / unpack the {amount, currency} hash across the two
-    #   physical columns. Without all three, single-cell defaults would
-    #   write a Hash to decimal_value and raise TypeMismatch.
-    # - cast: Hash input only. Bare Numeric/String is invalid — explicit
-    #   currency dimension is required at write time. Silently defaulting
-    #   to default_currency would invite bugs where users forget the
-    #   currency dimension entirely.
+    # - `operator_column` routes `:currency_eq` → `:string_value` and every
+    #   other supported op → `:decimal_value`. QueryBuilder reads this.
+    # - `read_value` / `write_value` / `apply_default` are the three
+    #   overrides paired with the multi-cell declaration. Without all three,
+    #   single-cell defaults would write a Hash to decimal_value and raise
+    #   TypeMismatch at save time.
+    # - `cast` requires a Hash input. Bare Numeric/String is invalid —
+    #   explicit currency dimension is required at write time. Silently
+    #   defaulting to default_currency would invite bugs where users forget
+    #   the currency dimension entirely.
     #
     # Operators (explicit narrowing — does NOT inherit string-search ops
     # like :contains/:starts_with from decimal_value's default since those
@@ -39,9 +39,10 @@ module TypedEAV
     # - allowed_currencies: Array<String> of ISO codes. When set,
     #   validate_typed_value enforces inclusion.
     class Currency < Base
-      value_column :decimal_value
-      storage_contract_class TypedEAV::CurrencyStorageContract
+      AMOUNT_COLUMN = :decimal_value
+      CURRENCY_COLUMN = :string_value
 
+      value_columns AMOUNT_COLUMN, CURRENCY_COLUMN
       operators(*%i[eq gt lt gteq lteq between currency_eq is_null is_not_null])
 
       store_accessor :options, :default_currency, :allowed_currencies
@@ -49,12 +50,45 @@ module TypedEAV
       validates :default_currency, format: { with: /\A[A-Z]{3}\z/ }, allow_nil: true
       validate :allowed_currencies_format
 
-      def self.value_columns
-        storage_contract_class.value_columns
+      # Route `:currency_eq` to the currency-code cell; every other supported
+      # operator targets the amount cell. The operator-validation gate in
+      # QueryBuilder.filter has already narrowed `operator` to the set
+      # declared above by the time this runs.
+      def self.operator_column(operator)
+        operator == :currency_eq ? CURRENCY_COLUMN : AMOUNT_COLUMN
       end
 
-      def self.operator_column(operator)
-        storage_contract_class.query_column(operator)
+      # Compose the logical Hash from the two cells. Returns `nil` only
+      # when BOTH cells are nil — a half-populated row still round-trips
+      # as the partial Hash so validation can surface the missing dimension.
+      def read_value(value_record)
+        amount = value_record[AMOUNT_COLUMN]
+        currency = value_record[CURRENCY_COLUMN]
+        return nil if amount.nil? && currency.nil?
+
+        { amount: amount, currency: currency }
+      end
+
+      # Unpack the casted Hash across the two cells. `nil` clears both.
+      def write_value(value_record, casted)
+        if casted.nil?
+          value_record[AMOUNT_COLUMN] = nil
+          value_record[CURRENCY_COLUMN] = nil
+        else
+          value_record[AMOUNT_COLUMN] = casted[:amount]
+          value_record[CURRENCY_COLUMN] = casted[:currency]
+        end
+      end
+
+      # Populate both cells from the field's configured default. Mirrors
+      # `write_value`'s Hash decomposition; tolerates string-keyed defaults
+      # for jsonb round-trip (`default_value_meta` stores raw config).
+      def apply_default(value_record)
+        default = default_value
+        return unless default.is_a?(Hash)
+
+        value_record[AMOUNT_COLUMN] = default[:amount] || default["amount"]
+        value_record[CURRENCY_COLUMN] = default[:currency] || default["currency"]
       end
 
       # Cast Hash input → [{amount: BigDecimal, currency: String}, false]

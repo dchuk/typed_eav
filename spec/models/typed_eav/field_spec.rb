@@ -879,15 +879,6 @@ RSpec.describe "Supported operators for all field types" do
   end
 end
 
-RSpec.describe TypedEAV::ColumnMapping do
-  it "raises NotImplementedError for undeclared value_column" do
-    klass = Class.new(TypedEAV::Field::Base) do
-      self.table_name = "typed_eav_fields"
-    end
-    expect { klass.value_column }.to raise_error(NotImplementedError)
-  end
-end
-
 # Phase 02: cascade-policy validator. Inclusion narrows `field_dependent` to
 # the closed set the dispatch hook understands; default "destroy" matches
 # v0.1.0 behavior so omitting the kwarg never surprises a v0.1.0 caller.

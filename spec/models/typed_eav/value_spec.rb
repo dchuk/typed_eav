@@ -785,12 +785,12 @@ RSpec.describe TypedEAV::Value, type: :model do
     end
   end
 
-  # Phase 05: Value#value reads through `field.read_value(self)` and
-  # Value#apply_field_default delegates to `field.apply_default_to(self)`.
+  # Value#value reads through `field.read_value(self)` and
+  # Value#apply_field_default delegates to `field.apply_default(self)`.
   # These two dispatches are the field-side surface that lets multi-cell
-  # types (Phase 05 Currency) compose / unpack a logical value across
-  # multiple typed columns without Value-side changes. Single-cell types
-  # are unchanged behaviorally — the spec asserts the dispatch is invoked
+  # types (Currency) compose / unpack a logical value across multiple
+  # typed columns without Value-side changes. Single-cell types are
+  # unchanged behaviorally — the spec asserts the dispatch is invoked
   # and that the returned value matches the pre-dispatch shape for
   # representative single-cell types (Text, Integer, Boolean).
   describe "Value#value and #apply_field_default route through Field extension points" do
@@ -833,24 +833,24 @@ RSpec.describe TypedEAV::Value, type: :model do
       end
     end
 
-    context "when apply_field_default dispatches through field.apply_default_to" do
-      it "invokes field.apply_default_to(self) when value: kwarg is omitted (Text default)" do
+    context "when apply_field_default dispatches through field.apply_default" do
+      it "invokes field.apply_default(self) when value: kwarg is omitted (Text default)" do
         field = create(:text_field, name: "dispatch_text_def", default_value_meta: { "v" => "default!" })
         # The Value's `field` AR association resolves to the SAME instance
         # that was passed in via `field:` — so spying on this instance
-        # captures the apply_default_to call from the create path.
-        allow(field).to receive(:apply_default_to).and_call_original
+        # captures the apply_default call from the create path.
+        allow(field).to receive(:apply_default).and_call_original
         v = contact.typed_values.create!(field: field)
         expect(v.string_value).to eq("default!")
-        expect(field).to have_received(:apply_default_to).with(v)
+        expect(field).to have_received(:apply_default).with(v)
       end
 
-      it "invokes field.apply_default_to(self) when value: kwarg is omitted (Integer default)" do
+      it "invokes field.apply_default(self) when value: kwarg is omitted (Integer default)" do
         field = create(:integer_field, name: "dispatch_int_def", default_value_meta: { "v" => 7 })
-        allow(field).to receive(:apply_default_to).and_call_original
+        allow(field).to receive(:apply_default).and_call_original
         v = contact.typed_values.create!(field: field)
         expect(v.integer_value).to eq(7)
-        expect(field).to have_received(:apply_default_to).with(v)
+        expect(field).to have_received(:apply_default).with(v)
       end
     end
 

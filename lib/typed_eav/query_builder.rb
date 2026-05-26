@@ -44,13 +44,12 @@ module TypedEAV
                 "Supported operators: #{supported.map { |o| ":#{o}" }.join(", ")}"
         end
 
-        # Phase 05: route the operator to its physical column via field-side
-        # dispatch. Single-cell types (every built-in as of Phase 04) return
-        # `value_column` for every operator — BC-safe. Multi-cell types
-        # (Phase 05 Currency) route operators like `:eq` (amount) and
-        # `:currency_eq` (currency code) to different columns. See
-        # ColumnMapping#operator_column.
-        col = field.storage_contract.query_column(operator)
+        # Route the operator to its physical column via the field-class
+        # dispatch. Single-cell types return `value_columns.first` for every
+        # operator — BC-safe. Multi-cell types (Currency) route operators
+        # like `:eq` (amount) and `:currency_eq` (currency code) to
+        # different columns. See `Field::TypedStorage.operator_column`.
+        col = field.class.operator_column(operator)
         arel_col = values_table[col]
 
         base = value_scope(field)

@@ -77,12 +77,13 @@ module TypedEAV
         private
 
         def write_version_row(value, change_type, context)
-          # Build before_value / after_value snapshots through the field
-          # storage contract. Single-cell types produce one-key snapshots;
-          # multi-cell types like Currency produce one key per typed cell.
-          storage = value.field.storage_contract
-          before_value = storage.before_snapshot(value, change_type)
-          after_value  = storage.after_snapshot(value, change_type)
+          # Build before_value / after_value snapshots directly off the
+          # field's `Field::TypedStorage` helpers. Single-cell types produce
+          # one-key snapshots; multi-cell types like Currency produce one
+          # key per typed cell.
+          field = value.field
+          before_value = field.before_snapshot(value, change_type)
+          after_value  = field.after_snapshot(value, change_type)
 
           # CRITICAL: for :destroy events, write `value_id: nil`.
           # By the time `after_commit on: :destroy` fires, the parent row

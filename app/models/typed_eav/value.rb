@@ -86,7 +86,7 @@ module TypedEAV
     def value
       return nil unless field
 
-      field.storage_contract.read(self)
+      field.read_value(self)
     end
 
     def value=(val)
@@ -114,7 +114,7 @@ module TypedEAV
         # decimal_value, raising TypeMismatch at save time.
         # Rails will further cast each column on save via its column type.
         casted, invalid = field.cast(val)
-        field.storage_contract.write(self, casted)
+        field.write_value(self, casted)
         @cast_was_invalid = invalid
       else
         # Field not yet assigned - stash for later
@@ -276,7 +276,7 @@ module TypedEAV
       #      Currency in Phase 05). Reconstructing that shape from
       #      before_value's per-column hash adds complexity for zero benefit
       #      since the per-column values are exactly what we need.
-      field.storage_contract.value_columns.each do |col|
+      field.class.value_columns.each do |col|
         self[col] = version.before_value[col.to_s]
       end
 
@@ -369,20 +369,20 @@ module TypedEAV
     end
 
     # Writes the field's configured default to the typed column(s) via the
-    # `field.apply_default_to(self)` dispatch. Does NOT route through value=
+    # `field.apply_default(self)` dispatch. Does NOT route through value=
     # because field.default_value is already cast via
     # cast(default_value_meta["v"]).first — re-casting would be redundant.
     # Field-side validate_default_value (field/base.rb) catches invalid raw
-    # defaults at field save time, so what apply_default_to writes is always
+    # defaults at field save time, so what apply_default writes is always
     # either a castable value or nil.
     #
     # Multi-cell forward-compat: single-cell types fall through to
-    # `self[value_column] = field.default_value` (Field::Base default).
-    # Currency / future multi-cell types override `apply_default_to` to
+    # `self[value_columns.first] = field.default_value` (TypedStorage default).
+    # Currency / future multi-cell types override `apply_default` to
     # populate multiple columns from a composite default. The dispatch
     # preserves the bypass-Value#value= contract end-to-end.
     def apply_field_default
-      field.storage_contract.apply_default(self)
+      field.apply_default(self)
     end
 
     def validate_value
@@ -540,7 +540,7 @@ module TypedEAV
       # code) cell would silently be missed by the dispatch gate, and
       # Phase 04 versioning would never see it (Scout §3 / Discrepancy D3
       # from plan 04-01).
-      return unless field.storage_contract.changed?(self)
+      return unless field.value_changed?(self)
 
       TypedEAV::EventDispatcher.dispatch_value_change(self, :update)
     end

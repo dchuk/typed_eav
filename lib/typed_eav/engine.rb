@@ -5,7 +5,7 @@ module TypedEAV
     isolate_namespace TypedEAV
 
     initializer "typed_eav.autoload" do
-      require_relative "column_mapping"
+      require_relative "field/typed_storage"
       require_relative "config"
       require_relative "registry"
       # Eager-loaded (not autoloaded) — Phase 04 versioning will register on

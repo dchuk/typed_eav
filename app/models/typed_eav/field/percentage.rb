@@ -23,10 +23,10 @@ module TypedEAV
     # - decimal_places: Integer >= 0 (default 2). Format-time precision.
     # - display_as: :fraction | :percent (default :fraction).
     class Percentage < Decimal
-      # Re-declare value_column :decimal_value. ColumnMapping's value_column
-      # stores the column on `@value_column` (a class instance variable on
-      # the declaring class) — Ruby class instance variables are NOT
-      # inherited through subclass lookup, so `Percentage.value_column`
+      # Re-declare value_column :decimal_value. TypedStorage's `value_column`
+      # / `value_columns` setters write to `@value_columns` (a class instance
+      # variable on the declaring class) — Ruby class instance variables are
+      # NOT inherited through subclass lookup, so `Percentage.value_column`
       # would raise NotImplementedError without this re-declaration.
       # Re-declaring with the same column is BC-safe and explicit; STI
       # behavior (the `type` column stores "TypedEAV::Field::Percentage")
@@ -38,9 +38,9 @@ module TypedEAV
       validate :decimal_places_format
       validate :display_as_inclusion
 
-      # Inherits supported_operators (DEFAULT_OPERATORS_BY_COLUMN
+      # Inherits supported_operators (TypedStorage::DEFAULT_OPERATORS_BY_COLUMN
       # [:decimal_value]) and cast (BigDecimal parse) from Decimal.
-      # Inherits read_value / write_value / apply_default_to defaults from
+      # Inherits read_value / write_value / apply_default defaults from
       # Field::Base via Decimal's chain.
 
       def validate_typed_value(record, val)

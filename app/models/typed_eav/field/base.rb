@@ -12,7 +12,7 @@ module TypedEAV
     class Base < ApplicationRecord
       self.table_name = "typed_eav_fields"
 
-      include TypedEAV::ColumnMapping
+      include TypedEAV::Field::TypedStorage
 
       # ── Associations ──
 
@@ -244,83 +244,17 @@ module TypedEAV
         [raw, false]
       end
 
-      # ── Phase 05 multi-cell extension points ──
+      # ── Multi-cell extension points ──
       #
-      # These three instance methods are the field-side surface that resolves
-      # Value#value semantics, the write path, and the default-application
-      # path. Single-cell field types (every built-in as of Phase 04) inherit
-      # the defaults below and behave identically to the pre-Phase-05 direct-
-      # column-access shape.
-      #
-      # Multi-cell field types (Phase 05: Currency stores `{amount, currency}`
-      # across decimal_value + string_value) override these to compose /
-      # unpack the logical value across multiple physical columns. The
-      # dispatch keeps Value#value, Value#value=, and Value#apply_field_default
-      # oblivious to multi-cell — they always go through the field, so adding
-      # new multi-cell types in the future requires no Value-side changes.
-      #
-      # IMPORTANT: read_value, write_value, and apply_default_to are paired.
-      # Currency overrides ALL THREE — overriding only one creates an
-      # asymmetry where reads see the multi-cell shape but writes / defaults
-      # populate only one column (or vice versa).
-
-      # Returns the logical value for this field as stored on the given
-      # Value record. Default reads `value_record[self.class.value_column]`.
-      # Override in multi-cell field types to compose a hash from multiple
-      # columns (e.g., Field::Currency returns
-      # `{amount: r[:decimal_value], currency: r[:string_value]}`).
-      #
-      # Called from Value#value. The Value#value `return nil unless field`
-      # guard runs before this method, so `self` is always set.
-      def read_value(value_record)
-        value_record[self.class.value_column]
-      end
-
-      # Writes a casted value to the given Value record. Default writes
-      # `value_record[self.class.value_column] = casted`. Override in multi-
-      # cell types to unpack a composite casted value into multiple columns
-      # (e.g., Field::Currency unpacks `{amount: BigDecimal, currency: String}`
-      # into decimal_value + string_value).
-      #
-      # Called from Value#value=. The cast invariant is preserved: `casted`
-      # is whatever the field's `cast(raw)` returned as the first element.
-      # For single-cell types that's a scalar; for Currency it's a Hash.
-      # Without this dispatch, a Currency cast result (a Hash) would be
-      # written to a single typed column, raising TypeMismatch at save time.
-      def write_value(value_record, casted)
-        value_record[self.class.value_column] = casted
-      end
-
-      # Writes this field's configured default to the given Value record.
-      # Default writes `value_record[self.class.value_column] = default_value`,
-      # bypassing Value#value= to avoid re-casting an already-cast default
-      # (default_value is cast at field save time via validate_default_value).
-      # Override in multi-cell types to populate multiple columns from a
-      # composite default (e.g., Field::Currency unpacks `default_value`'s
-      # `{amount: ..., currency: ...}` hash into decimal_value + string_value).
-      #
-      # Called from Value#apply_field_default in two contexts:
-      #   1. Initial value assignment when no `value:` kwarg was passed
-      #      (UNSET_VALUE sentinel resolution path).
-      #   2. Pending-value resolution (apply_pending_value branch where
-      #      @pending_value was UNSET_VALUE and the field arrived later).
-      def apply_default_to(value_record)
-        value_record[self.class.value_column] = default_value
-      end
+      # The three override-point instance methods (`read_value`,
+      # `write_value`, `apply_default`) and the concrete snapshot helpers
+      # (`value_changed?`, `before_snapshot`, `after_snapshot`) live in the
+      # `Field::TypedStorage` concern included above. Field types that span
+      # more than one typed column override all three to compose / unpack the
+      # logical value across multiple cells; `Field::Currency` is the
+      # canonical example.
 
       # ── Introspection ──
-
-      def self.storage_contract_class(contract_class = nil)
-        if contract_class
-          @storage_contract_class = contract_class
-        else
-          @storage_contract_class || TypedEAV::FieldStorageContract
-        end
-      end
-
-      def storage_contract
-        @storage_contract ||= self.class.storage_contract_class.new(self)
-      end
 
       def field_type_name
         self.class.name.demodulize.underscore

@@ -324,17 +324,20 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
         ActiveRecord::RecordInvalid.new(TypedEAV::ValueVersion.new),
       )
 
+      # The subscriber now reads the snapshot helpers directly off the
+      # field (no wrapper). Stub the two concrete methods Subscriber.call
+      # invokes (`before_snapshot`, `after_snapshot`) and exercise the real
+      # write_version_row code path through the doubled field/value pair.
       field_class_double = class_double(TypedEAV::Field::Integer, value_columns: [:integer_value])
       field_double = instance_double(TypedEAV::Field::Integer, class: field_class_double)
-      storage_contract = TypedEAV::FieldStorageContract.new(field_double)
-      allow(field_double).to receive(:storage_contract).and_return(storage_contract)
+      allow(field_double).to receive(:before_snapshot).with(anything, :create).and_return({})
+      allow(field_double).to receive(:after_snapshot).with(anything, :create).and_return("integer_value" => 42)
       value_double = instance_double(
         TypedEAV::Value,
         id: 1, field_id: 1, entity_type: "Contact", entity_id: 1,
         field: field_double,
         pending_version_group_id: nil # Phase 06: subscriber reads this (snapshot path)
       )
-      allow(value_double).to receive_messages("[]": 42, attribute_before_last_save: nil)
 
       expect do
         described_class.call(value_double, :create, {})

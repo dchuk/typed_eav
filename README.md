@@ -558,68 +558,89 @@ end
 ### Multi-cell field types
 
 External field types may store their logical value across multiple typed
-columns. Storage behavior is exposed through `field.storage_contract`,
-which keeps callers from knowing whether a field is single-cell or
-multi-cell. The contract covers:
+columns. The entire storage surface lives directly on `Field::Base` via
+the `Field::TypedStorage` concern, so a custom multi-cell type is just a
+`Field::Base` subclass that overrides three instance methods.
 
-- `value_columns` - the native typed cells used for storage, snapshots,
-  reverting, and update change detection.
-- `read(value_record)` / `write(value_record, casted)` - logical value
-  reads and writes.
-- `apply_default(value_record)` - default application across the field's
-  storage cells.
-- `query_column(operator)` - query routing for each supported operator.
-- `before_snapshot(value_record, change_type)` /
-  `after_snapshot(value_record, change_type)` - version row jsonb shape.
-- `changed?(value_record)` - update event gating across every storage
-  cell the field owns.
+**Class-level DSL** (declared at class load time):
 
-Single-cell field types inherit the default contract. For multi-cell
-fields, create a `TypedEAV::FieldStorageContract` subclass and select it
-from the field class:
+- `value_column :col` – single-cell sugar; declares the primary cell.
+- `value_columns :a, :b, ...` – plural form for multi-cell types. The
+  primary cell is `value_columns.first`. Both forms share storage;
+  `value_column` and `value_columns` are interchangeable getters/setters.
+- `operators :eq, :gt, ...` – restrict the supported operator set.
+- `self.operator_column(op)` – override to route different operators to
+  different cells. Defaults to `value_columns.first`.
+
+**Override-point instance methods** (the entire extension surface for
+multi-cell types):
+
+- `read_value(record)` – compose the logical value from the cells.
+- `write_value(record, casted)` – unpack the casted value across cells.
+- `apply_default(record)` – populate cells from `default_value`.
+
+The defaults target `value_columns.first`, so single-cell field types
+keep working without overrides. The three methods are paired – override
+all three or your reads will see a multi-cell shape that writes / defaults
+cannot produce.
+
+**Concrete snapshot helpers** (NOT overridable; derived from
+`value_columns`):
+
+- `value_changed?(record)` – true iff any cell saw a saved change.
+- `before_snapshot(record, change_type)` / `after_snapshot(record, change_type)`
+  – per-cell hashes keyed by string column names; powers the versioning
+  jsonb shape.
+
+Custom multi-cell type example (matches the built-in `Field::Currency`):
 
 ```ruby
-class MoneyStorageContract < TypedEAV::FieldStorageContract
-  def self.value_columns = %i[decimal_value string_value]
-  def self.query_column(operator) = operator == :currency_eq ? :string_value : :decimal_value
+class Fields::Money < TypedEAV::Field::Base
+  AMOUNT_COLUMN = :decimal_value
+  CURRENCY_COLUMN = :string_value
 
-  def read(value_record)
-    amount = value_record[:decimal_value]
-    currency = value_record[:string_value]
-    amount.nil? && currency.nil? ? nil : { amount: amount, currency: currency }
+  value_columns AMOUNT_COLUMN, CURRENCY_COLUMN
+  operators :eq, :gt, :lt, :gteq, :lteq, :between, :currency_eq, :is_null, :is_not_null
+
+  def self.operator_column(operator)
+    operator == :currency_eq ? CURRENCY_COLUMN : AMOUNT_COLUMN
   end
 
-  def write(value_record, casted)
-    value_record[:decimal_value] = casted&.fetch(:amount, nil)
-    value_record[:string_value] = casted&.fetch(:currency, nil)
+  def read_value(value_record)
+    amount = value_record[AMOUNT_COLUMN]
+    currency = value_record[CURRENCY_COLUMN]
+    return nil if amount.nil? && currency.nil?
+
+    { amount: amount, currency: currency }
+  end
+
+  def write_value(value_record, casted)
+    if casted.nil?
+      value_record[AMOUNT_COLUMN] = nil
+      value_record[CURRENCY_COLUMN] = nil
+    else
+      value_record[AMOUNT_COLUMN] = casted[:amount]
+      value_record[CURRENCY_COLUMN] = casted[:currency]
+    end
   end
 
   def apply_default(value_record)
-    default = field.default_value
+    default = default_value
     return unless default.is_a?(Hash)
 
-    value_record[:decimal_value] = default[:amount] || default["amount"]
-    value_record[:string_value] = default[:currency] || default["currency"]
+    value_record[AMOUNT_COLUMN] = default[:amount] || default["amount"]
+    value_record[CURRENCY_COLUMN] = default[:currency] || default["currency"]
   end
-end
-
-class Fields::Money < TypedEAV::Field::Base
-  value_column :decimal_value
-  storage_contract_class MoneyStorageContract
 end
 ```
 
-Compatibility helpers such as `self.value_columns` and
-`self.operator_column(operator)` may delegate to the selected contract
-when older callers still use those class methods.
-
-Defaults delegate to `value_column` for single-cell storage, so existing
-single-cell types are unchanged. The built-in `Field::Currency` is the
-canonical multi-cell consumer of these extension points.
+The built-in `Field::Currency` is the canonical multi-cell consumer of
+these extension points and reads as a normal `Field::Base` subclass with
+exactly three method overrides.
 
 ### Built-in field types
 
-- **`Currency`:** Stores `{amount: BigDecimal, currency: String}` across two typed columns (`decimal_value` for the amount; `string_value` for the ISO 4217 currency code) through `CurrencyStorageContract`. Operators: `:eq`, `:gt`, `:lt`, `:gteq`, `:lteq`, `:between` target the amount; `:currency_eq` targets the currency code; `:is_null` / `:is_not_null` target the amount column (a Currency value is null when its amount is null). Cast input MUST be a hash with `:amount` and/or `:currency` keys — bare numeric/string values are rejected with `:invalid` to enforce explicit currency dimension at write time. Options: `default_currency` (String ISO code, applied as fallback only when an amount is given without an explicit currency), `allowed_currencies` (Array of ISO codes; `validate_typed_value` enforces inclusion). Versioning snapshots automatically capture both columns through the storage contract. The `:currency_eq` operator is registered ONLY on `Field::Currency`; the QueryBuilder operator-validation gate rejects it with a clear `ArgumentError` if invoked on any other field type.
+- **`Currency`:** Stores `{amount: BigDecimal, currency: String}` across two typed columns (`decimal_value` for the amount; `string_value` for the ISO 4217 currency code). Multi-cell storage is declared via `value_columns :decimal_value, :string_value`; reads, writes, and default application override `read_value`, `write_value`, and `apply_default` directly on `Field::Currency`. Operators: `:eq`, `:gt`, `:lt`, `:gteq`, `:lteq`, `:between` target the amount; `:currency_eq` targets the currency code; `:is_null` / `:is_not_null` target the amount column (a Currency value is null when its amount is null). Cast input MUST be a hash with `:amount` and/or `:currency` keys — bare numeric/string values are rejected with `:invalid` to enforce explicit currency dimension at write time. Options: `default_currency` (String ISO code, applied as fallback only when an amount is given without an explicit currency), `allowed_currencies` (Array of ISO codes; `validate_typed_value` enforces inclusion). Versioning snapshots automatically capture both columns because the snapshot helpers iterate `value_columns`. The `:currency_eq` operator is registered ONLY on `Field::Currency`; the QueryBuilder operator-validation gate rejects it with a clear `ArgumentError` if invoked on any other field type.
 
   ```ruby
   Contact.where_typed_eav(name: "price", op: :currency_eq, value: "USD")
