@@ -124,6 +124,76 @@ module TypedEAV
       )
     end
 
+    # Per-record-varying bulk write API. Sibling to `bulk_set_typed_eav_values`
+    # for callers (sync importers, per-row updaters) where each record carries
+    # its own values hash. Routes through the same outer-transaction-plus-
+    # savepoint envelope and returns the same
+    # `{ successes: [...], errors_by_record: { record => errors_hash } }`
+    # shape. See `TypedEAV::BulkWrite` for the transaction shape and the
+    # `version_grouping:` semantics.
+    #
+    # ## Input shape
+    #
+    #   Contact.bulk_set_typed_eav_values_per_record(
+    #     alice => { "name" => "Alice", "age" => 31 },
+    #     bob   => { "name" => "Bob",   "city" => "Portland" },
+    #   )
+    #
+    # `values_by_record` is `Hash<host_record, Hash<field_name, value>>`.
+    # Field-name keys may be strings or symbols (normalized to strings).
+    # Ruby's insertion-ordered Hash invariant determines record iteration
+    # order — callers can rely on it.
+    #
+    # ## AR persisted-record hash-key collision gotcha
+    #
+    # Two distinct in-memory instances of the **same persisted row**
+    # (e.g. `Contact.find(1)` and `Contact.find(1)`) collide as Hash keys
+    # because AR's `eql?`/`hash` is defined by `class + id`. In a Hash,
+    # the second instance silently overwrites the first's value entry
+    # and only ONE save runs. If you need to apply two updates to the
+    # same row in caller order, sequence the calls outside the Hash —
+    # this API iterates whatever the Hash holds.
+    #
+    # The sibling `bulk_set_typed_eav_values(records, vbn)` API takes an
+    # Array of records and is unaffected — duplicate in-memory instances
+    # iterate each instance separately. The internal `execute_pairs`
+    # helper preserves that contract for both surfaces.
+    #
+    # ## Sparse-update semantic
+    #
+    # Unlisted fields on a record are **not** touched. To delete a value,
+    # pass the destroy-marker hash:
+    #
+    #   Contact.bulk_set_typed_eav_values_per_record(
+    #     alice => { "old_field" => { _destroy: true } },
+    #   )
+    #
+    # ## Mixed-scope records
+    #
+    # Records in one call may span multiple partitions: r1 in workspace 1
+    # and r2 in workspace 2 in the same call resolve their own scopes
+    # independently. Each record's `typed_eav_attributes=` consults the
+    # field definitions for its own `[scope, parent_scope]`. The thread-
+    # local definition memo keys `[host_class, scope, parent_scope]`
+    # collect one entry per distinct partition touched — no collisions.
+    # Callers spanning multiple partitions should wrap the call in
+    # `TypedEAV.unscoped { ... }` so each record can apply its own scope.
+    #
+    # ## `:per_field` union semantic
+    #
+    # When `version_grouping: :per_field`, the per-field UUIDs span the
+    # **union** of field names across all records. Records that both
+    # write `"name"` share one UUID for that cell; a record writing
+    # `"city"` (that no other record writes) gets its own UUID for
+    # `"city"`. Overlapping fields share a version group across records.
+    def bulk_set_typed_eav_values_per_record(values_by_record, version_grouping: :default)
+      TypedEAV::BulkWrite.execute_per_record(
+        host_class: self,
+        values_by_record: values_by_record,
+        version_grouping: version_grouping,
+      )
+    end
+
     private
 
     # Translates a resolved scope into the `(scope, parent_scope)` pair
