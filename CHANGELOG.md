@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Entity.bulk_set_typed_eav_values_per_record(values_by_record,
+  version_grouping: :default)` — per-record-varying sibling to
+  `bulk_set_typed_eav_values`. Takes a `Hash<host_record,
+  Hash<field_name, value>>` and routes each record's value-set through
+  the same outer-transaction-plus-savepoint-per-record envelope,
+  returning the same `{ successes: [...], errors_by_record: { record
+  => errors_hash } }` shape. Supports sparse-update semantics
+  (unlisted fields untouched), `{ _destroy: true }` value-removal
+  shorthand, mixed-scope records (each record honors its own
+  `[scope, parent_scope]` even inside `TypedEAV.unscoped { ... }`),
+  and `:per_field` UUID allocation across the union of field names.
+  Empty input short-circuits without opening a transaction. Internally,
+  both public executors (`BulkWrite.execute` and
+  `BulkWrite.execute_per_record`) now share a single
+  `execute_pairs(pairs, effective_grouping, field_uuids)` helper that
+  takes ordered `[record, vbn]` pairs — preserving `execute`'s byte-
+  for-byte behavior on duplicate in-memory instances of the same
+  persisted row (Hash-key collision is documented as a gotcha only
+  on the new API). G1 (issue #18).
+
 - `Entity.with_field` and `Entity.where_typed_eav` accept an opt-in
   `include_missing:` keyword (default `false`). Threaded through to
   `FilterQuery#initialize`. When paired with `:is_null`, the operator
