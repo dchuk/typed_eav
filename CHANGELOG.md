@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-05-26
+
+Closes four follow-up gaps (PRD #15) surfaced when a downstream Rails app
+consolidated onto 0.3.2 and found four places where the gem's public
+surface forced workarounds: a missing per-record-varying bulk-write entry
+point, a dedup defect on unsaved entities with in-memory `typed_values`
+builds, an `:is_null` operator that couldn't honor the user-intuitive "is
+empty" semantic, and a portable-schema shape that was wrong for in-app
+snapshot stores. A fifth gap (G5) was scoped down to a documentation
+promotion on the existing `Partition` module rather than a new wrapper.
+
+All five changes are additive — no public-API breakage. New entry points
+default to current shapes; existing callers of `bulk_set_typed_eav_values`,
+`with_field`/`where_typed_eav` (without the new kwarg), `export_schema`,
+and `initialize_typed_values` (on persisted records with no in-memory
+builds) keep their behavior byte-for-byte. New ADR: ADR-0006 pins the G3
+`include_missing` strategy as set-complement at the `FilterQuery` altitude
+(rejects the LEFT JOIN framing the PRD originally sketched).
 
 ### Added
 
