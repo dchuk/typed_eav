@@ -115,7 +115,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 | 5 - Field type expansion | 4/4 | complete | 2026-05-06 |
 | 6 - Bulk operations & import/export | 5/5 | complete | 2026-05-07 |
 | 7 - Read optimization | 0/0 | deferred | — |
-| 8 - Field display label (issue #21) | 0/0 | planning | — |
+| 8 - Field display label (issue #21) | 0/1 | planned | - |
 
 ---
 
