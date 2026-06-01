@@ -15,7 +15,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 - [x] Phase 5: Field type expansion
 - [x] Phase 6: Bulk operations & import/export
 - [ ] Phase 7: Read optimization _(deferred to a future milestone — 2026-06-01)_
-- [ ] Phase 8: Field display label (issue #21)
+- [x] Phase 8: Field display label (issue #21)
 
 ### Phase 1: Two-level scope partitioning
 **Goal:** Extend the canonical partition tuple from `(entity_type, scope)` to `(entity_type, scope, parent_scope)` for fields AND sections, so every later phase keys off the same identity.
@@ -115,7 +115,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 | 5 - Field type expansion | 4/4 | complete | 2026-05-06 |
 | 6 - Bulk operations & import/export | 5/5 | complete | 2026-05-07 |
 | 7 - Read optimization | 0/0 | deferred | — |
-| 8 - Field display label (issue #21) | 0/1 | planned | - |
+| 8 - Field display label (issue #21) | 1/1 | complete | 2026-06-01 |
 
 ---
 
