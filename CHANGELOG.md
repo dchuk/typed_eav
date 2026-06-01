@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-01
+
+Adds a human display label for fields, distinct from the immutable machine
+slug `name` (issue #21). Fully additive — every change defaults to the
+pre-0.5.0 behavior. Existing rows (with `label` NULL) render exactly as
+before, and consumers that never set a label observe no difference.
+
+### Added
+
+- `label` — a nullable, free-text column on `typed_eav_fields`
+  (`20260507000000_add_label_to_typed_eav_fields.rb`). No index, no
+  default, no backfill: `label` never participates in uniqueness, lookup,
+  partitioning, or ordering, so an index would be dead weight. Run
+  `rails typed_eav:install:migrations` (or copy the migration) and migrate
+  to pick it up. `name` stays the immutable machine key.
+
+- `TypedEAV::Field::Base#display_name` — the canonical human-facing
+  display string. Returns the free-text `label` when present, otherwise
+  falls back to `name.humanize`. A blank (`""`) label falls back too (via
+  `presence`). This is the ONE accessor all rendering should use; existing
+  rows render unchanged.
+
+- `SchemaPortability` round-trips the label. `export_schema` emits the
+  **raw** `"label"` so `import_schema` reproduces it verbatim and
+  divergence detection treats a differing label as a difference; legacy
+  payloads with no `"label"` key import as NULL with no version gate.
+  `export_snapshot_schema` emits the **resolved** `"display_name"` instead
+  (render-oriented snapshots hand the consumer a ready-to-render string —
+  intentionally asymmetric to the raw-label regular export).
+
+### Changed
+
+- A label-only edit on a Field dispatches the `:update` event, not
+  `:rename`. `:rename` remains reserved for changes to the machine `name`.
+  Regression-pinned in `spec/regressions/issue_21_label_no_rename_spec.rb`.
+
+### References
+
+- Issue #21 — Field display label / `display_name` contract.
+
 ## [0.4.0] - 2026-05-26
 
 Closes four follow-up gaps (PRD #15) surfaced when a downstream Rails app
