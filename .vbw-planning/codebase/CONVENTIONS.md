@@ -34,7 +34,7 @@ When a metric has to be silenced inline (e.g., `where_typed_eav`, `typed_eav_att
 
 Field::Base carries a class-level `# rubocop:disable Metrics/ClassLength` with a multi-line justification (the central STI parent legitimately holds associations, validations, cascade dispatch, partition-aware ordering, default-value handling, and backfill — splitting into concerns would scatter the cross-cutting `(entity_type, scope, parent_scope)` partition contract).
 
-The pattern is: don't disable silently, give the reason. Examples in `lib/typed_eav/has_typed_eav.rb`, `lib/typed_eav/query_builder.rb`, `app/models/typed_eav/value.rb`, `app/models/typed_eav/field/base.rb`, and `app/models/typed_eav/field/currency.rb`.
+The pattern is: don't disable silently, give the reason. Examples in `lib/typed_eav/entity_query.rb`, `lib/typed_eav/filter_query.rb`, `lib/typed_eav/query_builder.rb`, `app/models/typed_eav/value.rb`, `app/models/typed_eav/field/base.rb`, and `app/models/typed_eav/field/currency.rb`. (The heavy `where_typed_eav` / `typed_eav_hash_for` bodies that carried the original blanket disables moved to `FilterQuery` / `BulkRead` in the 0.3.0 split — ADR-0002.)
 
 ## Comments
 
@@ -46,7 +46,9 @@ The codebase has high-density, **rationale-first** comments. The pattern:
 
 Examples:
 - `lib/typed_eav.rb` lines 41–113 explain the resolution priority order for `current_scope` and the strict-vs-permissive contract split between `scope_resolver` and `with_scope`.
-- `lib/typed_eav/has_typed_eav.rb` lines 35–61 document the three-way name-collision sort (global / scope-only / full-triple).
+- `lib/typed_eav/partition.rb` documents the three-way name-collision sort (global / scope-only / full-triple) — moved here from `has_typed_eav.rb` in the 0.3.0 split (ADR-0002).
+- `lib/typed_eav/scope_tuple.rb` documents the strict-vs-permissive normalization split (resolver contract vs `with_scope` block input).
+- `lib/typed_eav/field/typed_storage.rb` documents why snapshot helpers are concrete (versioning-coupled invariant) while `read_value`/`write_value`/`apply_default` are the override surface.
 - `lib/typed_eav/event_dispatcher.rb` documents the internal-vs-user error policy split and why field-change dispatch deliberately omits the `context` arg (asymmetric vs value-change).
 - `app/models/typed_eav/field/reference.rb` lines 92–107 document the `::Integer` / `::String` constant-shadow hazard inside `module TypedEAV; module Field`.
 - `db/migrate/20260430000000_*.rb` lines 36–56 explain why three partials per partition table (Option B split) instead of two — Postgres treats NULL as distinct in unique indexes, and `nulls_not_distinct: true` (PG ≥ 15) was rejected because the gemspec doesn't pin a PG version.
@@ -120,7 +122,7 @@ The error tells the caller *how to fix it*, not just what's wrong. Migration not
 | Setter alias: `typed_eav=` is an alias for `typed_eav_attributes=` | both forms accepted |
 | Phase 03 dispatch internals: `_dispatch_*` prefix | `_dispatch_value_change_create`, `_dispatch_value_change_update`, `_dispatch_value_change_destroy`, `_dispatch_field_change`, `_dispatch_image_attached` — leading underscore signals private dispatch glue |
 | Phase 04 first-party hooks: `register_internal_*` | `register_internal_value_change`, `register_internal_field_change` — the `_internal_` infix signals first-party-only intent (not strictly enforced via `private_class_method` because Phase 04 lives in a different namespace and would not be able to call a truly-private method) |
-| Multi-cell extension points: paired `read_value` / `write_value` / `apply_default_to` | Override **all three** when adding a multi-cell field type — overriding only one creates an asymmetry where reads see the multi-cell shape but writes / defaults populate only one column |
+| Multi-cell extension points: paired `read_value` / `write_value` / `apply_default` (on `Field::TypedStorage`) | Override **all three** when adding a multi-cell field type — overriding only one creates an asymmetry where reads see the multi-cell shape but writes / defaults populate only one column. (Renamed from `apply_default_to` in the 0.3.0 ADR-0001 collapse.) |
 
 ## API stability signals
 
@@ -164,7 +166,8 @@ The "non-obvious contracts" section is doing real work — every item there is s
 
 ## File-organization rules
 
-- One STI subclass per file under `app/models/typed_eav/field/`. Don't reintroduce a single `types.rb`.
+- One STI subclass per file under `app/models/typed_eav/field/`. Don't reintroduce a single `types.rb`. Family **intermediate bases** (`validated_string.rb`, `range_bounded.rb`, `optionable.rb`) follow the same one-per-file rule and are documented public extension API (ADR-0004) — external authors subclass `ValidatedString`/`RangeBounded` or include `Optionable` rather than duplicating min/max/pattern or option-inclusion plumbing.
+- The storage seam lives in **one** concern, `lib/typed_eav/field/typed_storage.rb` (ADR-0001). Don't reintroduce a `ColumnMapping` module or `FieldStorageContract` wrapper class — multi-cell types override the `read_value`/`write_value`/`apply_default` trio directly on their Field subclass (Currency is the canonical example).
 - One generator per directory under `lib/generators/typed_eav/`. Each generator has its own `templates/` if it needs them.
 - Module entry (`lib/typed_eav.rb`) is small — extends are autoloaded; concerns are required by the engine initializer; the file itself is for *module-level* APIs (`with_scope`, `unscoped`, `with_context`, `current_scope`, `current_context`, etc.).
 - Phase 04 versioning subsystem under `lib/typed_eav/versioning/` — namespace shell + Subscriber, **plus** an `autoload :Subscriber` in `lib/typed_eav/versioning.rb` because top-level `autoload :Versioning` only resolves the namespace shell (it does NOT recursively autoload nested constants); without the explicit nested autoload, the engine's `config.after_initialize` block would `NameError` at boot.

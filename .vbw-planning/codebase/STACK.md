@@ -2,9 +2,12 @@
 
 ## Project Type
 
-**Ruby gem** — `typed_eav` v0.2.0. Distributed as a Rails Engine; published to RubyGems via GitHub Actions trusted publishing.
+**Ruby gem** — `typed_eav` v0.4.0. Distributed as a Rails Engine; published to RubyGems via GitHub Actions trusted publishing.
 
 Summary (from gemspec):
+> "Typed custom fields for ActiveRecord models"
+
+The fuller value prop (README §"Why Typed Columns?"):
 > "Add dynamic custom fields to ActiveRecord models at runtime using native database typed columns instead of jsonb blobs. Hybrid EAV with real indexes, real types, real query performance."
 
 Homepage: https://github.com/dchuk/typed_eav
@@ -17,7 +20,7 @@ Author: Darrin Chuk
 |---|---|---|
 | Ruby | `>= 3.1` | `required_ruby_version` in gemspec; CI matrix tests 3.1, 3.2, 3.3, 3.4 |
 | Rails | `>= 7.1` | Single hard dependency; resolves to `8.1.3` in `Gemfile.lock` |
-| PostgreSQL | required | The README states "Requires PostgreSQL"; jsonb `@>`, `text_pattern_ops` btree, partial GIN/unique indexes, `algorithm: :concurrently`, and `FOR UPDATE` row locking are PG-specific |
+| PostgreSQL | required | The README states "Requires PostgreSQL"; jsonb `@>`, `text_pattern_ops` btree, partial GIN/unique indexes, `algorithm: :concurrently`, `:uuid` columns, and `FOR UPDATE` row locking are PG-specific |
 | Zeitwerk | `~> 2.6` (via Rails) | Standard Rails autoloading; a dedicated spec (`spec/lib/typed_eav/zeitwerk_loading_spec.rb`) guards eager-load correctness |
 
 ## Test / Dev Stack
@@ -37,18 +40,20 @@ Author: Darrin Chuk
   - `Product` — `has_typed_eav types: [:text, :integer, :decimal, :boolean]` (unscoped, type-restricted).
   - `Project` — `has_typed_eav scope_method: :tenant_id, parent_scope_method: :workspace_id` (Phase 01 two-level partition host).
 - **Engine migrations are added to the test schema** by `spec_helper.rb` (`ActiveRecord::Migrator.migrations_paths << TypedEAV::Engine.root.join("db/migrate")`).
-- **Pending dummy-app migrations applied at suite start** — Phase 05 added `spec/dummy/db/migrate/20260506000000_create_active_storage_tables.active_storage.rb`; `spec_helper.rb` runs `MigrationContext.new(dummy_path).migrate` so a fresh check-out doesn't fail on the missing `active_storage_blobs` table.
+- **Pending dummy-app migrations applied at suite start** — `spec_helper.rb` runs `MigrationContext.new(dummy_path).migrate` so a fresh check-out doesn't fail on missing tables (e.g., the Phase 05 Active Storage tables).
 - **Transactional fixtures** + per-example metadata flags `:unscoped`, `:scoping`, `:event_callbacks`, `:real_commits` (see TESTING.md).
 - **Active Storage soft-detect**: `Engine.register_attachment_associations!` registers `has_one_attached :attachment` on `TypedEAV::Value` only when `::ActiveStorage::Blob` is defined. The dummy app pulls the full `rails` meta-gem so AS is always loaded under the test suite; production hosts that exclude AS get a no-op.
 
 ## Generators (consumer-facing)
 
-The gem ships two Rails generators, both registered with explicit `namespace` declarations (Thor lookup correctness fix per `ccb04b3`):
+The gem ships two Rails generators, both registered with explicit `namespace` declarations (Thor lookup correctness fix):
 
 | Generator | Namespace | Purpose |
 |---|---|---|
 | `typed_eav:install` | copies engine migrations | Wraps `rake typed_eav:install:migrations`; prints next-steps banner |
 | `typed_eav:scaffold` | controller + concern + helper + Stimulus controllers + views + initializer + routes | Mounts an admin UI at `/typed_eav_fields`; **fail-closed** authorization hook (`authorize_typed_eav_admin!` returns `head :not_found`) by design |
+
+`spec/integration/generated_scaffold_behavior_spec.rb` (added in the 0.3.x arc) renders the scaffold output against a host app to assert behavior, not just file presence.
 
 ## Front-end (in scaffold output only)
 
@@ -66,4 +71,22 @@ The gem ships two Rails generators, both registered with explicit `namespace` de
 
 ## Versioning
 
-Single source of truth: `lib/typed_eav/version.rb` (`TypedEAV::VERSION = "0.2.0"`). The gemspec reads it directly. Release workflow asserts `git tag` matches.
+Single source of truth: `lib/typed_eav/version.rb` (`TypedEAV::VERSION = "0.4.0"`). The gemspec reads it directly. Release workflow asserts `git tag` matches.
+
+Release arc since the v0.2.0 map:
+- **0.3.0** — four-refactor architecture cleanup arc (#9–#13), anchored by ADRs 0001–0005. No public-API breakage except the documented `FieldStorageContract` removal (ADR-0001).
+- **0.3.1 / 0.3.2** — docs-only patches (0.3.2 fixed a hallucinated `typed_eav_changes` API reference in 0.3.1's README).
+- **0.4.0** (2026-05-26) — closes four follow-up gaps (PRD #15): per-record bulk-write entry point, in-memory dedup fix, `include_missing:` "is empty" semantic (ADR-0006), and a restore-oriented snapshot schema shape. All additive.
+- **Phase 8** (issue #21) — additive nullable `label` column + `Field#display_name`.
+
+## Architecture Decision Records
+
+`docs/adr/` holds six accepted ADRs documenting the 0.3.0–0.4.0 arc:
+- **0001** — collapse the column-mapping stack into `Field::TypedStorage`; break `FieldStorageContract` pre-1.0.
+- **0002** — split `HasTypedEav` into mixin + `EntityQuery` + query objects (`FilterQuery`, `BulkRead`, `Partition`).
+- **0003** — keep `EventDispatcher` as a broker (no change; rationale documented).
+- **0004** — introduce family intermediate bases (`ValidatedString`, `RangeBounded`, `Optionable`).
+- **0005** — keep Phase-6 modules independent; do not introduce an import-pipeline orchestrator.
+- **0006** — compose `include_missing:` via set-complement at the `FilterQuery` altitude.
+
+`docs/goals/refactor-0-3-0/` holds the GoalBuddy artifacts for the 0.3.0 arc.

@@ -11,7 +11,8 @@ The gem has **one** runtime dependency:
 No other runtime gems. Notably absent (intentional):
 - No serialization gem (`json` ships with Ruby).
 - No image/file gem — Active Storage ships with Rails and is **soft-detected**: `Engine.register_attachment_associations!` only attaches the `has_one_attached :attachment` macro when `::ActiveStorage::Blob` is defined at engine boot. Apps that exclude AS pay zero cost.
-- No multi-tenancy gem — `acts_as_tenant` is **auto-detected** in `Config::DEFAULT_SCOPE_RESOLVER` via `defined?(::ActsAsTenant)` but is not a hard dependency. As of v0.2.0 the resolver returns the Phase 1 tuple `[ActsAsTenant.current_tenant, nil]` instead of a bare scalar.
+- No multi-tenancy gem — `acts_as_tenant` is **auto-detected** in `Config::DEFAULT_SCOPE_RESOLVER` via `defined?(::ActsAsTenant)` but is not a hard dependency. The resolver returns the Phase 1 tuple `[ActsAsTenant.current_tenant, nil]` instead of a bare scalar; tuple coercion/validation is centralized in `TypedEAV::ScopeTuple` (0.3.0, #10) — `normalize_strict` for resolver returns, `normalize_permissive` for `with_scope` block input.
+- No CSV gem — `lib/typed_eav/csv_mapper.rb` `require "csv"` (CSV moved to a bundled gem in Ruby 3.4, but ships with the stdlib for the supported Ruby range; no gemspec dep added).
 - No `ActiveSupport::Configurable` reliance — Configurable was deprecated in Rails 8.1; `Config` and `Registry` use hand-rolled `defined?(@var)` accessors instead so the public API stays stable across Rails 8.1 → 8.2 migration.
 
 ## Development & test dependencies (Gemfile)
@@ -64,7 +65,8 @@ These are **detected but not required** at runtime — the gem checks `defined?(
 | `text_pattern_ops` btree opclass | `idx_te_values_field_str` index | `db/migrate/20260330000000_create_typed_eav_tables.rb` |
 | Partial unique indexes (`WHERE scope IS NOT NULL` / `IS NULL` / `parent_scope IS NOT NULL`) | The Phase 01 paired-triple unique constraints on `(name, entity_type, scope, parent_scope)` — three partials per partition table (`*_uniq_scoped_full`, `*_uniq_scoped_only`, `*_uniq_global`) | `db/migrate/20260430000000_add_parent_scope_to_typed_eav_partitions.rb`. NB: `nulls_not_distinct: true` (PG ≥ 15) was rejected — the gemspec's Rails floor doesn't pin a PG-server-version, so the gem stays compatible with PG 12/13/14. |
 | GIN index | `idx_te_values_json_gin` (used by `:any_eq`/`:all_eq`) | `db/migrate/20260330000000_create_typed_eav_tables.rb` |
-| `algorithm: :concurrently` (CREATE INDEX CONCURRENTLY) | Phase 01 parent_scope migration | `db/migrate/20260430000000_*` uses `disable_ddl_transaction!` so production rollouts on million-row tables stay online. |
+| `algorithm: :concurrently` (CREATE INDEX CONCURRENTLY) | Phase 01 parent_scope migration; Phase 06 `version_group_id` migration | `db/migrate/20260430000000_*` and `20260506000001_*` use `disable_ddl_transaction!` + explicit `up`/`down` so production rollouts on large tables stay online. |
+| `:uuid` column type | `typed_eav_value_versions.version_group_id` (Phase 06 bulk-write correlation tag) | `db/migrate/20260506000001_*`. Unkeyed correlation token (no parent `bulk_operations` table — deliberately omitted, locked at 06-CONTEXT.md). 16 bytes vs 36 for a string UUID; native PG equality/btree. |
 | `FOR UPDATE` row locking | `Field::Base` and `Section` partition-aware ordering helpers (`move_higher`/`move_lower`/`move_to_top`/`move_to_bottom`/`insert_at`) | Locks the partition's rows in `:id` order — deterministic acquisition order avoids deadlocks across concurrent reorders within the same partition. |
 | `ON DELETE SET NULL` | `typed_eav_values.field_id` (Phase 02 cascade policy), `typed_eav_value_versions.value_id` and `field_id` (Phase 04 audit log) | Allows orphan-tolerant rows when `field_dependent: :nullify` is chosen, and preserves audit history when the live Value is destroyed. |
 

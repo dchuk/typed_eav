@@ -1,8 +1,8 @@
 # META.md
 
-mapped_at: 2026-05-06T00:00:00Z
-git_hash: eae69013128e423a2a0164262a3d8bcd41457d00
-file_count: 145
+mapped_at: 2026-06-01T00:00:00Z
+git_hash: c8ddc743597d9f67b62b7e1c6ce0ffc8fa9ccfd4
+file_count: 182
 mode: incremental
 monorepo: false
 mapping_tier: solo

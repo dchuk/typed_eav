@@ -27,11 +27,13 @@ class TypedEAV::Field::SomeType < Base
 end
 ```
 
-Default operators come from `ColumnMapping::DEFAULT_OPERATORS_BY_COLUMN` keyed by column name — declaring `value_column :integer_value` automatically allows `:eq, :not_eq, :gt, :gteq, :lt, :lteq, :between, :is_null, :is_not_null` unless `operators ...` narrows them. The override is explicit: don't widen by default, narrow when warranted.
+Default operators come from `Field::TypedStorage::DEFAULT_OPERATORS_BY_COLUMN` keyed by column name (the seam moved out of the removed `ColumnMapping` module in ADR-0001) — declaring `value_column :integer_value` automatically allows `:eq, :not_eq, :gt, :gteq, :lt, :lteq, :between, :is_null, :is_not_null` unless `operators ...` narrows them. The override is explicit: don't widen by default, narrow when warranted.
+
+Since ADR-0004 the FIRST move when adding a type is to check for a family base: subclass `ValidatedString` (string + min/max/pattern), subclass `RangeBounded` (comparable + min/max bounds), or include `Optionable` (option-set) before hand-rolling the same plumbing.
 
 ### "Multi-cell extension trio (override all three or none)"
 
-Multi-cell field types (Phase 05 Currency is the canonical example) override **three paired** instance methods on `Field::Base`:
+Multi-cell field types (Currency is the canonical example) override **three paired** instance methods declared on the `Field::TypedStorage` concern (ADR-0001 collapsed the old `FieldStorageContract` class hierarchy into this single seam):
 
 ```ruby
 def self.value_columns
@@ -45,12 +47,24 @@ end
 
 def read_value(value_record);   ...; end  # compose composite from cols
 def write_value(value_record, casted); ...; end  # unpack composite into cols
-def apply_default_to(value_record); ...; end  # write default across cols
+def apply_default(value_record); ...; end  # write default across cols (renamed from apply_default_to)
 ```
 
-Single-cell types inherit defaults that delegate to `value_column` (singular) — every built-in type pre-Phase-05 behaves identically.
+Single-cell types inherit defaults that delegate to `value_columns.first` — every built-in single-cell type behaves identically. Currency is now an ordinary `Field` subclass with these overrides — the same shape external custom multi-cell types use.
 
-The pattern: override **all three**, or override none. Overriding only `read_value` (for example) creates an asymmetry where reads see the multi-cell shape but writes / defaults populate only one column, which would silently corrupt data. Documented inline in `field/base.rb` lines 247–309.
+The pattern: override **all three**, or override none. Overriding only `read_value` (for example) creates an asymmetry where reads see the multi-cell shape but writes / defaults populate only one column, which would silently corrupt data. The snapshot helpers (`value_changed?`/`before_snapshot`/`after_snapshot`) are concrete and **not** overridable — the snapshot shape is a versioning-coupled invariant. Documented inline in `lib/typed_eav/field/typed_storage.rb`.
+
+### "Family intermediate base — inheritance when storage is shared, concern when not" (ADR-0004)
+
+Three field families absorb per-leaf duplication: `ValidatedString` (class) for Text/Email/Url (all `string_value`), `RangeBounded` (class) for Integer/Decimal/Date/DateTime (different columns, identified by "has min/max bounds" — declares no `value_column`), and `Optionable` (concern) for Select/MultiSelect (different columns — `string_value` vs `json_value` — so inheritance can't unify storage). The rule is locked: **inheritance class when children share storage; concern when they don't.** True stubs (Color/Boolean/Json) stay direct `< Base`. All three are documented public extension API. When a third caller of a still-duplicated helper appears, extract a family along this rule.
+
+### "Two altitudes of query module" (ADR-0002)
+
+`QueryBuilder` is the low-level per-field SQL primitive (given `(field, op, value)` → relation/predicate; knows nothing about scope, collision, or multiple filters). `FilterQuery` / `BulkRead` are the orchestration altitude (input normalization, partition collision precedence, multimap-vs-single-scope branching, cross-filter composition). When adding a query shape, pick the altitude: per-field predicate work → `QueryBuilder`; cross-filter or cross-tuple work → a top-level query class. `include_missing:` (ADR-0006) is the worked example — it composes as a set complement (`where.not(id: QueryBuilder.entity_ids(field, :is_not_null, nil))`) at the `FilterQuery` altitude rather than forking the `:is_null` branch inside `QueryBuilder` with a LEFT JOIN.
+
+### "Independent toolbox modules over a premature orchestrator" (ADR-0005)
+
+The Phase-6 trio (`BulkWrite`, `CSVMapper`, `SchemaPortability`) deliberately do NOT share an interface or a unified `Result` shape — each return shape matches its own axis (per-record error attribution / one-row transform / aggregate category counts). Composition into an "import pipeline" is the caller's, not the gem's. When several modules look like they "should compose under one orchestrator," check whether each is independently useful first; if so, leave them independent.
 
 ### "One module dispatch instead of per-type classes"
 
@@ -79,8 +93,8 @@ The codebase uses three frozen-Object sentinels:
 
 | Sentinel | Distinguishes |
 |---|---|
-| `HasTypedEAV::ClassQueryMethods::UNSET_SCOPE` | "kwarg not passed → resolve from ambient" vs "explicitly nil → filter to global-only on this axis" |
-| `HasTypedEAV::ClassQueryMethods::ALL_SCOPES` | "normal scoped query" vs "inside `unscoped { }` → use multimap branch" |
+| `EntityQuery::UNSET_SCOPE` | "kwarg not passed → resolve from ambient" vs "explicitly nil → filter to global-only on this axis" |
+| `EntityQuery::ALL_SCOPES` | "normal scoped query" vs "inside `unscoped { }` → use multimap branch" |
 | `Value::UNSET_VALUE` | "no `value:` kwarg given → trigger `field.apply_default_to(self)`" vs "explicit `value: nil` → store nil" |
 
 This is the alternative to adding multiple positional parameters or a "mode" symbol — a sentinel is cheap, identifiable via `.equal?`, and self-documenting via its constant name.

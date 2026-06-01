@@ -47,27 +47,41 @@ spec/
 │
 ├── integration/                        # cross-cutting end-to-end specs
 │   ├── generators_spec.rb              # runs install/scaffold generators in temp dirs
+│   ├── generated_scaffold_behavior_spec.rb        # 0.3.x — renders scaffold output, asserts behavior
 │   └── typed_eav_lifecycle_spec.rb     # full create/assign/query/update/destroy
 │
 ├── lib/typed_eav/                      # pure-logic tests for /lib code
 │   ├── active_storage_soft_detect_spec.rb        # Phase 05 — stubs ::ActiveStorage absence
-│   ├── column_mapping_spec.rb
-│   ├── column_mapping_value_columns_spec.rb      # Phase 04 — value_columns plural API
+│   ├── bulk_operations_spec.rb                    # Phase 06 — bulk_set_typed_eav_values (uniform)
+│   ├── bulk_read_spec.rb                          # Phase 06 — BulkRead query bound + single-class invariant
+│   ├── bulk_write_per_record_spec.rb              # 0.4.0 G1 — execute_per_record + dedup contract
 │   ├── config_and_registry_spec.rb
 │   ├── config_versioning_spec.rb                 # Phase 04 — master switch + actor_resolver
+│   ├── csv_mapper_spec.rb                         # Phase 06 — passthrough + typed-coercion modes
+│   ├── entity_query_spec.rb                       # ADR-0002 — class-query orchestration + resolve_scope
 │   ├── event_context_spec.rb                     # Phase 03 — with_context / current_context
 │   ├── event_dispatcher_spec.rb                  # Phase 03 — internals/user-proc fire order + error policy
 │   ├── field_cascade_spec.rb                     # Phase 02 — destroy/nullify/restrict_with_error
+│   ├── field/typed_storage_spec.rb               # ADR-0001 — storage seam (consolidates 3 old specs)
+│   ├── filter_query_spec.rb                       # ADR-0002/0006 — multi-filter + include_missing set-complement
+│   ├── partition_spec.rb                          # ADR-0002 — visible_fields + collision precedence + orphan msg
 │   ├── query_builder_spec.rb                     # every operator × type matrix (incl. :references, :currency_eq)
 │   ├── registry_versioned_spec.rb                # Phase 04 — Registry.versioned? per-entity opt-in
+│   ├── schema_portability_spec.rb                 # Phase 06 — export/import + export_snapshot_schema (G4)
+│   ├── scope_tuple_spec.rb                         # #10 — normalize_permissive/strict + invariant
 │   ├── scoping_spec.rb                           # UNSET_SCOPE, ALL_SCOPES, fail-closed, with_scope, unscoped, two-axis resolver
 │   ├── versioned_concern_spec.rb                 # Phase 04 — TypedEAV::Versioned mixin
 │   ├── versioning/subscriber_spec.rb             # Phase 04 — Subscriber.call gates + snapshot logic
 │   └── zeitwerk_loading_spec.rb
 │
 ├── models/typed_eav/                   # AR-model specs
+│   ├── bulk_read_spec.rb               # Phase 06 — model-level bulk hash reads
 │   ├── field_event_spec.rb             # Phase 03 — Field after_commit branch dispatch (create/update/destroy/rename)
-│   ├── field_spec.rb                   # every Field::* type's cast/validate (now incl. Currency, Percentage, Reference, Image, File)
+│   ├── field_schema_spec.rb            # field-schema export/round-trip behaviour
+│   ├── field_spec.rb                   # every Field::* type's cast/validate (incl. Currency, Percentage, Reference, Image, File)
+│   ├── field/optionable_spec.rb        # ADR-0004 — Optionable concern shared behaviour
+│   ├── field/range_bounded_spec.rb     # ADR-0004 — RangeBounded family validators
+│   ├── field/validated_string_spec.rb  # ADR-0004 — ValidatedString family validators (max_gte_min on all leaves)
 │   ├── has_typed_eav_spec.rb
 │   ├── section_and_option_spec.rb
 │   ├── value_event_spec.rb             # Phase 03 — Value after_commit dispatch + update filter
@@ -79,6 +93,7 @@ spec/
 │
 ├── regressions/                        # tests pinned to specific historical bugs
 │   ├── known_bugs_spec.rb              # `pending` for desired-but-unfixed; non-pending for already-fixed
+│   ├── issue_21_label_no_rename_spec.rb           # Phase 08 — label-only edit pins to :update, not :rename
 │   ├── review_round_2_array_cast_spec.rb
 │   ├── review_round_2_blank_handling_spec.rb
 │   ├── review_round_2_scope_leak_spec.rb
@@ -86,10 +101,10 @@ spec/
 │   ├── review_round_4_parent_scope_spec.rb      # Phase 01 — three-way collision precedence
 │   └── review_round_5_versioning_slot_zero_spec.rb     # Phase 04 — Subscriber stays at slot 0
 │
-└── spec_helper.rb                      # ~175 lines — see Spec-level conventions below
+└── spec_helper.rb                      # see Spec-level conventions below
 ```
 
-41 spec files total.
+48 spec files total. The 0.3.0 refactor consolidated `column_mapping_spec.rb` + `column_mapping_value_columns_spec.rb` + the old `field_storage_contract_spec.rb` into a single `field/typed_storage_spec.rb` (ADR-0001), and added unit surfaces for the extracted query objects (`entity_query`, `filter_query`, `partition`, `scope_tuple`) and the family bases.
 
 ## Spec-level conventions
 
@@ -139,7 +154,7 @@ One factory per Field subclass plus host-model factories (`:contact`, `:product`
 
 ### Test plan document
 
-`TEST_PLAN.md` (~31 KB) is a per-spec-file breakdown of every planned test case. Generated 2026-04-08 against an earlier point in the suite — the "Current State" section is now well behind the present 41-file suite, but the plan document is still useful as a target/checklist when adding new tests so coverage stays uniform across types.
+`TEST_PLAN.md` (~31 KB) is a per-spec-file breakdown of every planned test case. Generated 2026-04-08 against an earlier point in the suite — the "Current State" section is now well behind the present 48-file suite, but the plan document is still useful as a target/checklist when adding new tests so coverage stays uniform across types.
 
 ## Lint config for tests
 
