@@ -113,6 +113,12 @@ module TypedEAV
           "entity_type" => field.entity_type,
           "scope" => field.scope,
           "parent_scope" => field.parent_scope,
+          # Raw label (issue #21) — NOT the resolved display_name. The regular
+          # export round-trips the stored value verbatim so import reproduces
+          # it exactly and divergence detection (field_export_row_equal?) treats
+          # a differing label as a difference. Legacy payloads lack this key →
+          # entry["label"] is nil on import → label stays NULL (no version gate).
+          "label" => field.label,
           "required" => field.required,
           "sort_order" => field.sort_order,
           "field_dependent" => field.field_dependent,
@@ -145,6 +151,12 @@ module TypedEAV
         entry = {
           "name" => field.name,
           "field_type_name" => field.field_type_name,
+          # RESOLVED display_name (issue #21), NOT the raw label — snapshots are
+          # render-oriented (CONTEXT decision 3). This is intentionally
+          # asymmetric to the regular export's raw "label": a snapshot consumer
+          # gets the ready-to-render string (label when present, else
+          # name.humanize) without re-deriving it.
+          "display_name" => field.display_name,
           "required" => field.required,
           "sort_order" => field.sort_order,
           "options" => field.options,
@@ -247,6 +259,7 @@ module TypedEAV
 
       def overwrite_field!(existing, entry)
         existing.assign_attributes(
+          label: entry["label"],
           required: entry["required"],
           sort_order: entry["sort_order"],
           field_dependent: entry["field_dependent"],
