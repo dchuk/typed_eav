@@ -810,6 +810,7 @@ A few non-obvious contracts worth knowing about up front:
 - **Orphan-parent rows rejected**: a `Field` or `Section` row with `parent_scope` set but `scope` blank is invalid. The `Value`-side guard rejects cross-`(scope, parent_scope)` writes too.
 - **Event hooks fire from `after_commit`**: the `on_value_change` and `on_field_change` callbacks fire after the database write is durable; their exceptions never break a save. See §"Event hooks" for the full contract.
 - **Versioning is opt-in**: When enabled (`TypedEAV.config.versioning = true` on the gem; `versioned: true` per host), every `:create` / `:update` / `:destroy` event on a Value writes an append-only audit row in `typed_eav_value_versions`. See §"Versioning" for the full contract.
+- **`label` is cosmetic, `name` is the machine key**: A field's optional `label` is free-text human display, independent of the slug `name`. Render via `display_name`, which returns `label` when present else `name.humanize`. `label` has no uniqueness or format constraints (only a 255-char max) and never affects ordering, lookup, partitioning, or rename detection — editing only `label` fires `on_field_change` with `:update`, never `:rename`. Existing rows (`label` NULL) render unchanged. Schema export round-trips the raw `label` (legacy payloads without a `label` key import as NULL); snapshot export carries the resolved `display_name`.
 
 ## Event hooks
 
