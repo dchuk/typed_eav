@@ -4,10 +4,10 @@
 **Milestone:** Enhancement plan v1
 
 ## Current Phase
-Phase: 6 of 7 (Bulk Operations)
-Plans: 5/5
-Progress: 100%
-Status: complete
+Phase: 8 of 8 (Field Display Label)
+Plans: 0/0
+Progress: 0%
+Status: planning
 
 ## Phase Status
 - **Phase 1 (Two Level Scope Partitioning):** Complete
@@ -17,6 +17,7 @@ Status: complete
 - **Phase 5 (Field Type Expansion):** Complete
 - **Phase 6 (Bulk Operations):** Complete
 - **Phase 7 (Read Optimization):** Deferred to a future milestone (2026-06-01)
+- **Phase 8 (Field Display Label):** Planning (issue #21)
 
 ## Key Decisions
 | Decision | Date | Rationale |
@@ -56,3 +57,4 @@ None
 - 2026-05-05: Planned phase 04 (versioning) — 3 plans across 3 waves (linear chain; file conflicts on value.rb and lib/typed_eav.rb force sequencing). 14 tasks total. Open items resolved: changed_by=string, three indexes shipped, FK ON DELETE SET NULL on value_id+field_id, generator unchanged (idempotent re-runs), value_columns plural fix bundled in plan 04-02.
 - 2026-05-06: Planned phase 06 (bulk operations) — 5 plans across 3 waves. Wave 1 parallel: 06-01 version_group_id migration + subscriber, 06-02 schema export/import, 06-03 CSV mapper. Wave 2: 06-04 bulk read (typed_eav_hash_for). Wave 3: 06-05 bulk write (bulk_set_typed_eav_values) — depends on 06-01 (migration) and 06-04 (file-level serialization on has_typed_eav.rb ClassQueryMethods). 15 tasks total.
 - 2026-06-01: Reconciled roadmap drift — phases 5 & 6 marked complete in the progress table (were stale: "uat issues"/"pending"; both verified remediated to PASS, UAT rounds complete, shipped through v0.4.0). Phase 7 (Read optimization) deferred to a future milestone. Next active work: issue #21 (Field display label).
+- 2026-06-01: Added Phase 8 (Field display label, issue #21) — additive `label` column + `display_name` accessor + schema-portability round-trip. Pre-seeded 08-CONTEXT.md (binding decisions, both issue open-questions resolved) and 08-RESEARCH.md (issue spec verified against code at v0.4.0). Ready to plan.
