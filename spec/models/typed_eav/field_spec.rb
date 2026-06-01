@@ -565,6 +565,70 @@ RSpec.describe "Reserved field names" do
   end
 end
 
+RSpec.describe "Field display label (issue #21)", type: :model do
+  describe "#display_name" do
+    it "returns the label when label is present" do
+      field = build(:text_field, name: "sub_category", label: "Sub-Category")
+      expect(field.display_name).to eq("Sub-Category")
+    end
+
+    it "falls back to name.humanize when label is blank ('')" do
+      field = build(:text_field, name: "sub_category", label: "")
+      expect(field.display_name).to eq("Sub category")
+    end
+
+    it "falls back to name.humanize when label is nil" do
+      field = build(:text_field, name: "sub_category", label: nil)
+      expect(field.display_name).to eq("Sub category")
+    end
+  end
+
+  describe ":label validation" do
+    it "is valid with no label (optional, nil allowed)" do
+      expect(build(:text_field, label: nil)).to be_valid
+    end
+
+    it "is valid with a label up to 255 chars" do
+      expect(build(:text_field, label: "a" * 255)).to be_valid
+    end
+
+    it "is invalid with a label longer than 255 chars" do
+      field = build(:text_field, label: "a" * 256)
+      expect(field).not_to be_valid
+      expect(field.errors[:label]).to be_present
+    end
+
+    it "places no uniqueness constraint on label" do
+      create(:text_field, name: "first_field", entity_type: "Contact", scope: "lbl_uniq", label: "Shared")
+      dup = build(:text_field, name: "second_field", entity_type: "Contact", scope: "lbl_uniq", label: "Shared")
+      expect(dup).to be_valid
+    end
+
+    it "places no format constraint on label (free text, including reserved-like values)" do
+      # 'type' is a RESERVED_NAME for :name but label has no such guard.
+      expect(build(:text_field, name: "sub_category", label: "type")).to be_valid
+    end
+  end
+
+  it "lets a slugified name validate while display_name surfaces the human label" do
+    # label bypasses RESERVED_NAMES / slug rules entirely — those apply to :name.
+    field = create(:text_field, name: "sub_category", entity_type: "Contact", scope: "lbl_slug", label: "Sub-Category")
+    expect(field).to be_valid
+    expect(field.display_name).to eq("Sub-Category")
+  end
+
+  describe ".sorted ordering is unaffected by label" do
+    it "orders by (sort_order, name), never by label", :unscoped do
+      # Labels chosen so that a label-based sort would REVERSE the (sort_order, name) order.
+      create(:text_field, entity_type: "Contact", scope: "lbl_sort", name: "alpha", sort_order: 1, label: "Zzz")
+      create(:text_field, entity_type: "Contact", scope: "lbl_sort", name: "beta", sort_order: 1, label: "Aaa")
+
+      ordered = TypedEAV::Field::Base.where(entity_type: "Contact", scope: "lbl_sort").sorted
+      expect(ordered.map(&:name)).to eq(%w[alpha beta])
+    end
+  end
+end
+
 RSpec.describe "Field default values" do
   it "stores and retrieves a default value cast through field type" do
     field = create(:integer_field)

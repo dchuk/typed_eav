@@ -45,6 +45,11 @@ module TypedEAV
 
       validates :name, presence: true, uniqueness: { scope: %i[entity_type scope parent_scope] }
       validates :name, exclusion: { in: RESERVED_NAMES, message: "is reserved" }
+      # `label` is optional free-text human display, independent of the machine
+      # slug `name` (issue #21). The ONLY guard is a max-length sanity bound —
+      # intentionally NO uniqueness and NO format/exclusion constraint. RESERVED_NAMES,
+      # slug-uniqueness, and rename detection all key on :name and never on :label.
+      validates :label, length: { maximum: 255 }, allow_nil: true
       validates :type, presence: true
       validates :entity_type, presence: true
       validate :validate_default_value
@@ -260,6 +265,16 @@ module TypedEAV
 
       def field_type_name
         self.class.name.demodulize.underscore
+      end
+
+      # Canonical human-facing display string (issue #21). Returns the
+      # free-text `label` when present, otherwise falls back to humanizing the
+      # machine slug `name`. This is the ONE accessor all rendering should use;
+      # `name` stays the immutable machine key. A blank ("") label falls back
+      # too (via `presence`), so existing rows (label NULL) render exactly as
+      # they did before this column existed.
+      def display_name
+        label.presence || name.humanize
       end
 
       def array_field?
