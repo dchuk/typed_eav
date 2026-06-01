@@ -14,7 +14,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 - [x] Phase 4: Versioning
 - [x] Phase 5: Field type expansion
 - [x] Phase 6: Bulk operations & import/export
-- [ ] Phase 7: Read optimization
+- [ ] Phase 7: Read optimization _(deferred to a future milestone — 2026-06-01)_
 
 ### Phase 1: Two-level scope partitioning
 **Goal:** Extend the canonical partition tuple from `(entity_type, scope)` to `(entity_type, scope, parent_scope)` for fields AND sections, so every later phase keys off the same identity.
@@ -82,6 +82,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 - **Bulk read API:** `Entity.typed_eav_hash_for(records)` → `{ entity_id => { name => value } }`. Internally: one preload of `typed_values: :field`, group by entity, apply `definitions_by_name` collision precedence.
 
 ### Phase 7: Read optimization
+**Status:** Deferred to a future milestone (decided 2026-06-01). Scoped here but never built; carried forward intact for a later milestone. The milestone's six built phases (1–6) shipped through v0.4.0.
 **Goal:** Eager-load helpers, cache primitives, materialized-view index, and query-plan helpers. Last because the materialized view depends on Phase 3's `on_field_change`.
 **Deps:** Phase 3 (`on_field_change` for DDL regeneration timing); benefits from Phase 4 (versioning) for cache invalidation primitives.
 **Reqs:** REQ-05
@@ -99,9 +100,9 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 | 2 - Phase-1 pipeline completions | 4/4 | complete | 2026-04-29 |
 | 3 - Event system | 2/2 | complete | 2026-05-01 |
 | 4 - Versioning | 3/3 | complete | 2026-05-06 |
-| 5 - Field type expansion | 4/4 | uat issues | - |
-| 6 - Bulk operations & import/export | 0/0 | pending | — |
-| 7 - Read optimization | 0/0 | pending | — |
+| 5 - Field type expansion | 4/4 | complete | 2026-05-06 |
+| 6 - Bulk operations & import/export | 5/5 | complete | 2026-05-07 |
+| 7 - Read optimization | 0/0 | deferred | — |
 
 ---
 
