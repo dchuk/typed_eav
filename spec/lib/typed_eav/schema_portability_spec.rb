@@ -3,6 +3,17 @@
 require "spec_helper"
 
 RSpec.describe TypedEAV::SchemaPortability, :unscoped do
+  def capture_schema_lookup_queries(&block)
+    queries = []
+    subscriber = lambda do |_name, _started, _finished, _id, payload|
+      next if %w[SCHEMA TRANSACTION CACHE].include?(payload[:name])
+
+      queries << payload[:sql] if payload[:sql].match?(/FROM "typed_eav_(fields|options|sections)"/i)
+    end
+    ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record", &block)
+    queries
+  end
+
   it "round-trips field and section definitions for an exact partition tuple" do
     create(:text_field, entity_type: "Contact", scope: "portable", name: "nickname", sort_order: 1)
     create(:integer_field, entity_type: "Contact", scope: "portable", name: "score", sort_order: 2)
@@ -26,6 +37,34 @@ RSpec.describe TypedEAV::SchemaPortability, :unscoped do
     expect(described_class.export_schema(entity_type: "Contact", scope: "portable")).to eq(exported)
   end
 
+  it "preloads existing fields with options and sections in bounded queries" do
+    6.times do |index|
+      create(
+        :select_field,
+        entity_type: "Contact",
+        scope: "bounded_import",
+        name: "select_#{index}",
+        sort_order: index,
+      )
+      create(
+        :typed_section,
+        entity_type: "Contact",
+        scope: "bounded_import",
+        name: "Section #{index}",
+        code: "section_#{index}",
+        sort_order: index,
+      )
+    end
+    exported = described_class.export_schema(entity_type: "Contact", scope: "bounded_import")
+    result = nil
+    lookup_queries = capture_schema_lookup_queries do
+      result = described_class.import_schema(exported)
+    end
+
+    expect(result).to include("unchanged" => 12)
+    expect(lookup_queries.size).to eq(3)
+  end
+
   describe ".export_snapshot_schema" do
     it "returns the versioned envelope with snapshot_schema_version and fields keys" do
       result = described_class.export_snapshot_schema(entity_type: "Contact", scope: "snap_empty")
@@ -47,7 +86,7 @@ RSpec.describe TypedEAV::SchemaPortability, :unscoped do
 
       expect(result["fields"].length).to eq(1)
       expect(result["fields"].first.keys).to contain_exactly(
-        "name", "field_type_name", "display_name", "required", "sort_order", "options",
+        "name", "field_type_name", "display_name", "required", "sort_order", "options"
       )
     end
 
@@ -58,7 +97,7 @@ RSpec.describe TypedEAV::SchemaPortability, :unscoped do
 
       result = described_class.export_snapshot_schema(entity_type: "Contact", scope: "snap_order")
 
-      expect(result["fields"].map { |f| f["name"] }).to eq(%w[first second third])
+      expect(result["fields"].pluck("name")).to eq(%w[first second third])
     end
 
     it "includes options_data for optionable fields ordered by [sort_order, label, id]" do
@@ -130,7 +169,7 @@ RSpec.describe TypedEAV::SchemaPortability, :unscoped do
 
       result = described_class.export_snapshot_schema(entity_type: "Contact", scope: "snap_in")
 
-      expect(result["fields"].map { |f| f["name"] }).to eq(["included"])
+      expect(result["fields"].pluck("name")).to eq(["included"])
     end
   end
 
@@ -141,11 +180,11 @@ RSpec.describe TypedEAV::SchemaPortability, :unscoped do
       result = described_class.export_schema(entity_type: "Contact", scope: "regress")
 
       expect(result.keys).to contain_exactly(
-        "schema_version", "entity_type", "scope", "parent_scope", "fields", "sections",
+        "schema_version", "entity_type", "scope", "parent_scope", "fields", "sections"
       )
       expect(result["fields"].first.keys).to include(
         "name", "type", "entity_type", "scope", "parent_scope",
-        "required", "sort_order", "field_dependent", "options", "default_value_meta",
+        "required", "sort_order", "field_dependent", "options", "default_value_meta"
       )
     end
   end
@@ -187,6 +226,7 @@ RSpec.describe TypedEAV::SchemaPortability, :unscoped do
       expect(imported.display_name).to eq("Nick Name")
     end
 
+    # rubocop:disable RSpec/ExampleLength -- explicit legacy wire payload is the compatibility fixture.
     it "imports a pre-feature payload (no 'label' key) as label nil with no version gate" do
       # Legacy export entry: every current key EXCEPT "label".
       legacy = {
@@ -218,6 +258,7 @@ RSpec.describe TypedEAV::SchemaPortability, :unscoped do
       expect(imported.label).to be_nil
       expect(imported.display_name).to eq("Sub category")
     end
+    # rubocop:enable RSpec/ExampleLength
 
     it "updates label on conflict with on_conflict: :overwrite" do
       create(:text_field, entity_type: "Contact", scope: "lbl_ow", name: "nickname", sort_order: 1, label: "Old Label")
@@ -234,7 +275,8 @@ RSpec.describe TypedEAV::SchemaPortability, :unscoped do
 
     describe "divergence detection (on_conflict: :error)" do
       it "treats a differing label as a divergence (raises)" do
-        create(:text_field, entity_type: "Contact", scope: "lbl_div", name: "nickname", sort_order: 1, label: "Original")
+        create(:text_field, entity_type: "Contact", scope: "lbl_div", name: "nickname", sort_order: 1,
+                            label: "Original")
 
         exported = described_class.export_schema(entity_type: "Contact", scope: "lbl_div")
         exported["fields"].first["label"] = "Different"
@@ -255,7 +297,8 @@ RSpec.describe TypedEAV::SchemaPortability, :unscoped do
 
     describe "snapshot export carries the RESOLVED display_name" do
       it "emits the label as display_name when label is present" do
-        create(:text_field, entity_type: "Contact", scope: "snap_lbl", name: "sub_category", sort_order: 1, label: "Sub-Category")
+        create(:text_field, entity_type: "Contact", scope: "snap_lbl", name: "sub_category", sort_order: 1,
+                            label: "Sub-Category")
 
         result = described_class.export_snapshot_schema(entity_type: "Contact", scope: "snap_lbl")
         entry = result["fields"].first
@@ -267,7 +310,8 @@ RSpec.describe TypedEAV::SchemaPortability, :unscoped do
       end
 
       it "emits the name.humanize fallback as display_name when label is nil" do
-        create(:text_field, entity_type: "Contact", scope: "snap_lbl_nil", name: "sub_category", sort_order: 1, label: nil)
+        create(:text_field, entity_type: "Contact", scope: "snap_lbl_nil", name: "sub_category", sort_order: 1,
+                            label: nil)
 
         result = described_class.export_snapshot_schema(entity_type: "Contact", scope: "snap_lbl_nil")
         entry = result["fields"].first
