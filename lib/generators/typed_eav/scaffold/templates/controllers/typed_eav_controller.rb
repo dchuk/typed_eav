@@ -133,9 +133,7 @@ class TypedEAVController < ApplicationController
   # `TypedEAV.config.scope_resolver` to set the tuple.
   def scoped_fields
     partition = current_partition!
-    return TypedEAV::Field::Base.all if partition[:mode] == :all_partitions
-
-    TypedEAV::Field::Base.where(id: visible_field_ids(partition))
+    TypedEAV::Partition.visible_fields(**partition)
   end
 
   # Resolve the ambient tuple for writes. Mirrors `scoped_fields` semantics:
@@ -181,12 +179,6 @@ class TypedEAVController < ApplicationController
 
   def field_partition(field)
     { scope: field.scope, parent_scope: field.parent_scope, mode: :partition }
-  end
-
-  def visible_field_ids(partition)
-    TypedEAV::Field::Base.distinct.pluck(:entity_type).flat_map do |entity_type|
-      TypedEAV::Partition.visible_fields(entity_type: entity_type, **partition).pluck(:id)
-    end
   end
 
   def resolve_type_class(type_name)

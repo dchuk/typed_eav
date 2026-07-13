@@ -3,6 +3,16 @@
 require "spec_helper"
 
 RSpec.describe "generated scaffold behavior", type: :request do
+  def field_selects(&block)
+    queries = []
+    callback = lambda do |_, _, _, _, payload|
+      sql = payload[:sql]
+      queries << sql if sql.match?(/SELECT.*typed_eav_fields/i) && payload[:name] != "SCHEMA"
+    end
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+    queries
+  end
+
   before do
     install_generated_scaffold
   end
@@ -23,14 +33,53 @@ RSpec.describe "generated scaffold behavior", type: :request do
       scope: "t1",
       parent_scope: "w2",
     )
+    contact_field = create(:text_field, name: "contact_status", entity_type: "Contact", scope: "t1")
 
-    TypedEAV.with_scope(%w[t1 w1]) do
-      get "/typed_eav_fields"
+    queries = field_selects do
+      TypedEAV.with_scope(%w[t1 w1]) do
+        get "/typed_eav_fields"
+      end
     end
 
     expect(response).to have_http_status(:ok)
-    expect(response.body).to include(global.name, tenant.name, workspace.name)
+    expect(response.body).to include(global.name, tenant.name, workspace.name, contact_field.name)
     expect(response.body).not_to include(other_tenant.name, other_workspace.name)
+    expect(queries.size).to eq(1)
+  end
+
+  it "treats an absent scope as the global partition only" do
+    global = create(:text_field, name: "global_status", entity_type: "Contact")
+    scoped = create(:text_field, name: "scoped_status", entity_type: "Contact", scope: "t1")
+    previous_require_scope = TypedEAV.config.require_scope
+    TypedEAV.config.require_scope = false
+
+    get "/typed_eav_fields"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include(global.name)
+    expect(response.body).not_to include(scoped.name)
+  ensure
+    TypedEAV.config.require_scope = previous_require_scope
+  end
+
+  it "shows every partition only inside the explicit unscoped bypass" do
+    global = create(:text_field, name: "global_status", entity_type: "Contact")
+    tenant_one = create(:text_field, name: "tenant_one_status", entity_type: "Contact", scope: "t1")
+    tenant_two = create(:text_field, name: "tenant_two_status", entity_type: "Project", scope: "t2")
+
+    TypedEAV.unscoped { get "/typed_eav_fields" }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include(global.name, tenant_one.name, tenant_two.name)
+  end
+
+  it "fails closed before querying fields when the host has not authorized access" do
+    load template_root.join("controllers/typed_eav_controller.rb")
+
+    queries = field_selects { get "/typed_eav_fields" }
+
+    expect(response).to have_http_status(:not_found)
+    expect(queries).to be_empty
   end
 
   it "adds and removes field options through the generated admin routes" do

@@ -21,13 +21,18 @@ module TypedEAV
       # scope-only rows, and full-tuple rows. Passing mode: :all_partitions is
       # the deliberate admin bypass; it is distinct from `scope: nil`, which
       # means the global partition only.
-      def visible_fields(entity_type:, scope: nil, parent_scope: nil, mode: :partition)
+      def visible_fields(entity_type: nil, scope: nil, parent_scope: nil, mode: :partition)
         validate_mode!(mode)
-        return TypedEAV::Field::Base.where(entity_type: entity_type) if mode == :all_partitions
+        fields = TypedEAV::Field::Base.all
+        fields = fields.where(entity_type: entity_type) if entity_type
+        return fields if mode == :all_partitions
 
         raise ArgumentError, ORPHAN_PARENT_MESSAGE unless ScopeTuple.invariant_satisfied?(scope, parent_scope)
 
-        TypedEAV::Field::Base.for_entity(entity_type, scope: scope, parent_scope: parent_scope)
+        fields.where(
+          scope: [scope, nil].uniq,
+          parent_scope: [parent_scope, nil].uniq,
+        )
       end
 
       # One visible field per name after collision resolution. Most-specific
