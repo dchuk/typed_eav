@@ -166,13 +166,14 @@ module TypedEAV
         typed_values.filter_map { |tv| tv.field_id || tv.field&.id }
       end
 
-      # Selects the candidate value for `typed_eav_value`. On a collision,
-      # prefer the row attached to the winning field_id; otherwise fall back
-      # to the first orphan/non-collision candidate.
+      # Selects the candidate value for `typed_eav_value`. When a definition
+      # wins for the current partition, only a row attached to that field_id
+      # may surface. Retained rows from a host's former partition must not be
+      # used as a fallback when the current winner has no value yet.
       def select_winning_value(candidates, winning)
         return candidates.first unless winning
 
-        candidates.detect { |v| (v.field_id || v.field&.id) == winning.id } || candidates.first
+        candidates.detect { |v| (v.field_id || v.field&.id) == winning.id }
       end
 
       # Hash-builder helper for `typed_eav_hash`. When a winner is registered
