@@ -297,6 +297,8 @@ module TypedEAV
       end
 
       # Kept for backward compatibility but now a no-op since we don't cache.
+      # TypedEAV does not invoke this hook internally; overriding it is not a
+      # supported option-lifecycle extension point.
       def clear_option_cache!
         # no-op
       end
