@@ -121,5 +121,14 @@ RSpec.describe "TypedEAV generators" do
 
       expect(generator).to have_received(:rake).with("typed_eav:install:migrations")
     end
+
+    it "ships a consumer-app smoke test for the packaged migration path" do
+      smoke = File.expand_path("../../script/consumer_install_smoke", __dir__)
+
+      expect(File).to exist(smoke)
+      expect(File.read(smoke)).to include('"typed_eav:install:migrations"')
+      expect(File.read(smoke)).to include('"db:create"')
+      expect(File.read(smoke)).to include('"db:migrate"')
+    end
   end
 end
