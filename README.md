@@ -1233,16 +1233,19 @@ As of v0.2.0, the paired partial unique indexes cover the three-key partition tu
 
 ## Schema
 
-The gem creates four tables:
+The gem creates five tables:
 
 - `typed_eav_fields` - field definitions (STI, one row per field per entity type)
 - `typed_eav_values` - values (one row per entity per field, with typed columns)
 - `typed_eav_options` - allowed values for select/multi-select fields
 - `typed_eav_sections` - optional UI grouping
+- `typed_eav_value_versions` - opt-in, append-only audit history for Value
+  create, update, and destroy events; it retains durable entity identity even
+  when the live Value row is later removed
 
 ## Architecture
 
-Internal module layout as of 0.3.0. Most consumers never reach for these directly — the public surface is the `has_typed_eav` macro and the instance/class methods it installs — but the split matters if you're extending the gem, debugging an integration, or evaluating it for production. Decisions are anchored by [ADR-0001](docs/adr/0001-collapse-column-mapping-stack.md) through [ADR-0005](docs/adr/0005-keep-phase-six-modules-independent.md).
+Internal module layout as of 0.5.0. Most consumers never reach for these directly — the public surface is the `has_typed_eav` macro and the instance/class methods it installs — but the split matters if you're extending the gem, debugging an integration, or evaluating it for production. Decisions are anchored by [ADR-0001](docs/adr/0001-collapse-column-mapping-stack.md) through [ADR-0006](docs/adr/0006-include-missing-via-set-complement.md).
 
 ### Macro entry: `HasTypedEav`
 
@@ -1313,6 +1316,16 @@ Single-record reads (`typed_eav_value`, `typed_eav_hash`) live on `InstanceMetho
 - `typed_eav_scope` / `typed_eav_parent_scope` — scope resolution per record
 
 Every method uses `TypedEAV::Partition.definitions_by_name` so the collision-precedence rules for ambient/explicit/parent scopes are computed in one place.
+
+### Partition visibility: `Partition`
+
+Host applications that need to inspect effective schema should use the
+documented-public `TypedEAV::Partition` seam rather than rebuilding tuple
+predicates. It exposes `visible_fields`, `effective_fields_by_name`,
+`definitions_by_name`, `definitions_multimap_by_name`, `visible_sections`,
+and `find_visible_section!`. These methods preserve global, scope-only, and
+full-tuple precedence; ADR-0006 additionally fixes include-missing set
+composition at the `FilterQuery` altitude.
 
 ### Field types and storage: `Field::TypedStorage`
 
