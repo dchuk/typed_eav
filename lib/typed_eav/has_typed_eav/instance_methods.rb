@@ -235,10 +235,12 @@ module TypedEAV
       # fast without forcing that contract.
       def loaded_typed_values_with_fields
         if typed_values.loaded?
-          # Don't re-query if the caller already preloaded; ensure each value's
-          # field is materialized (fall back to per-row load if the nested
-          # `:field` was not preloaded).
-          typed_values.to_a
+          values = typed_values.to_a
+          missing_fields = values.reject { |value| value.association(:field).loaded? }
+          if missing_fields.any?
+            ActiveRecord::Associations::Preloader.new(records: missing_fields, associations: :field).call
+          end
+          values
         else
           typed_values.includes(:field).to_a
         end
