@@ -8,6 +8,16 @@ require "spec_helper"
 # (real AR fixtures + chained scopes) lives in
 # spec/models/typed_eav/has_typed_eav_spec.rb.
 RSpec.describe TypedEAV::FilterQuery, :unscoped do
+  def value_selects(&block)
+    queries = []
+    callback = lambda do |_, _, _, _, payload|
+      sql = payload[:sql]
+      queries << sql if sql.match?(/SELECT.*typed_eav_values/i) && payload[:name] != "SCHEMA"
+    end
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+    queries
+  end
+
   describe ".new(...).to_relation" do
     describe "input normalization" do
       let!(:age_field) { create(:integer_field, name: "age", entity_type: "Contact") }
@@ -176,6 +186,23 @@ RSpec.describe TypedEAV::FilterQuery, :unscoped do
 
         expect(relation).to contain_exactly(c1, c2)
       end
+
+      it "keeps the cross-definition union inside one lazy SQL query" do
+        create(:integer_field, name: "age", entity_type: "Contact", scope: "t3")
+
+        queries = value_selects do
+          relation = described_class.new(
+            model: Contact,
+            filters: [{ name: "age", op: :eq, value: 30 }],
+            scope: TypedEAV::EntityQuery::ALL_SCOPES,
+            parent_scope: nil,
+          ).to_relation
+
+          expect(relation).to contain_exactly(c1, c2)
+        end
+
+        expect(queries.size).to eq(1)
+      end
     end
 
     describe "unknown field name" do
@@ -328,13 +355,34 @@ RSpec.describe TypedEAV::FilterQuery, :unscoped do
         let!(:bob)   { create(:contact, name: "Bob") }
 
         before do
-          TypedEAV::Value.create!(entity: alice, field: city_field).tap { |v| v.value = "Portland"; v.save! }
-          TypedEAV::Value.create!(entity: bob, field: city_field).tap   { |v| v.value = "Seattle";  v.save! }
-          TypedEAV::Value.create!(entity: alice, field: age_field).tap  { |v| v.value = 30; v.save! }
-          TypedEAV::Value.create!(entity: bob, field: age_field).tap    { |v| v.value = 25; v.save! }
-          TypedEAV::Value.create!(entity: alice, field: date_field).tap { |v| v.value = Date.new(1990, 6, 1); v.save! }
-          TypedEAV::Value.create!(entity: bob, field: date_field).tap   { |v| v.value = Date.new(2000, 6, 1); v.save! }
-          TypedEAV::Value.create!(entity: alice, field: ref_field).tap  { |v| v.value = bob.id; v.save! }
+          TypedEAV::Value.create!(entity: alice, field: city_field).tap do |v|
+            v.value = "Portland"
+            v.save!
+          end
+          TypedEAV::Value.create!(entity: bob, field: city_field).tap do |v|
+            v.value = "Seattle"
+            v.save!
+          end
+          TypedEAV::Value.create!(entity: alice, field: age_field).tap do |v|
+            v.value = 30
+            v.save!
+          end
+          TypedEAV::Value.create!(entity: bob, field: age_field).tap do |v|
+            v.value = 25
+            v.save!
+          end
+          TypedEAV::Value.create!(entity: alice, field: date_field).tap do |v|
+            v.value = Date.new(1990, 6, 1)
+            v.save!
+          end
+          TypedEAV::Value.create!(entity: bob, field: date_field).tap do |v|
+            v.value = Date.new(2000, 6, 1)
+            v.save!
+          end
+          TypedEAV::Value.create!(entity: alice, field: ref_field).tap do |v|
+            v.value = bob.id
+            v.save!
+          end
         end
 
         it "ignores include_missing: true for :eq" do
@@ -415,10 +463,16 @@ RSpec.describe TypedEAV::FilterQuery, :unscoped do
         let!(:scoped_missing) { create(:contact, name: "ScopedMissing", tenant_id: "t1") }
 
         before do
-          TypedEAV::Value.create!(entity: scoped_filled, field: scoped_status).tap { |v| v.value = "active"; v.save! }
+          TypedEAV::Value.create!(entity: scoped_filled, field: scoped_status).tap do |v|
+            v.value = "active"
+            v.save!
+          end
           # `scoped_missing` has NO row on the scoped field — but a row on the
           # global field, which should be ignored under the scoped query.
-          TypedEAV::Value.create!(entity: scoped_missing, field: global_status).tap { |v| v.value = "shadowed"; v.save! }
+          TypedEAV::Value.create!(entity: scoped_missing, field: global_status).tap do |v|
+            v.value = "shadowed"
+            v.save!
+          end
         end
 
         it "uses the scope-winning field's :is_not_null as the complement" do
@@ -458,10 +512,16 @@ RSpec.describe TypedEAV::FilterQuery, :unscoped do
         let!(:entity_d_w2) { create(:contact, name: "D", tenant_id: "ws-2") }
 
         before do
-          TypedEAV::Value.create!(entity: entity_a, field: name_ws1).tap { |v| v.value = "Alice"; v.save! }
+          TypedEAV::Value.create!(entity: entity_a, field: name_ws1).tap do |v|
+            v.value = "Alice"
+            v.save!
+          end
           TypedEAV::Value.create!(entity: entity_b, field: name_ws1) # NULL row
           TypedEAV::Value.create!(entity: entity_d_w1, field: name_ws1) # NULL row
-          TypedEAV::Value.create!(entity: entity_d_w2, field: name_ws2).tap { |v| v.value = "Delta"; v.save! }
+          TypedEAV::Value.create!(entity: entity_d_w2, field: name_ws2).tap do |v|
+            v.value = "Delta"
+            v.save!
+          end
           _ = name_ws3 # force-load so the multimap sees the third field def
         end
 
