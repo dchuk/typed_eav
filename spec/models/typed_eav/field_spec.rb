@@ -1266,6 +1266,28 @@ RSpec.describe "TypedEAV::Field::Base#backfill_default!", type: :model do
         expect(value.integer_value).to eq(42)
       end
     end
+
+    it "loads existing values once for the entity batch" do
+      field = create(:integer_field, name: "bf_bounded", entity_type: "Contact",
+                                     default_value_meta: { "v" => 42 })
+      contacts = Array.new(12) { create(:contact) }
+      TypedEAV::Value.create!(entity: contacts.first, field: field, value: 99)
+      TypedEAV::Value.create!(entity: contacts.second, field: field, value: nil)
+      value_loads = []
+      subscriber = lambda do |_name, _started, _finished, _id, payload|
+        next unless payload[:name] == "TypedEAV::Value Load"
+        next unless payload[:sql].include?('FROM "typed_eav_values"')
+
+        value_loads << payload[:sql]
+      end
+
+      ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+        field.backfill_default!
+      end
+
+      expect(value_loads.size).to eq(1)
+      expect(TypedEAV::Value.where(field_id: field.id).count).to eq(contacts.size)
+    end
   end
 
   describe "skip rule for non-nil typed values" do
@@ -1394,11 +1416,11 @@ RSpec.describe "TypedEAV::Field::Base#backfill_default!", type: :model do
 
       call_count = 0
       original_method = field.method(:backfill_one)
-      allow(field).to receive(:backfill_one) do |entity, column|
+      allow(field).to receive(:backfill_one) do |entity, column, existing|
         call_count += 1
         raise "boom on third entity" if call_count == 3
 
-        original_method.call(entity, column)
+        original_method.call(entity, column, existing)
       end
 
       expect { field.backfill_default! }.to raise_error(StandardError, /boom/)

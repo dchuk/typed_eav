@@ -363,10 +363,17 @@ module TypedEAV
           # surfaces; prior batches stay committed. Caller re-runs idempotently
           # because the per-record skip rule re-checks each entity.
           ActiveRecord::Base.transaction(requires_new: true) do
-            batch.each do |entity|
-              next unless partition_matches?(entity)
+            eligible = batch.select { |entity| partition_matches?(entity) }
+            existing_by_entity_id = TypedEAV::Value
+                                    .where(
+                                      entity_type: entity_class.polymorphic_name,
+                                      entity_id: eligible.map(&:id),
+                                      field_id: id,
+                                    )
+                                    .index_by(&:entity_id)
 
-              backfill_one(entity, column)
+            eligible.each do |entity|
+              backfill_one(entity, column, existing_by_entity_id[entity.id])
             end
           end
         end
@@ -598,9 +605,7 @@ module TypedEAV
       #    row created via explicit `value: nil` is still a backfill
       #    candidate per CONTEXT.md).
       #  - row exists with non-nil typed column → skip (idempotence).
-      def backfill_one(entity, column)
-        existing = TypedEAV::Value.where(entity: entity, field_id: id).first
-
+      def backfill_one(entity, column, existing)
         if existing.nil?
           TypedEAV::Value.create!(entity: entity, field: self, value: default_value)
         elsif existing[column].nil?
