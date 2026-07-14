@@ -4,6 +4,11 @@ source "https://rubygems.org"
 
 gemspec
 
+# Compatibility CI sets RAILS_VERSION to constrain each representative lane.
+# Without it, Bundler resolves the newest Rails allowed by the gemspec.
+rails_version = ENV.fetch("RAILS_VERSION", nil)
+gem "rails", rails_version if rails_version
+
 group :development, :test do
   gem "factory_bot_rails"
   gem "pg"

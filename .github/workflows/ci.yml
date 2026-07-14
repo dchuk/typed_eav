@@ -5,14 +5,38 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  compatibility:
+    name: Compatibility contract
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.contract.outputs.matrix }}
+      tooling_ruby: ${{ steps.contract.outputs.tooling_ruby }}
+      ceiling_ruby: ${{ steps.contract.outputs.ceiling_ruby }}
+      ceiling_rails: ${{ steps.contract.outputs.ceiling_rails }}
+      ceiling_postgresql: ${{ steps.contract.outputs.ceiling_postgresql }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load compatibility contract
+        id: contract
+        run: |
+          contract=".github/compatibility.json"
+          echo "matrix=$(jq -c '{include: .lanes}' "$contract")" >> "$GITHUB_OUTPUT"
+          echo "tooling_ruby=$(jq -r '.tooling.ruby' "$contract")" >> "$GITHUB_OUTPUT"
+          echo "ceiling_ruby=$(jq -r '.lanes[] | select(.name == "ceiling") | .ruby' "$contract")" >> "$GITHUB_OUTPUT"
+          echo "ceiling_rails=$(jq -r '.lanes[] | select(.name == "ceiling") | .rails' "$contract")" >> "$GITHUB_OUTPUT"
+          echo "ceiling_postgresql=$(jq -r '.lanes[] | select(.name == "ceiling") | .postgresql' "$contract")" >> "$GITHUB_OUTPUT"
+
   lint:
     name: RuboCop
+    needs: compatibility
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,23 +44,23 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.4"
+          ruby-version: ${{ needs.compatibility.outputs.tooling_ruby }}
           bundler-cache: true
 
       - name: Run RuboCop
         run: bundle exec rubocop --format github
 
   test:
-    name: RSpec (Ruby ${{ matrix.ruby }})
+    name: RSpec (${{ matrix.name }} — Ruby ${{ matrix.ruby }}, Rails ${{ matrix.rails_series }}, PostgreSQL ${{ matrix.postgresql }})
+    needs: compatibility
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        ruby: ["3.1", "3.2", "3.3", "3.4"]
+      matrix: ${{ fromJSON(needs.compatibility.outputs.matrix) }}
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgresql }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -51,6 +75,7 @@ jobs:
 
     env:
       RAILS_ENV: test
+      RAILS_VERSION: ${{ matrix.rails }}
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: postgres
@@ -95,11 +120,12 @@ jobs:
 
   consumer-install:
     name: Consumer migration installation
+    needs: compatibility
     runs-on: ubuntu-latest
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ needs.compatibility.outputs.ceiling_postgresql }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -113,6 +139,7 @@ jobs:
           --health-retries 5
 
     env:
+      RAILS_VERSION: ${{ needs.compatibility.outputs.ceiling_rails }}
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: postgres
@@ -123,7 +150,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.4"
+          ruby-version: ${{ needs.compatibility.outputs.ceiling_ruby }}
           bundler-cache: true
 
       - name: Exercise packaged migrations in a consumer app

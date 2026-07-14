@@ -16,7 +16,7 @@ Gem::Specification.new do |spec|
   spec.license     = "MIT"
   spec.homepage    = "https://github.com/dchuk/typed_eav"
 
-  spec.required_ruby_version = ">= 3.1"
+  spec.required_ruby_version = [">= 3.3", "< 4.1"]
 
   spec.metadata = {
     "homepage_uri" => spec.homepage,
@@ -31,13 +31,13 @@ Gem::Specification.new do |spec|
     Dir["{app,config,db,lib}/**/*", "MIT-LICENSE", "Rakefile", "README.md", "CHANGELOG.md"]
   end
 
-  spec.add_dependency "rails", ">= 7.1"
+  spec.add_dependency "rails", ">= 7.2", "< 8.2"
 
   # `csv` was a default gem in Ruby ≤ 3.3 but was removed from default gems
   # starting in Ruby 3.4 (see Ruby 3.4.0 release notes — bundled-gems list).
   # `TypedEAV::CSVMapper` (Phase 6, Plan 06-03) calls `require "csv"`, so
   # we declare it as a runtime dependency to keep the gem usable across
-  # the supported Ruby range (`required_ruby_version = ">= 3.1"`). Without
+  # the supported Ruby range (`required_ruby_version = ">= 3.3", "< 4.1"`). Without
   # this declaration, bundler on Ruby 3.4+ raises `LoadError` at the
   # `require "csv"` site even though the stdlib file is present on disk.
   spec.add_dependency "csv", "~> 3.3"

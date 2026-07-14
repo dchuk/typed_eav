@@ -6,8 +6,23 @@ on:
       - "v*"
 
 jobs:
+  compatibility:
+    name: Compatibility contract
+    runs-on: ubuntu-latest
+    outputs:
+      ceiling_ruby: ${{ steps.contract.outputs.ceiling_ruby }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load compatibility contract
+        id: contract
+        run: |
+          contract=".github/compatibility.json"
+          echo "ceiling_ruby=$(jq -r '.lanes[] | select(.name == "ceiling") | .ruby' "$contract")" >> "$GITHUB_OUTPUT"
+
   release:
     name: Push gem to RubyGems
+    needs: compatibility
     runs-on: ubuntu-latest
 
     permissions:
@@ -24,7 +39,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.4"
+          ruby-version: ${{ needs.compatibility.outputs.ceiling_ruby }}
           bundler-cache: true
 
       - name: Verify tag matches gem version
