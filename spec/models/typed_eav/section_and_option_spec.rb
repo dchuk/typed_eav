@@ -198,6 +198,36 @@ RSpec.describe TypedEAV::Section, type: :model do
 end
 
 RSpec.describe TypedEAV::Option, type: :model do
+  describe "commit behavior", :real_commits do
+    def field_selects_during(&block)
+      sql = []
+      subscriber = lambda do |_name, _started, _finished, _id, payload|
+        next if %w[SCHEMA TRANSACTION CACHE].include?(payload[:name])
+        next unless payload[:sql].match?(/\ASELECT .*typed_eav_fields/im)
+
+        sql << payload[:sql]
+      end
+
+      ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record", &block)
+      sql
+    end
+
+    it "does not load the field solely to invalidate a cache after create, update, or destroy" do
+      field = create(:select_field)
+
+      create_selects = field_selects_during do
+        described_class.create!(field: field, label: "Maybe", value: "maybe")
+      end
+      option = field.field_options.find_by!(value: "maybe")
+      update_selects = field_selects_during { option.update!(label: "Perhaps") }
+      destroy_selects = field_selects_during { option.destroy! }
+
+      expect(create_selects).to be_empty
+      expect(update_selects).to be_empty
+      expect(destroy_selects).to be_empty
+    end
+  end
+
   describe "validations" do
     it "requires label and value" do
       option = described_class.new

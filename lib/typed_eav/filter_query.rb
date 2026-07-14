@@ -147,9 +147,7 @@ module TypedEAV
           # field def has a non-NULL value for it. Union the non-missing
           # entity_ids across all per-tenant field defs, then complement at
           # the host level. ADR-0006.
-          non_missing_ids = fields.flat_map do |f|
-            TypedEAV::QueryBuilder.entity_ids(f, :is_not_null, nil).pluck(:entity_id)
-          end.uniq
+          non_missing_ids = union_entity_ids(fields, :is_not_null, nil)
           query.where.not(id: non_missing_ids)
         else
           union_ids = union_entity_ids(fields, spec[:operator], spec[:value])
@@ -168,11 +166,15 @@ module TypedEAV
     end
 
     # OR-across all field_ids that share the same name (across tenants),
-    # while preserving AND between filters via the chained `.where`. Use the
-    # underlying Value scope (`.filter`) and `pluck(:entity_id)` to collapse
-    # to a plain integer array we can union across tenants.
+    # while preserving AND between filters via the chained `.where`. Keep the
+    # union as a composable entity-id subquery so matching IDs never need to
+    # be materialized in Ruby.
     def union_entity_ids(fields, operator, value)
-      fields.flat_map { |f| TypedEAV::QueryBuilder.filter(f, operator, value).pluck(:entity_id) }.uniq
+      fields
+        .map { |field| TypedEAV::QueryBuilder.filter(field, operator, value) }
+        .reduce { |union, relation| union.or(relation) }
+        .distinct
+        .select(:entity_id)
     end
 
     def parse_filter(filter)

@@ -3,6 +3,16 @@
 require "spec_helper"
 
 RSpec.describe TypedEAV::HasTypedEAV, type: :model do
+  def field_selects(&block)
+    queries = []
+    callback = lambda do |_, _, _, _, payload|
+      sql = payload[:sql]
+      queries << sql if sql.match?(/SELECT.*typed_eav_fields/i) && payload[:name] != "SCHEMA"
+    end
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+    queries
+  end
+
   describe "has_typed_eav class method" do
     it "adds typed_values association" do
       expect(Contact.reflect_on_association(:typed_values)).to be_present
@@ -283,6 +293,36 @@ RSpec.describe TypedEAV::HasTypedEAV, type: :model do
 
     it "returns all values as a hash" do
       expect(contact.typed_eav_hash).to eq({ "age" => 30, "bio" => "Hello" })
+    end
+
+    it "batch-loads fields when typed values are unloaded" do
+      unloaded = contact.reload
+
+      queries = field_selects do
+        expect(unloaded.typed_eav_hash).to eq({ "age" => 30, "bio" => "Hello" })
+      end
+
+      expect(queries.size).to eq(2)
+    end
+
+    it "batch-loads fields when only typed values were preloaded" do
+      preloaded = Contact.includes(:typed_values).find(contact.id)
+
+      queries = field_selects do
+        expect(preloaded.typed_eav_value("age")).to eq(30)
+      end
+
+      expect(queries.size).to eq(2)
+    end
+
+    it "does not reload fields when nested associations were preloaded" do
+      preloaded = Contact.includes(typed_values: :field).find(contact.id)
+
+      queries = field_selects do
+        expect(preloaded.typed_eav_hash).to eq({ "age" => 30, "bio" => "Hello" })
+      end
+
+      expect(queries.size).to eq(1)
     end
   end
 

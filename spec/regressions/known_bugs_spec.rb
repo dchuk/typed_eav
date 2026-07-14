@@ -129,7 +129,7 @@ RSpec.describe "Regressions from ANALYSIS.md" do
       value = TypedEAV::Value.new(entity: contact, field: field)
       value.value = "   "
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/blank/))
+      expect(value.errors[:value]).to include(a_string_including("blank"))
     end
 
     it "rejects array of blanks for required text_array field" do
@@ -137,7 +137,7 @@ RSpec.describe "Regressions from ANALYSIS.md" do
       value = TypedEAV::Value.new(entity: contact, field: field)
       value.value = ["", nil, ""]
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/blank/))
+      expect(value.errors[:value]).to include(a_string_including("blank"))
     end
   end
 
@@ -158,7 +158,7 @@ RSpec.describe "Regressions from ANALYSIS.md" do
       value = TypedEAV::Value.new(entity: contact, field: field)
       value.value = "{not valid"
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/invalid/))
+      expect(value.errors[:value]).to include(a_string_including("invalid"))
     end
 
     it "passes through already-parsed hashes" do
@@ -176,7 +176,7 @@ RSpec.describe "Regressions from ANALYSIS.md" do
       value = TypedEAV::Value.new(entity: contact, field: field)
       value.value = ["1.9", "2"]
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/invalid/))
+      expect(value.errors[:value]).to include(a_string_including("invalid"))
     end
 
     it "enforces per-element min/max" do

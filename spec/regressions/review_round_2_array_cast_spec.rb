@@ -33,7 +33,7 @@ RSpec.describe "Array field cast preserves invalid state" do
       value = TypedEAV::Value.new(entity: contact, field: field)
       value.value = ["1", "2.9", "3"]
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/invalid/))
+      expect(value.errors[:value]).to include(a_string_including("invalid"))
       # The stored column should be nil — not [1, 3] — so a form re-render
       # shows the original submission instead of a silently pruned subset.
       expect(value.json_value).to be_nil

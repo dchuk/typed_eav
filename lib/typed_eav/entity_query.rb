@@ -75,7 +75,15 @@ module TypedEAV
     # short: meaningful only with `:is_null` (Reading A "no non-NULL
     # value," includes no-row hosts), no-op with `:is_not_null`, silently
     # ignored otherwise.
-    def with_field(name, operator_or_value = nil, value = nil, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE, include_missing: false)
+    # rubocop:disable Metrics/ParameterLists -- preserves the public positional and partition keyword API.
+    def with_field(
+      name,
+      operator_or_value = nil,
+      value = nil,
+      scope: UNSET_SCOPE,
+      parent_scope: UNSET_SCOPE,
+      include_missing: false
+    )
       filter = if value.nil? && !operator_or_value.is_a?(Symbol)
                  # Two-arg form: with_field("name", "value") implies :eq
                  { name: name, op: :eq, value: operator_or_value }
@@ -84,6 +92,7 @@ module TypedEAV
                end
       where_typed_eav(filter, scope: scope, parent_scope: parent_scope, include_missing: include_missing)
     end
+    # rubocop:enable Metrics/ParameterLists
 
     # Returns field definitions for this entity type.
     #

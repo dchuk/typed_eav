@@ -153,4 +153,34 @@ RSpec.describe "Round-4 review: parent_scope cross-cutting", :scoping do
       expect(v.errors.added?(:field, :invalid)).to be true
     end
   end
+
+  describe "Scenario D: retained values after a partition move" do
+    let!(:status_w1) do
+      create(:text_field, name: "status", entity_type: "Project", scope: "t1", parent_scope: "w1")
+    end
+    let!(:status_w2) do
+      create(:text_field, name: "status", entity_type: "Project", scope: "t1", parent_scope: "w2")
+    end
+
+    it "does not surface the former partition's value when the current winner has no row" do
+      project = create(:project, tenant_id: "t1", workspace_id: "w1")
+      TypedEAV::Value.create!(entity: project, field: status_w1, value: "former workspace")
+      project.update!(workspace_id: "w2")
+
+      TypedEAV.with_scope(%w[t1 w2]) do
+        expect(project.typed_eav_value("status")).to be_nil
+        expect(project.typed_eav_hash).not_to have_key("status")
+        expect(Project.typed_eav_hash_for([project])).to eq(project.id => {})
+      end
+
+      TypedEAV::Value.create!(entity: project, field: status_w2, value: "current workspace")
+      project.reload
+
+      TypedEAV.with_scope(%w[t1 w2]) do
+        expect(project.typed_eav_value("status")).to eq("current workspace")
+        expect(project.typed_eav_hash).to include("status" => "current workspace")
+        expect(Project.typed_eav_hash_for([project])).to eq(project.id => { "status" => "current workspace" })
+      end
+    end
+  end
 end

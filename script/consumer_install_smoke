@@ -1,0 +1,123 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "fileutils"
+require "bundler"
+require "open3"
+require "pathname"
+require "rbconfig"
+require "tmpdir"
+require "rubygems/package"
+
+ROOT = Pathname.new(__dir__).join("..").expand_path
+
+def run!(*command, chdir: ROOT, env: {})
+  puts "+ #{command.join(" ")}"
+  success = system(env, *command, chdir: chdir.to_s)
+  raise "command failed: #{command.join(" ")}" unless success
+end
+
+def run_unbundled!(*command, chdir: ROOT, env: {})
+  Bundler.with_unbundled_env { run!(*command, chdir: chdir, env: env) }
+end
+
+def capture!(*command, chdir: ROOT, env: {})
+  output, status = Open3.capture2e(env, *command, chdir: chdir.to_s)
+  raise "command failed: #{command.join(" ")}\n#{output}" unless status.success?
+
+  output
+end
+
+require ROOT.join("lib/typed_eav/version")
+require "rails"
+
+database = ENV.fetch("TYPED_EAV_CONSUMER_DATABASE", "typed_eav_consumer_smoke_#{Process.pid}")
+database_url = ENV.fetch(
+  "TYPED_EAV_CONSUMER_DATABASE_URL",
+  "postgresql://#{ENV.fetch("PGUSER", "postgres")}:#{ENV.fetch("PGPASSWORD", "")}@" \
+  "#{ENV.fetch("PGHOST", "localhost")}/#{database}",
+)
+
+# The block intentionally keeps the complete disposable consumer lifecycle in
+# one ensure-protected scope so paths and database cleanup cannot escape it.
+# rubocop:disable Metrics/BlockLength
+Dir.mktmpdir("typed-eav-consumer-") do |tmp|
+  tmp = Pathname.new(tmp)
+  artifact = tmp.join("typed_eav-#{TypedEAV::VERSION}.gem")
+  unpacked_root = tmp.join("package")
+  host = tmp.join("host")
+
+  run!(RbConfig.ruby, "-S", "gem", "build", "typed_eav.gemspec", "--output", artifact.to_s)
+  run!(RbConfig.ruby, "-S", "gem", "unpack", artifact.to_s, "--target", unpacked_root.to_s)
+  package = unpacked_root.join("typed_eav-#{TypedEAV::VERSION}")
+  package.join("typed_eav.gemspec").write(Gem::Package.new(artifact.to_s).spec.to_ruby)
+
+  run!(
+    RbConfig.ruby,
+    Gem.bin_path("railties", "rails"),
+    "new",
+    host.to_s,
+    "--skip-bundle",
+    "--skip-git",
+    "--skip-test",
+    "--skip-system-test",
+    "--skip-javascript",
+    "--skip-asset-pipeline",
+    "--database=postgresql",
+  )
+
+  host.join("Gemfile").write(<<~GEMFILE)
+    source "https://rubygems.org"
+    gem "rails", "#{Rails::VERSION::STRING}"
+    gem "pg", "~> 1.1"
+    gem "bootsnap", require: false
+    gem "typed_eav", path: #{package.to_s.inspect}
+  GEMFILE
+
+  bundle = [RbConfig.ruby, Gem.bin_path("bundler", "bundle")]
+  host_bundle_env = { "BUNDLE_GEMFILE" => host.join("Gemfile").to_s }
+  run_unbundled!(*bundle, "install", chdir: host, env: host_bundle_env)
+
+  rails = [*bundle, "exec", "rails"]
+  app_env = host_bundle_env.merge("RAILS_ENV" => "test", "DATABASE_URL" => database_url)
+  run_unbundled!(*rails, "typed_eav:install:migrations", chdir: host, env: app_env)
+  first_install = Dir[host.join("db/migrate/*.typed_eav.rb")]
+  run_unbundled!(*rails, "typed_eav:install:migrations", chdir: host, env: app_env)
+  second_install = Dir[host.join("db/migrate/*.typed_eav.rb")]
+
+  raise "second migration install changed the copied set" unless second_install == first_install
+
+  source_stems = Dir[package.join("db/migrate/*.rb")].map do |path|
+    File.basename(path).sub(/\A\d+_/, "")
+  end.sort
+  installed_stems = first_install.map do |path|
+    File.basename(path).sub(/\A\d+_/, "").sub(".typed_eav.rb", ".rb")
+  end.sort
+  raise "packaged migrations were not copied completely" unless installed_stems == source_stems
+
+  database_created = false
+  begin
+    run_unbundled!(*rails, "db:create", chdir: host, env: app_env)
+    database_created = true
+    run_unbundled!(*rails, "db:migrate", chdir: host, env: app_env)
+    schema_check = <<~'RUBY'
+      connection = ActiveRecord::Base.connection
+      required_tables = %w[
+        typed_eav_fields typed_eav_values typed_eav_options
+        typed_eav_sections typed_eav_value_versions
+      ]
+      missing = required_tables.reject { |table| connection.data_source_exists?(table) }
+      abort "missing tables: #{missing.join(', ')}" if missing.any?
+      abort "missing field unique indexes" unless connection.indexes("typed_eav_fields").any?(&:unique)
+      abort "missing value foreign keys" if connection.foreign_keys("typed_eav_values").empty?
+      field_name = connection.columns("typed_eav_fields").find { |column| column.name == "name" }
+      abort "missing field name constraint" if field_name.nil? || field_name.null
+    RUBY
+    run_unbundled!(*rails, "runner", schema_check, chdir: host, env: app_env)
+  ensure
+    run_unbundled!(*rails, "db:drop", chdir: host, env: app_env) if database_created
+  end
+end
+# rubocop:enable Metrics/BlockLength
+
+puts "Consumer migration installation smoke test passed"

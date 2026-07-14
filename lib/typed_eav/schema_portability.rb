@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "schema_portability/import_index"
+
 module TypedEAV
   # Export and import field + section definitions for an exact partition
   # tuple. Value rows are intentionally out of scope.
@@ -89,14 +91,18 @@ module TypedEAV
         validate_conflict_policy!(on_conflict)
 
         result = { "created" => 0, "updated" => 0, "skipped" => 0, "unchanged" => 0, "errors" => [] }
+        field_entries = Array(hash["fields"])
+        section_entries = Array(hash["sections"])
 
         TypedEAV::Field::Base.transaction do
-          Array(hash["fields"]).each do |entry|
-            import_field_entry(entry, on_conflict, result)
+          import_index = ImportIndex.new(field_entries, section_entries)
+
+          field_entries.each do |entry|
+            import_field_entry(entry, on_conflict, result, import_index)
           end
 
-          Array(hash["sections"]).each do |entry|
-            import_section_entry(entry, on_conflict, result)
+          section_entries.each do |entry|
+            import_section_entry(entry, on_conflict, result, import_index)
           end
         end
 
@@ -105,7 +111,7 @@ module TypedEAV
 
       private
 
-      # rubocop:disable Metrics/AbcSize -- flat projection is the canonical field export shape.
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- flat projection is the canonical field export shape.
       def export_field_entry(field)
         entry = {
           "name" => field.name,
@@ -141,7 +147,7 @@ module TypedEAV
 
         entry
       end
-      # rubocop:enable Metrics/AbcSize
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
       # Lean per-field projection used by {.export_snapshot_schema}. Mirrors
       # the option-row ordering rule from {.export_field_entry} — sort
@@ -207,13 +213,9 @@ module TypedEAV
               "Supported: #{valid_policies.map { |policy| ":#{policy}" }.join(", ")}."
       end
 
-      def import_field_entry(entry, on_conflict, result)
-        existing = TypedEAV::Field::Base.find_by(
-          name: entry["name"],
-          entity_type: entry["entity_type"],
-          scope: entry["scope"],
-          parent_scope: entry["parent_scope"],
-        )
+      def import_field_entry(entry, on_conflict, result, import_index)
+        identity = import_index.field_identity(entry)
+        existing = import_index.fields[identity]
 
         if existing
           reject_type_swap!(existing, entry)
@@ -233,7 +235,7 @@ module TypedEAV
             result["updated"] += 1
           end
         else
-          create_field!(entry)
+          import_index.fields[identity] = create_field!(entry)
           result["created"] += 1
         end
       end
@@ -282,7 +284,7 @@ module TypedEAV
 
       def create_field!(entry)
         field = TypedEAV::Field::Base.create!(entry.except("options_data"))
-        return unless field.optionable?
+        return field unless field.optionable?
 
         Array(entry["options_data"]).each do |option|
           field.field_options.create!(
@@ -291,16 +293,12 @@ module TypedEAV
             sort_order: option["sort_order"],
           )
         end
+        field
       end
 
-      # rubocop:disable Metrics/MethodLength -- mirrors field import for section rows without option replacement.
-      def import_section_entry(entry, on_conflict, result)
-        existing = TypedEAV::Section.find_by(
-          code: entry["code"],
-          entity_type: entry["entity_type"],
-          scope: entry["scope"],
-          parent_scope: entry["parent_scope"],
-        )
+      def import_section_entry(entry, on_conflict, result, import_index)
+        identity = import_index.section_identity(entry)
+        existing = import_index.sections[identity]
 
         if existing
           if section_export_row_equal?(existing, entry)
@@ -322,11 +320,10 @@ module TypedEAV
             result["updated"] += 1
           end
         else
-          TypedEAV::Section.create!(entry)
+          import_index.sections[identity] = TypedEAV::Section.create!(entry)
           result["created"] += 1
         end
       end
-      # rubocop:enable Metrics/MethodLength
 
       def raise_divergent_section!(entry)
         raise ArgumentError,
