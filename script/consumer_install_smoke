@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "bundler"
 require "open3"
 require "pathname"
 require "rbconfig"
@@ -14,6 +15,10 @@ def run!(*command, chdir: ROOT, env: {})
   puts "+ #{command.join(" ")}"
   success = system(env, *command, chdir: chdir.to_s)
   raise "command failed: #{command.join(" ")}" unless success
+end
+
+def run_unbundled!(*command, chdir: ROOT, env: {})
+  Bundler.with_unbundled_env { run!(*command, chdir: chdir, env: env) }
 end
 
 def capture!(*command, chdir: ROOT, env: {})
@@ -71,13 +76,13 @@ Dir.mktmpdir("typed-eav-consumer-") do |tmp|
 
   bundle = [RbConfig.ruby, Gem.bin_path("bundler", "bundle")]
   host_bundle_env = { "BUNDLE_GEMFILE" => host.join("Gemfile").to_s }
-  run!(*bundle, "install", chdir: host, env: host_bundle_env)
+  run_unbundled!(*bundle, "install", chdir: host, env: host_bundle_env)
 
   rails = [*bundle, "exec", "rails"]
   app_env = host_bundle_env.merge("RAILS_ENV" => "test", "DATABASE_URL" => database_url)
-  run!(*rails, "typed_eav:install:migrations", chdir: host, env: app_env)
+  run_unbundled!(*rails, "typed_eav:install:migrations", chdir: host, env: app_env)
   first_install = Dir[host.join("db/migrate/*.typed_eav.rb")]
-  run!(*rails, "typed_eav:install:migrations", chdir: host, env: app_env)
+  run_unbundled!(*rails, "typed_eav:install:migrations", chdir: host, env: app_env)
   second_install = Dir[host.join("db/migrate/*.typed_eav.rb")]
 
   raise "second migration install changed the copied set" unless second_install == first_install
@@ -92,9 +97,9 @@ Dir.mktmpdir("typed-eav-consumer-") do |tmp|
 
   database_created = false
   begin
-    run!(*rails, "db:create", chdir: host, env: app_env)
+    run_unbundled!(*rails, "db:create", chdir: host, env: app_env)
     database_created = true
-    run!(*rails, "db:migrate", chdir: host, env: app_env)
+    run_unbundled!(*rails, "db:migrate", chdir: host, env: app_env)
     schema_check = <<~'RUBY'
       connection = ActiveRecord::Base.connection
       required_tables = %w[
@@ -108,9 +113,9 @@ Dir.mktmpdir("typed-eav-consumer-") do |tmp|
       field_name = connection.columns("typed_eav_fields").find { |column| column.name == "name" }
       abort "missing field name constraint" if field_name.nil? || field_name.null
     RUBY
-    run!(*rails, "runner", schema_check, chdir: host, env: app_env)
+    run_unbundled!(*rails, "runner", schema_check, chdir: host, env: app_env)
   ensure
-    run!(*rails, "db:drop", chdir: host, env: app_env) if database_created
+    run_unbundled!(*rails, "db:drop", chdir: host, env: app_env) if database_created
   end
 end
 # rubocop:enable Metrics/BlockLength
