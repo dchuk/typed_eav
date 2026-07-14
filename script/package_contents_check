@@ -1,0 +1,56 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "pathname"
+require "rubygems/package"
+require "tmpdir"
+
+ROOT = Pathname.new(__dir__).join("..").expand_path
+REQUIRED_FILES = %w[
+  CHANGELOG.md
+  MIT-LICENSE
+  README.md
+  lib/typed_eav/version.rb
+  lib/generators/typed_eav/install/install_generator.rb
+].freeze
+DISALLOWED_PREFIXES = %w[.git/ .github/ script/ spec/].freeze
+
+artifact = Pathname.new(ARGV.fetch(0) { abort "usage: package_contents_check PATH_TO_GEM" }).expand_path
+abort "gem artifact does not exist: #{artifact}" unless artifact.file?
+
+source_spec = Gem::Specification.load(ROOT.join("typed_eav.gemspec").to_s)
+abort "could not load typed_eav.gemspec" unless source_spec
+
+package = Gem::Package.new(artifact.to_s)
+artifact_spec = package.spec
+source_files = source_spec.files.select { |path| ROOT.join(path).file? }.sort
+errors = []
+
+errors << "artifact name is #{artifact_spec.name.inspect}" unless artifact_spec.name == source_spec.name
+unless artifact_spec.version == source_spec.version
+  errors << "artifact version is #{artifact_spec.version}, expected #{source_spec.version}"
+end
+errors << "artifact metadata file list differs from typed_eav.gemspec" unless artifact_spec.files.sort == source_files
+
+missing_required = REQUIRED_FILES - artifact_spec.files
+errors << "artifact is missing required files: #{missing_required.join(", ")}" if missing_required.any?
+unless artifact_spec.files.any? { |path| path.match?(%r{\Adb/migrate/\d+_.+\.rb\z}) }
+  errors << "artifact contains no database migrations"
+end
+
+disallowed = artifact_spec.files.select do |path|
+  DISALLOWED_PREFIXES.any? { |prefix| path.start_with?(prefix) }
+end
+errors << "artifact contains development-only files: #{disallowed.join(", ")}" if disallowed.any?
+
+Dir.mktmpdir("typed-eav-package-") do |tmp|
+  package.extract_files(tmp)
+  extracted = Dir.chdir(tmp) do
+    Dir.glob("**/*", File::FNM_DOTMATCH).select { |path| File.file?(path) }.sort
+  end
+  errors << "extracted artifact contents differ from gem metadata" unless extracted == artifact_spec.files.sort
+end
+
+abort errors.join("\n") if errors.any?
+
+puts "Package contents verified: #{artifact.basename} (#{artifact_spec.files.length} files)"

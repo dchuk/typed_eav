@@ -47,7 +47,20 @@ Dir.mktmpdir("typed-eav-consumer-") do |tmp|
   unpacked_root = tmp.join("package")
   host = tmp.join("host")
 
-  run!(RbConfig.ruby, "-S", "gem", "build", "typed_eav.gemspec", "--output", artifact.to_s)
+  supplied_artifact = ENV.fetch("TYPED_EAV_GEM_ARTIFACT", nil)
+  if supplied_artifact
+    supplied_artifact = Pathname.new(supplied_artifact).expand_path
+    raise "supplied gem artifact does not exist: #{supplied_artifact}" unless supplied_artifact.file?
+
+    FileUtils.cp(supplied_artifact, artifact)
+  else
+    run!(RbConfig.ruby, "-S", "gem", "build", "typed_eav.gemspec", "--output", artifact.to_s)
+  end
+
+  artifact_spec = Gem::Package.new(artifact.to_s).spec
+  raise "supplied artifact is not typed_eav" unless artifact_spec.name == "typed_eav"
+  raise "supplied artifact version does not match source" unless artifact_spec.version.to_s == TypedEAV::VERSION
+
   run!(RbConfig.ruby, "-S", "gem", "unpack", artifact.to_s, "--target", unpacked_root.to_s)
   package = unpacked_root.join("typed_eav-#{TypedEAV::VERSION}")
   package.join("typed_eav.gemspec").write(Gem::Package.new(artifact.to_s).spec.to_ruby)

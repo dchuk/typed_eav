@@ -4,25 +4,283 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      fail_rehearsal:
+        description: "Fail the final verification gate without publishing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  compatibility:
-    name: Compatibility contract
+  source:
+    name: Resolve exact source commit
     runs-on: ubuntu-latest
     outputs:
-      ceiling_ruby: ${{ steps.contract.outputs.ceiling_ruby }}
+      commit_sha: ${{ steps.source.outputs.commit_sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checkout matches the triggering ref
+        id: source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FULL_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          if [ "$EVENT_NAME" = "push" ]; then
+            tag_sha="$(git rev-parse "${FULL_REF}^{commit}")"
+            if [ "$head_sha" != "$tag_sha" ]; then
+              echo "Checkout $head_sha does not match tag commit $tag_sha" >&2
+              exit 1
+            fi
+          fi
+          echo "commit_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+  compatibility:
+    name: Compatibility contract
+    needs: source
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.contract.outputs.matrix }}
+      tooling_ruby: ${{ steps.contract.outputs.tooling_ruby }}
+      ceiling_ruby: ${{ steps.contract.outputs.ceiling_ruby }}
+      ceiling_rails: ${{ steps.contract.outputs.ceiling_rails }}
+      ceiling_postgresql: ${{ steps.contract.outputs.ceiling_postgresql }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.commit_sha }}
+          persist-credentials: false
 
       - name: Load compatibility contract
         id: contract
         run: |
           contract=".github/compatibility.json"
-          echo "ceiling_ruby=$(jq -r '.lanes[] | select(.name == "ceiling") | .ruby' "$contract")" >> "$GITHUB_OUTPUT"
+          {
+            echo "matrix=$(jq -c '{include: .lanes}' "$contract")"
+            echo "tooling_ruby=$(jq -r '.tooling.ruby' "$contract")"
+            echo "ceiling_ruby=$(jq -r '.lanes[] | select(.name == "ceiling") | .ruby' "$contract")"
+            echo "ceiling_rails=$(jq -r '.lanes[] | select(.name == "ceiling") | .rails' "$contract")"
+            echo "ceiling_postgresql=$(jq -r '.lanes[] | select(.name == "ceiling") | .postgresql' "$contract")"
+          } >> "$GITHUB_OUTPUT"
 
-  release:
-    name: Push gem to RubyGems
-    needs: compatibility
+  test:
+    name: RSpec (${{ matrix.name }} — Ruby ${{ matrix.ruby }}, Rails ${{ matrix.rails_series }}, PostgreSQL ${{ matrix.postgresql }})
+    needs: [source, compatibility]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.compatibility.outputs.matrix) }}
+
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgresql }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      RAILS_ENV: test
+      RAILS_VERSION: ${{ matrix.rails }}
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.commit_sha }}
+          persist-credentials: false
+
+      - name: Set up Ruby ${{ matrix.ruby }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+
+      - name: Configure dummy app database
+        run: |
+          cat > spec/dummy/config/database.yml <<'YAML'
+          test:
+            adapter: postgresql
+            database: typed_eav_test
+            host: <%= ENV.fetch("PGHOST", "localhost") %>
+            username: <%= ENV.fetch("PGUSER", "postgres") %>
+            password: <%= ENV.fetch("PGPASSWORD", "") %>
+            encoding: unicode
+          YAML
+
+      - name: Create database and run migrations
+        run: |
+          bundle exec ruby -e '
+            require_relative "spec/dummy/config/environment"
+            config = ActiveRecord::Base.configurations.configs_for(env_name: "test").first
+            ActiveRecord::Tasks::DatabaseTasks.create(config)
+            ActiveRecord::Base.establish_connection(config)
+            paths = [
+              TypedEAV::Engine.root.join("db/migrate").to_s,
+              Rails.root.join("db/migrate").to_s,
+            ]
+            ActiveRecord::MigrationContext.new(paths).migrate
+          '
+
+      - name: Run RSpec
+        run: bundle exec rspec --format progress
+
+  package:
+    name: Lint and build release artifact
+    needs: [source, compatibility]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.commit_sha }}
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ needs.compatibility.outputs.tooling_ruby }}
+          bundler-cache: true
+
+      - name: Verify tag matches gem version
+        if: github.event_name == 'push'
+        run: |
+          gem_version="v$(ruby -r ./lib/typed_eav/version -e 'print TypedEAV::VERSION')"
+          tag_version="${GITHUB_REF_NAME}"
+          if [ "$gem_version" != "$tag_version" ]; then
+            echo "Tag $tag_version does not match gem version $gem_version" >&2
+            exit 1
+          fi
+
+      - name: Run RuboCop
+        run: bundle exec rubocop --format github
+
+      - name: Build and inspect gem
+        run: |
+          mkdir -p pkg
+          version="$(ruby -r ./lib/typed_eav/version -e 'print TypedEAV::VERSION')"
+          gem build typed_eav.gemspec --output "pkg/typed_eav-${version}.gem"
+          bundle exec ruby script/package_contents_check "pkg/typed_eav-${version}.gem"
+          sha256sum "pkg/typed_eav-${version}.gem" > pkg/SHA256SUMS
+
+      - name: Upload verified gem
+        uses: actions/upload-artifact@v7
+        with:
+          name: typed-eav-gem
+          path: pkg/
+          if-no-files-found: error
+          retention-days: 14
+
+  consumer-install:
+    name: Consumer migration installation
+    needs: [source, compatibility, package]
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:${{ needs.compatibility.outputs.ceiling_postgresql }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      RAILS_VERSION: ${{ needs.compatibility.outputs.ceiling_rails }}
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.commit_sha }}
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ needs.compatibility.outputs.ceiling_ruby }}
+          bundler-cache: true
+
+      - name: Download verified gem
+        uses: actions/download-artifact@v8
+        with:
+          name: typed-eav-gem
+          path: pkg
+
+      - name: Exercise verified gem in a consumer app
+        run: |
+          sha256sum --check pkg/SHA256SUMS
+          mapfile -t artifacts < <(find pkg -maxdepth 1 -name '*.gem' -type f)
+          if [ "${#artifacts[@]}" -ne 1 ]; then
+            echo "Expected exactly one gem artifact, found ${#artifacts[@]}" >&2
+            exit 1
+          fi
+          bundle exec ruby script/package_contents_check "${artifacts[0]}"
+          TYPED_EAV_GEM_ARTIFACT="${artifacts[0]}" bundle exec ruby script/consumer_install_smoke
+
+  release-gate:
+    name: Final release gate
+    needs: [source, compatibility, test, package, consumer-install]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every verification job
+        env:
+          SOURCE_RESULT: ${{ needs.source.result }}
+          COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
+          CONSUMER_RESULT: ${{ needs.consumer-install.result }}
+        run: |
+          for result in "$SOURCE_RESULT" "$COMPATIBILITY_RESULT" "$TEST_RESULT" "$PACKAGE_RESULT" "$CONSUMER_RESULT"; do
+            if [ "$result" != "success" ]; then
+              echo "Release verification failed or was skipped: $result" >&2
+              exit 1
+            fi
+          done
+
+      - name: Exercise the fail-closed rehearsal
+        if: inputs.fail_rehearsal == true
+        run: |
+          echo "Intentional rehearsal failure: publication must remain skipped" >&2
+          exit 1
+
+  publish:
+    name: Push verified gem to RubyGems
+    needs: [source, compatibility, package, release-gate]
+    if: >-
+      needs.release-gate.result == 'success' &&
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
     permissions:
@@ -34,22 +292,39 @@ jobs:
       url: https://rubygems.org/gems/typed_eav
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.commit_sha }}
+          persist-credentials: false
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ needs.compatibility.outputs.ceiling_ruby }}
-          bundler-cache: true
 
-      - name: Verify tag matches gem version
+      - name: Download verified gem
+        uses: actions/download-artifact@v8
+        with:
+          name: typed-eav-gem
+          path: pkg
+
+      - name: Reconfirm artifact identity
         run: |
-          gem_version="v$(ruby -r ./lib/typed_eav/version -e 'print TypedEAV::VERSION')"
-          tag_version="${GITHUB_REF_NAME}"
-          if [ "$gem_version" != "$tag_version" ]; then
-            echo "Tag $tag_version does not match gem version $gem_version" >&2
+          sha256sum --check pkg/SHA256SUMS
+          mapfile -t artifacts < <(find pkg -maxdepth 1 -name '*.gem' -type f)
+          if [ "${#artifacts[@]}" -ne 1 ]; then
+            echo "Expected exactly one gem artifact, found ${#artifacts[@]}" >&2
             exit 1
           fi
+          artifact_version="$(ruby -rrubygems/package -e 'print Gem::Package.new(ARGV.fetch(0)).spec.version' "${artifacts[0]}")"
+          if [ "v${artifact_version}" != "$GITHUB_REF_NAME" ]; then
+            echo "Artifact version v${artifact_version} does not match tag $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          ruby script/package_contents_check "${artifacts[0]}"
 
-      - name: Release gem (trusted publishing)
-        uses: rubygems/release-gem@v1
+      - name: Configure trusted publishing credentials
+        uses: rubygems/configure-rubygems-credentials@dc5a8d8553e6ee01fc26761a49e99e733d17954a # v2.1.0
+
+      - name: Publish the verified artifact
+        run: gem push pkg/*.gem --host https://rubygems.org
