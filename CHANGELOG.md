@@ -7,12 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-13
+
+Hardens correctness, query efficiency, installation confidence, and release
+safety while defining the supported runtime window. Existing public method
+signatures and valid-record behavior remain unchanged. The compatibility floor
+is intentionally raised to the release lines exercised by CI.
+
 ### Changed
 
 - Define the supported runtime contract as Ruby 3.3–4.0, Rails 7.2–8.1, and
   PostgreSQL 15–18. Runtime dependency bounds now reject unverified future
   Ruby and Rails release lines; prereleases remain outside the support
   guarantee. Issue #26.
+
+### Fixed
+
+- Prevent single-value reads from returning a stale value from a losing
+  partition, and enforce the parent-scope partition invariant in PostgreSQL.
+  Issues #22 and #23.
+- Exercise packaged migrations in a generated Rails consumer application so
+  missing or non-idempotent installation paths fail before release. Issue #25.
+
+### Performance
+
+- Remove obsolete option-cache invalidation and batch-load fields for already
+  loaded typed values. Issues #28 and #29.
+- Bound scaffold visibility queries and preload existing values during default
+  backfills. Issues #30 and #31.
+- Keep all-partitions filter unions inside SQL and batch schema-import lookups
+  and option writes. Issues #32 and #33.
+
+### Documentation
+
+- Refresh maintainer, schema, and architecture guidance for the 0.5+ behavior
+  and current database invariants. Issue #34.
+
+### Release engineering
+
+- Gate trusted publishing on the exact dereferenced tag commit, the complete
+  supported compatibility matrix, lint, package-content inspection, and a
+  real-host migration installation using the same checksummed gem artifact
+  that is sent to RubyGems. Issue #27.
+
+### References
+
+- Issues #22, #23, and #25–#34.
 
 ## [0.5.0] - 2026-06-01
 
@@ -387,6 +427,7 @@ worked examples.
 
 Initial release.
 
+[0.6.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.6.0
 [0.3.2]: https://github.com/dchuk/typed_eav/releases/tag/v0.3.2
 [0.3.1]: https://github.com/dchuk/typed_eav/releases/tag/v0.3.1
 [0.3.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.3.0

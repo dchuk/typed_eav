@@ -5,7 +5,7 @@
 ## Active Context
 
 **Work:** No active milestone
-**Last shipped:** 0.5.0 (2026-06-01) — 0.4.0 added the per-record bulk-write, include-missing query, snapshot-schema, partition-publicity, and initialization fixes; 0.5.0 added Field display labels. `lib/typed_eav/version.rb` and `CHANGELOG.md` are the canonical release-status sources.
+**Last shipped:** 0.6.0 (2026-07-13) — correctness and query hardening, the supported Ruby/Rails/PostgreSQL contract, packaged-install verification, and fail-closed trusted publishing. `lib/typed_eav/version.rb` and `CHANGELOG.md` are the canonical release-status sources.
 **Next action:** Run /vbw:vibe to start a new milestone, or /vbw:status to review progress
 
 ## VBW Rules
