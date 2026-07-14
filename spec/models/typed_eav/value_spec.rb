@@ -211,7 +211,7 @@ RSpec.describe TypedEAV::Value, type: :model do
       value = described_class.new(entity: contact, field: field)
       value.value = nil
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/blank/))
+      expect(value.errors[:value]).to include(a_string_including("blank"))
     end
 
     it "passes when value is present" do
@@ -252,7 +252,7 @@ RSpec.describe TypedEAV::Value, type: :model do
       value = described_class.new(entity: contact, field: field)
       value.value = "nonexistent"
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/included in the list/))
+      expect(value.errors[:value]).to include(a_string_including("included in the list"))
     end
 
     it "accepts valid option values" do
@@ -405,7 +405,7 @@ RSpec.describe TypedEAV::Value, type: :model do
       value = described_class.new(entity: contact, field: field)
       value.value = "not_a_number"
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/invalid/))
+      expect(value.errors[:value]).to include(a_string_including("invalid"))
     end
 
     it "does not leak cast-invalid flag across value instances sharing a field" do
@@ -455,7 +455,7 @@ RSpec.describe TypedEAV::Value, type: :model do
       value = described_class.new(entity: contact, field: field)
       value.value = "not-an-email"
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/email/))
+      expect(value.errors[:value]).to include(a_string_including("email"))
     end
 
     it "accepts valid email" do
@@ -479,7 +479,7 @@ RSpec.describe TypedEAV::Value, type: :model do
       value = described_class.new(entity: contact, field: field)
       value.value = "not-a-url"
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/URL/))
+      expect(value.errors[:value]).to include(a_string_including("URL"))
     end
 
     it "accepts valid https URL" do
@@ -546,7 +546,7 @@ RSpec.describe TypedEAV::Value, type: :model do
       value = described_class.new(entity: contact, field: field)
       value.value = %w[vip nonexistent]
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/included in the list/))
+      expect(value.errors[:value]).to include(a_string_including("included in the list"))
     end
 
     it "accepts all valid options" do
@@ -589,7 +589,7 @@ RSpec.describe TypedEAV::Value, type: :model do
       value = described_class.new(entity: contact, field: field)
       value.value = { "data" => "x" * 1_100_000 }
       expect(value).not_to be_valid
-      expect(value.errors[:value]).to include(match(/too large/))
+      expect(value.errors[:value]).to include(a_string_including("too large"))
     end
 
     it "accepts JSON values under 1MB" do
