@@ -27,6 +27,22 @@ WHERE integer_value = 42
 
 Standard B-tree indexes work. Range scans work. The query planner is happy. ActiveRecord handles all type casting automatically through the column's registered type.
 
+## Compatibility
+
+The canonical support contract lives in
+[`.github/compatibility.json`](.github/compatibility.json). Typed EAV supports:
+
+| Runtime | Supported versions |
+|---|---|
+| Ruby | 3.3 through 4.0 (`>= 3.3`, `< 4.1`) |
+| Rails | 7.2 through 8.1 (`>= 7.2`, `< 8.2`) |
+| PostgreSQL | 15 through 18 |
+
+CI proves representative floor, middle, and ceiling combinations rather than
+every Cartesian product. Versions outside these ranges and prerelease versions
+are outside the support guarantee. PostgreSQL compatibility claims assume the
+current minor release for each supported major version.
+
 ## Installation
 
 Add to your Gemfile:
