@@ -49,4 +49,15 @@ RSpec.describe "runtime compatibility contract" do
     expect(readme).to include("PostgreSQL | 15 through 18")
     expect(readme).to include("prerelease versions")
   end
+
+  it "drives CI and release workflow runtime selection from the canonical contract" do
+    ci = root.join(".github/workflows/ci.yml").read
+    release = root.join(".github/workflows/release.yml").read
+
+    expect(ci).to include("fromJSON(needs.compatibility.outputs.matrix)")
+    expect(ci).to include("postgres:${{ matrix.postgresql }}")
+    expect(ci).to include("RAILS_VERSION: ${{ matrix.rails }}")
+    expect(ci).to include("needs.compatibility.outputs.ceiling_ruby")
+    expect(release).to include("needs.compatibility.outputs.ceiling_ruby")
+  end
 end
