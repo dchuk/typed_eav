@@ -68,11 +68,13 @@ jobs:
         id: contract
         run: |
           contract=".github/compatibility.json"
-          echo "matrix=$(jq -c '{include: .lanes}' "$contract")" >> "$GITHUB_OUTPUT"
-          echo "tooling_ruby=$(jq -r '.tooling.ruby' "$contract")" >> "$GITHUB_OUTPUT"
-          echo "ceiling_ruby=$(jq -r '.lanes[] | select(.name == "ceiling") | .ruby' "$contract")" >> "$GITHUB_OUTPUT"
-          echo "ceiling_rails=$(jq -r '.lanes[] | select(.name == "ceiling") | .rails' "$contract")" >> "$GITHUB_OUTPUT"
-          echo "ceiling_postgresql=$(jq -r '.lanes[] | select(.name == "ceiling") | .postgresql' "$contract")" >> "$GITHUB_OUTPUT"
+          {
+            echo "matrix=$(jq -c '{include: .lanes}' "$contract")"
+            echo "tooling_ruby=$(jq -r '.tooling.ruby' "$contract")"
+            echo "ceiling_ruby=$(jq -r '.lanes[] | select(.name == "ceiling") | .ruby' "$contract")"
+            echo "ceiling_rails=$(jq -r '.lanes[] | select(.name == "ceiling") | .rails' "$contract")"
+            echo "ceiling_postgresql=$(jq -r '.lanes[] | select(.name == "ceiling") | .postgresql' "$contract")"
+          } >> "$GITHUB_OUTPUT"
 
   test:
     name: RSpec (${{ matrix.name }} — Ruby ${{ matrix.ruby }}, Rails ${{ matrix.rails_series }}, PostgreSQL ${{ matrix.postgresql }})
