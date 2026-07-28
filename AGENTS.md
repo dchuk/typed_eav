@@ -5,7 +5,7 @@
 ## Active Context
 
 **Work:** No active milestone
-**Last shipped:** 0.6.0 (2026-07-13) — correctness and query hardening, the supported Ruby/Rails/PostgreSQL contract, packaged-install verification, and fail-closed trusted publishing. `lib/typed_eav/version.rb` and `CHANGELOG.md` are the canonical release-status sources.
+**Last shipped:** 0.6.0 (2026-07-13) — correctness and query hardening, the supported Ruby/Rails/PostgreSQL contract, packaged-install verification, and fail-closed trusted publishing. `lib/typed_eav/version.rb` and `CHANGELOG.md` are the canonical release-status sources for the source version; `RELEASING.md` defines when publication is complete.
 **Next action:** Run /vbw:vibe to start a new milestone, or /vbw:status to review progress
 
 ## VBW Rules
@@ -17,6 +17,7 @@
 - **Plan before building.** Use /vbw:vibe for all lifecycle actions. Plans are the source of truth.
 - **Do not fabricate content.** Only use what the user explicitly states in project-defining flows.
 - **Do not bump version or push until asked.** Never run `scripts/bump-version.sh` or `git push` unless the user explicitly requests it, except when `.vbw-planning/config.json` intentionally sets `auto_push` to `always` or `after_phase`.
+- **Finish every release surface.** Follow `RELEASING.md`. A release is not complete until the version is published on RubyGems, the exact tag has a stable GitHub Release, and the newest stable release is marked **Latest**.
 
 ## Code Intelligence
 
