@@ -68,6 +68,21 @@ RSpec.describe "release workflow" do
     expect(workflow_text).not_to include("rubygems/release-gem@")
   end
 
+  it "finishes publication with a stable GitHub release marked latest" do
+    github_release = jobs.fetch("github-release")
+
+    expect(github_release.fetch("needs")).to contain_exactly("source", "publish")
+    expect(github_release.fetch("if")).to include("needs.publish.result == 'success'")
+    expect(github_release.dig("permissions", "contents")).to eq("write")
+    expect(github_release.dig("env", "GH_TOKEN")).to eq("${{ github.token }}")
+    expect(commands(github_release)).to include('gh release view "$GITHUB_REF_NAME"')
+    expect(commands(github_release)).to include('gh release create "$GITHUB_REF_NAME"')
+    expect(commands(github_release)).to include("--verify-tag")
+    expect(commands(github_release)).to include("--generate-notes")
+    expect(commands(github_release)).to include("--latest")
+    expect(commands(github_release)).to include('gh release edit "$GITHUB_REF_NAME" --latest')
+  end
+
   it "retains tag-to-version guards and offers a non-publishing failed rehearsal" do
     package = jobs.fetch("package")
     gate = jobs.fetch("release-gate")

@@ -328,3 +328,39 @@ jobs:
 
       - name: Publish the verified artifact
         run: gem push pkg/*.gem --host https://rubygems.org
+
+  github-release:
+    name: Publish GitHub release
+    needs: [source, publish]
+    if: >-
+      needs.publish.result == 'success' &&
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Create or verify stable release
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            release_state="$(gh release view "$GITHUB_REF_NAME" --json isDraft,isPrerelease --jq '[.isDraft, .isPrerelease] | @tsv')"
+            if [ "$release_state" != $'false\tfalse' ]; then
+              echo "Existing GitHub release for $GITHUB_REF_NAME is a draft or prerelease" >&2
+              exit 1
+            fi
+            gh release edit "$GITHUB_REF_NAME" --latest
+          else
+            version="${GITHUB_REF_NAME#v}"
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --title "typed_eav $version" \
+              --generate-notes \
+              --latest
+          fi
