@@ -59,5 +59,7 @@ RSpec.describe "runtime compatibility contract" do
     expect(ci).to include("RAILS_VERSION: ${{ matrix.rails }}")
     expect(ci).to include("needs.compatibility.outputs.ceiling_ruby")
     expect(release).to include("needs.compatibility.outputs.ceiling_ruby")
+    expect(ci.scan("actions/checkout@v7").length).to eq(4)
+    expect(ci).not_to include("actions/checkout@v4")
   end
 end
