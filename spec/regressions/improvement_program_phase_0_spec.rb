@@ -82,7 +82,6 @@ RSpec.describe "Improvement program Phase 0 correctness probes", type: :model do
 
       scoped.move_higher
 
-      pending("field ordering currently mutates the visibility fallback relation, not only the exact partition")
       expect(scoped.reload.sort_order).to eq(1)
       expect(global.reload.sort_order).to eq(1)
     end

@@ -128,6 +128,14 @@ module TypedEAV
         )
       }
 
+      # Exact mutation partition. Unlike `for_entity`, this relation does not
+      # widen either axis with fallback rows. It intentionally starts from the
+      # STI base class in `reorder_within_partition` so every field type shares
+      # one ordering partition.
+      scope :for_partition, lambda { |entity_type, scope: nil, parent_scope: nil|
+        where(entity_type: entity_type, scope: scope, parent_scope: parent_scope)
+      }
+
       scope :sorted, -> { order(sort_order: :asc, name: :asc) }
       scope :required_fields, -> { where(required: true) }
 
@@ -527,11 +535,11 @@ module TypedEAV
       # locking + normalization scaffold.
       def reorder_within_partition
         self.class.transaction do
-          locked = self.class
-                       .for_entity(entity_type, scope: scope, parent_scope: parent_scope)
-                       .order(:id)
-                       .lock("FOR UPDATE")
-                       .to_a
+          locked = TypedEAV::Field::Base
+                   .for_partition(entity_type, scope: scope, parent_scope: parent_scope)
+                   .order(:id)
+                   .lock("FOR UPDATE")
+                   .to_a
 
           # Sort the locked snapshot into display order (the lock was acquired
           # in :id order for deadlock safety; we reorder in memory for the

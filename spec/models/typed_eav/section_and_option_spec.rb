@@ -183,6 +183,35 @@ RSpec.describe TypedEAV::Section, type: :model do
       expect(section_partition_orders(entity_type: "SecIso", scope: "t2")).to eq(t2_before)
     end
 
+    it "keeps global and scope-only partitions separate" do
+      global = make_section_partition(entity_type: "SecIsoGlobal", count: 3, prefix: "global")
+      scoped = make_section_partition(entity_type: "SecIsoGlobal", scope: "t1", count: 3, prefix: "scoped")
+      global_before = global.map { |section| [section.code, section.sort_order] }
+
+      scoped.first.move_to_bottom
+
+      expect(section_partition_orders(entity_type: "SecIsoGlobal")).to eq(global_before)
+    end
+
+    it "keeps full tuples separate from scope-only and global fallbacks" do
+      global = make_section_partition(entity_type: "SecIsoTuple", count: 3, prefix: "global")
+      scope_only = make_section_partition(entity_type: "SecIsoTuple", scope: "t1", count: 3, prefix: "scope")
+      full = make_section_partition(
+        entity_type: "SecIsoTuple", scope: "t1", parent_scope: "w1", count: 3, prefix: "full",
+      )
+      global_before = global.map { |section| [section.code, section.sort_order] }
+      scope_before = scope_only.map { |section| [section.code, section.sort_order] }
+
+      full.first.move_to_bottom
+
+      expect(section_partition_orders(entity_type: "SecIsoTuple")).to eq(global_before)
+      exact_scope = described_class
+                    .for_partition("SecIsoTuple", scope: "t1")
+                    .order(:sort_order, :name)
+                    .pluck(:code, :sort_order)
+      expect(exact_scope).to eq(scope_before)
+    end
+
     it "places nil sort_order rows after positioned rows during normalization" do
       s1 = create(:typed_section, name: "Nil A", code: "nil_a", entity_type: "SecNilNorm", sort_order: nil)
       s2 = create(:typed_section, name: "Nil B", code: "nil_b", entity_type: "SecNilNorm", sort_order: nil)

@@ -1109,6 +1109,16 @@ RSpec.describe "TypedEAV::Field::Base ordering helpers", type: :model do
   end
 
   describe "partition isolation" do
+    it "keeps global and scope-only partitions separate" do
+      global = make_partition(entity_type: "OrdIsoGlobal", count: 3, prefix: "global")
+      scoped = make_partition(entity_type: "OrdIsoGlobal", scope: "t1", count: 3, prefix: "scoped")
+      global_before = global.map { |field| [field.name, field.sort_order] }
+
+      scoped.first.move_to_bottom
+
+      expect(partition_orders(entity_type: "OrdIsoGlobal")).to eq(global_before)
+    end
+
     it "does not affect a different scope partition" do
       t1_fields = make_partition(entity_type: "OrdIsoScope", scope: "t1", count: 3, prefix: "t1")
       t2_fields = make_partition(entity_type: "OrdIsoScope", scope: "t2", count: 3, prefix: "t2")
@@ -1139,6 +1149,34 @@ RSpec.describe "TypedEAV::Field::Base ordering helpers", type: :model do
       w1_fields.first.move_to_bottom
 
       expect(partition_orders(entity_type: "OrdIsoParent", scope: "t1", parent_scope: "w2")).to eq(w2_before)
+    end
+
+    it "keeps full tuples separate from scope-only and global fallbacks" do
+      global = make_partition(entity_type: "OrdIsoTuple", count: 3, prefix: "global")
+      scope_only = make_partition(entity_type: "OrdIsoTuple", scope: "t1", count: 3, prefix: "scope")
+      full = make_partition(entity_type: "OrdIsoTuple", scope: "t1", parent_scope: "w1", count: 3, prefix: "full")
+      global_before = global.map { |field| [field.name, field.sort_order] }
+      scope_before = scope_only.map { |field| [field.name, field.sort_order] }
+
+      full.first.move_to_bottom
+
+      expect(partition_orders(entity_type: "OrdIsoTuple")).to eq(global_before)
+      exact_scope = TypedEAV::Field::Base
+                    .for_partition("OrdIsoTuple", scope: "t1")
+                    .order(:sort_order, :name)
+                    .pluck(:name, :sort_order)
+      expect(exact_scope).to eq(scope_before)
+    end
+
+    it "locks mixed STI field types in one exact partition" do
+      text = create(:text_field, name: "mixed_text", entity_type: "OrdMixedTypes", sort_order: 1)
+      integer = create(:integer_field, name: "mixed_integer", entity_type: "OrdMixedTypes", sort_order: 2)
+
+      integer.move_to_top
+
+      expect(partition_orders(entity_type: "OrdMixedTypes")).to eq(
+        [[integer.name, 1], [text.name, 2]],
+      )
     end
   end
 

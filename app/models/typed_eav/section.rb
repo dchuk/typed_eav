@@ -29,6 +29,12 @@ module TypedEAV
         parent_scope: [parent_scope, nil].uniq,
       )
     }
+
+    # Exact mutation partition. Visibility intentionally widens through
+    # `for_entity`; ordering mutations must only normalize this exact tuple.
+    scope :for_partition, lambda { |entity_type, scope: nil, parent_scope: nil|
+      where(entity_type: entity_type, scope: scope, parent_scope: parent_scope)
+    }
     scope :sorted, -> { order(sort_order: :asc, name: :asc) }
 
     # ── Display ordering ──
@@ -110,11 +116,11 @@ module TypedEAV
 
     def reorder_within_partition
       self.class.transaction do
-        locked = self.class
-                     .for_entity(entity_type, scope: scope, parent_scope: parent_scope)
-                     .order(:id)
-                     .lock("FOR UPDATE")
-                     .to_a
+        locked = TypedEAV::Section
+                 .for_partition(entity_type, scope: scope, parent_scope: parent_scope)
+                 .order(:id)
+                 .lock("FOR UPDATE")
+                 .to_a
 
         siblings = locked.sort_by { |r| [r.sort_order.nil? ? 1 : 0, r.sort_order || 0, r.name.to_s] }
 
