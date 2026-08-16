@@ -64,6 +64,14 @@ The following is captured output from the existing Rails/dummy test environment 
 | `Contact.where_typed_eav({name: "age", op: :is_null, value: nil}, scope: nil)` | `SELECT "contacts".* FROM "contacts" WHERE "contacts"."id" IN (SELECT DISTINCT "typed_eav_values"."entity_id" FROM "typed_eav_values" WHERE "typed_eav_values"."field_id" = 121136 AND "typed_eav_values"."integer_value" IS NULL)` | Explicit value-row NULL predicate |
 | Same public path with `include_missing: true` | `SELECT "contacts".* FROM "contacts" WHERE "contacts"."id" NOT IN (SELECT DISTINCT "typed_eav_values"."entity_id" FROM "typed_eav_values" WHERE "typed_eav_values"."field_id" = 121136 AND "typed_eav_values"."integer_value" IS NOT NULL)` | Missing-row-inclusive complement semantics |
 
+## Phase 3 string-search evidence
+
+T043 measured exact public `=`, `ILIKE`, and `NOT ILIKE` predicates against the shipped partial-covering B-tree, an additive lower-expression B-tree, and an additive partial `pg_trgm` GIN index. Seed 4401 supplied 250,000 target-field and 250,000 noise-field rows per candidate with deterministic skew, escaped `%`/`_`, short-pattern, suffix, prefix, positive, and negative controls. Three rotated PostgreSQL 17 trials passed dataset/operator checksum equality and primary dispersion at 0.150653. Existing-container state and exact cleanup passed under anonymous co-tenant load; absolute timing remains diagnostic.
+
+GIN appeared in public plans for prefix, ordinary contains, suffix, and escaped-literal probes. It did not accelerate `NOT ILIKE` or one/two-character probes. Current B-tree equality remained index-only. The lower-expression B-tree appeared only for the separate `lower(string_value) LIKE ...` prototype; unchanged public `ILIKE` did not use it, and collation equivalence is not assumed. Median index bytes were 35,840,000 current, 59,867,136 lower-additive, and 57,851,904 GIN-additive. GIN median build time was 2,378.324 ms and insert/update throughput 85,449.9/40,828.6 rows/s versus 409.119 ms and 198,696.6/97,350.6 for current B-tree alone; GIN insert/update WAL was 17,589,544/14,149,224 versus 6,857,536/4,789,184 bytes.
+
+Disposable PostgreSQL 15.19, 16.15, and 18.6 lanes proved `pg_trgm` availability plus create, idempotent create, update, drop, and recreate/drop by a database owner whose superuser, createdb, createrole, and replication flags were all false. Version-tagged startup logs and hashes are embedded in the artifact. Required-versus-optional-versus-guidance extension policy, automatic index installation, and production query/schema changes remain T030 decisions.
+
 ## Nine-column program tracker
 
 | Phase | Task | Owner agent | Status | Dependencies | Decision | Evidence | Commit | Follow-up |
@@ -82,7 +90,8 @@ The following is captured output from the existing Rails/dummy test environment 
 | 2 | T032 scalar index experiment | Worker/Judge | done | Gate 1 + qualified host | Select partial covering `(field_id, value) INCLUDE (entity_id) WHERE value IS NOT NULL` | Three rotated representative trials; footprint, WAL, write and core-query plans | `5249d1c` | Apply NULL policy before migration |
 | 2 | T034 NULL distributions | Worker | done | T025/T026/T033 | **Option B**: no automatic NULL index; targeted measured guidance only | Low/high NULL, five query shapes, bytes/WAL, three trials, exact cleanup | task commit | Concurrent partial-covering migration; Gate 2 |
 | 2 | T036 scalar index migration | Worker | done | T034/T035 | Concurrent create-before-drop upgrade and recreate-before-remove rollback with exact catalog enforcement | Six partial-covering replacements, interrupted-run recovery, definition-drift rejection, packaged consumer up/down/up | task commit | Run Gate 2 integration review |
-| 3–4 | String/planner/query paths | PM/Workers | queued | Gate 2 | Compare B-tree/trigram and multi-filter plans | Operator-specific benchmark evidence | — | Preserve scope and missing semantics |
+| 3 | T043 string-search benchmark | Worker | done | Gate 2/T042 | Evidence only; extension/index policy remains for T030 | Three rotated PG17 trials; PG15/16/18 lifecycle logs; exact public plans/checksums; cleanup verified | task commit | T030 chooses policy; lower B-tree does not serve unchanged ILIKE |
+| 4 | Planner/query paths | PM/Workers | queued | Phase 3 policy | Compare statistics and multi-filter plans | Operator-specific benchmark evidence | — | Preserve scope and missing semantics |
 | 5–8 | Read/write/durability/cleanup | PM/Workers | queued | Gates 4/6 | Characterize semantics before optimizing | Profiles, failure proofs, ADRs | — | Preserve callbacks, versioning, tenant isolation |
 | 9–12 | Tournament and documentation | PM/Workers | queued | Prior gates + host | Choose architecture only from fair benchmark | Comparable strategies and final ADRs | — | Final audit and full-outcome proof |
 

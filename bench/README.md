@@ -49,3 +49,21 @@ bench/docker/scalar-index/run_remote_null.sh
 The runner creates only uniquely named, T034-labeled resources on the configured SSH host. It uses the same CPU, memory, I/O, network, privilege, headroom, telemetry, invariant, and exact-cleanup boundaries as the representative scalar runner. Three same-seed trials rotate candidate order. The committed artifact is `bench/results/phase-2-null-distributions.json`; its schema/checksum checks, existing-container invariant, and post-cleanup audit pass.
 
 The result supports Option B: ship no automatic NULL index, retain partial-covering scalar indexes as the default, and document a targeted application-owned NULL index only for a measured low-NULL workload dominated by explicit-NULL probes. At 1% logical NULL, the extra index reduced median root-plan buffers for explicit NULL and `eq nil` by 83.4%, but increased total index bytes 37.5% and insert WAL 28.7%. At 50% logical NULL it increased those query buffers 84.4%, index bytes 43.4%, and insert WAL 32.4%. It did not improve `is_not_null` or `include_missing`, and increased NULL-inclusive `not_eq` buffers in both distributions. Absolute timings remain diagnostic under continuous co-tenant transcoding.
+
+## Phase 3 string-search benchmark
+
+`string_search_benchmark.rb` compares the shipped partial-covering `text_pattern_ops` B-tree with additive lower-expression B-tree and partial `pg_trgm` GIN candidates. GiST remains smoke-only. The unchanged public predicates are measured separately from the prototype: equality uses `=`, positive string operators use `ILIKE`, `not_contains` uses `NOT ILIKE`, and `lower(string_value) LIKE ...` is explicitly not presented as serving public `ILIKE`.
+
+Seed 4401 supplies 250,000 target-field rows and 250,000 noise-field rows per candidate with deterministic skew. It includes equality, prefix, contains, suffix, negative, escaped `%`/`_`, and one/two-character controls. Candidate and per-operator entity-ID checksums must agree. Plans use `EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, FORMAT JSON)` and include nodes, indexes, buffers, heap fetches, sizes, build time/WAL, and indexed insert/update throughput/WAL.
+
+```sh
+PATH=/Users/darrindemchuk/.rbenv/versions/3.4.4/bin:$PATH \
+  ruby bench/string_search_benchmark.rb \
+  --tier smoke --seed 4401 --output /private/tmp/typed-eav-phase-3-string-smoke.json
+
+bench/docker/string-search/run_remote.sh
+```
+
+The isolated runner first proves least-privilege `pg_trgm` availability, install, idempotent create, update, drop, and recreate/drop on PostgreSQL 15, 16, and 18, retaining checksummed version-tagged startup logs. PostgreSQL 18 mounts its owned volume at `/var/lib/postgresql`; 15/16 use `/var/lib/postgresql/data`. Only then does it run three rotated PostgreSQL 17 trials. Unique T043 labels, an internal network, conservative resource caps, continuous headroom/no-impact checks, and exact cleanup isolate the run; it uses no published ports, host networking, Compose, privileged mode, restart policy, Docker socket, or media bind.
+
+The accepted artifact is `bench/results/phase-3-string-search-representative.json`. Primary dispersion was 0.150653, below the 0.25 gate without a rerun. Public PostgreSQL 17 plans used GIN for `starts_with`, `contains`, `ends_with`, and escaped-literal patterns, but not `not_contains` or one/two-character probes. The additive lower B-tree was used only by the separate lower/LIKE prototype. Median GIN index bytes were 57,851,904 versus 35,840,000 for current B-tree alone; GIN also increased indexed write WAL and reduced indexed write throughput. Absolute co-tenant timing is diagnostic, and this evidence does not choose extension policy or authorize an index.
