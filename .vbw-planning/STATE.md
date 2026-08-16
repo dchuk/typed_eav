@@ -4,17 +4,17 @@
 **Milestone:** TypedEAV Improvement Program
 
 ## Current Phase
-Phase: 1 of 5
+Phase: 1 of 5 (Baseline And Correctness)
 Plans: 0/0
 Progress: 0%
 Status: ready
 
 ## Phase Status
-- **Phase 1:** Pending planning
-- **Phase 2:** Pending
-- **Phase 3:** Pending
-- **Phase 4:** Pending
-- **Phase 5:** Pending
+- **Phase 1 (Baseline And Correctness):** Pending planning
+- **Phase 2 (Scalar Text And Planner Architecture):** Pending
+- **Phase 3 (Read Write And Lifecycle Operations):** Pending
+- **Phase 4 (Durability And Structural Cleanup):** Pending
+- **Phase 5 (Tournament Architecture Decision And Documentation):** Pending
 
 ## Key Decisions
 | Decision | Date | Rationale |
