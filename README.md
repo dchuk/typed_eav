@@ -244,6 +244,33 @@ extension because other objects may share it. See
 [benchmark guide](bench/README.md#phase-3-string-search-benchmark) for the
 operator matrix, measured costs, SQL, and evidence limits.
 
+### Optional planner statistics for correlated field/value predicates
+
+TypedEAV does not install PostgreSQL extended-statistics objects. An application
+whose own plans persistently misestimate `field_id = ... AND typed_value = ...`
+may evaluate application-owned `dependencies` statistics for that exact typed
+column. Dependency statistics apply to compatible equality and `IN` clauses,
+not range predicates. `mcv` describes common value combinations, while
+`ndistinct` primarily informs distinct-group estimates; neither should be added
+without workload evidence.
+
+The representative PostgreSQL 17 benchmark found better aggregate equality
+estimates from dependencies, but no plan-shape or demonstrated runtime benefit.
+Its combined object mirrored MCV on the four changed probes because matching MCV
+groups supplied those estimates. The experiment's target of 100 was a controlled
+input, not a universal recommendation. One probe labeled common-date equality
+actually queried an absent date and returned zero rows; it is not evidence about
+common-date estimates.
+
+Applications should own stable names and DDL, select targets from representative
+data, run `ANALYZE`, and compare estimated/actual rows, plans, runtime, planning
+cost, maintenance cost, and data churn before retaining an object. Coordinate
+ownership in shared databases, inspect catalog definitions before changing
+objects, and drop only application-owned statistics during rollback. See
+[ADR 0010](docs/adr/0010-planner-statistics-policy.md) and the
+[benchmark guide](bench/README.md#phase-4a-planner-extended-statistics) for safe
+evaluation SQL and evidence limits.
+
 ### How Type Inference Works
 
 You don't need to think about types when querying. Rails handles it:

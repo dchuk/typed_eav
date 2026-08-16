@@ -106,3 +106,54 @@ bundle exec ruby bench/planner_statistics_benchmark.rb \
 ```
 
 The authorized runner is `bench/docker/planner-statistics/run_remote.sh`. It uses only T051-labeled internal Docker objects, resource caps, an owned output volume, closed-file SHA-256 manifests, explicit tar streaming, unchanged existing-container checks, and exact cleanup. Absolute co-tenant timing is diagnostic. PostgreSQL 17 is the only planner evidence, classifications may be inconclusive, and mechanical completeness—not a favorable result—accepts the artifact.
+
+ADR 0010 selects documentation-only, application-owned evaluation. TypedEAV
+does not install an extended-statistics object or ship a migration, generator,
+or helper. The statistics kinds answer different questions: `dependencies` can
+adjust compatible equality and `IN` estimates for correlated columns but does
+not apply to ranges; `mcv` stores frequencies for common column combinations;
+and `ndistinct` estimates distinct combinations, principally for grouping. In
+the representative result, matching MCV groups supplied all four estimates that
+changed under the combined object, so it mirrored MCV rather than the
+dependencies-only aggregate result.
+
+The artifact also preserves a mislabeled zero-row probe.
+`date_skewed_common_eq` queried `2024-01-01`, but generated common dates begin at
+`2024-01-02`. Treat it as absent-date estimation evidence, not common-date
+evidence. Do not infer execution-time or plan improvement: no candidate changed
+plan shape, introduced a sequential scan, or lost an index-only plan. The plans
+come only from PostgreSQL 17, and target 100 was a fixed experimental control,
+not a universal recommendation.
+
+An application investigating a demonstrated integer-equality misestimate can
+start with application-owned DDL in a representative preproduction database:
+
+```sql
+CREATE STATISTICS app_te_values_field_integer_dependencies (dependencies)
+ON field_id, integer_value
+FROM typed_eav_values;
+
+ALTER STATISTICS app_te_values_field_integer_dependencies
+SET STATISTICS <application-selected-target>;
+
+ANALYZE typed_eav_values;
+```
+
+Test only the typed columns and statistics kinds implicated by real queries.
+Compare a before/after corpus with `EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS)`,
+estimated versus actual rows, planning/execution time, workload latency,
+`ANALYZE` duration, catalog size, and maintenance cost. Repeat after realistic
+data churn and for each operated PostgreSQL version. Creation does not populate
+the object until `ANALYZE` runs.
+
+The application owns stable names, target selection, DDL timing, and removal.
+Inspect `pg_statistic_ext` and, when permitted, `pg_statistic_ext_data` to verify
+table, columns, kinds, owner, target, and collected data. In a shared database,
+coordinate one owner; never change or remove another application's object based
+on its name alone. Roll back only the verified application-owned object, then
+refresh and remeasure the baseline:
+
+```sql
+DROP STATISTICS IF EXISTS app_te_values_field_integer_dependencies;
+ANALYZE typed_eav_values;
+```
