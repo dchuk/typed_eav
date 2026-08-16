@@ -113,7 +113,41 @@ Dir.mktmpdir("typed-eav-consumer-") do |tmp|
     run_unbundled!(*rails, "db:create", chdir: host, env: app_env)
     database_created = true
     run_unbundled!(*rails, "db:migrate", chdir: host, env: app_env)
-    schema_check = <<~'RUBY'
+    index_catalog_helper = <<~'RUBY'
+      def typed_eav_smoke_index(connection, name)
+        quoted_name = connection.quote(name)
+        connection.select_one(<<~SQL.squish)
+          SELECT
+            index_state.indisvalid AS valid,
+            index_state.indisready AS ready,
+            index_state.indisunique AS unique,
+            access_method.amname AS method,
+            index_state.indnkeyatts AS key_count,
+            pg_get_expr(index_state.indpred, index_state.indrelid) AS predicate,
+            array_to_string(ARRAY(
+              SELECT attribute.attname
+              FROM unnest(index_state.indkey) WITH ORDINALITY AS index_column(attnum, position)
+              JOIN pg_attribute attribute
+                ON attribute.attrelid = index_state.indrelid AND attribute.attnum = index_column.attnum
+              ORDER BY index_column.position
+            ), ',') AS columns,
+            array_to_string(ARRAY(
+              SELECT operator_class.opcname
+              FROM unnest(index_state.indclass) WITH ORDINALITY AS index_opclass(opcoid, position)
+              JOIN pg_opclass operator_class ON operator_class.oid = index_opclass.opcoid
+              WHERE index_opclass.position <= index_state.indnkeyatts
+              ORDER BY index_opclass.position
+            ), ',') AS opclasses
+          FROM pg_class index_relation
+          JOIN pg_index index_state ON index_state.indexrelid = index_relation.oid
+          JOIN pg_class table_relation ON table_relation.oid = index_state.indrelid
+          JOIN pg_am access_method ON access_method.oid = index_relation.relam
+          WHERE table_relation.relname = 'typed_eav_values'
+            AND index_relation.relname = #{quoted_name}
+        SQL
+      end
+    RUBY
+    schema_check = index_catalog_helper + <<~'RUBY'
       connection = ActiveRecord::Base.connection
       required_tables = %w[
         typed_eav_fields typed_eav_values typed_eav_options
@@ -125,7 +159,59 @@ Dir.mktmpdir("typed-eav-consumer-") do |tmp|
       abort "missing value foreign keys" if connection.foreign_keys("typed_eav_values").empty?
       field_name = connection.columns("typed_eav_fields").find { |column| column.name == "name" }
       abort "missing field name constraint" if field_name.nil? || field_name.null
+
+      expected = {
+        "idx_te_values_field_int_present" => ["integer_value", "int8_ops"],
+        "idx_te_values_field_dec_present" => ["decimal_value", "numeric_ops"],
+        "idx_te_values_field_date_present" => ["date_value", "date_ops"],
+        "idx_te_values_field_dt_present" => ["datetime_value", "timestamp_ops"],
+        "idx_te_values_field_bool_present" => ["boolean_value", "bool_ops"],
+        "idx_te_values_field_str_present" => ["string_value", "text_pattern_ops"],
+      }
+      expected.each do |name, (value_column, value_opclass)|
+        row = typed_eav_smoke_index(connection, name)
+        abort "missing replacement index #{name}" unless row
+        abort "invalid replacement index #{name}" unless row.fetch("valid") && row.fetch("ready")
+        abort "wrong access method for #{name}" unless row.fetch("method") == "btree"
+        abort "unexpected unique index #{name}" if row.fetch("unique")
+        abort "wrong keys for #{name}" unless row.fetch("key_count").to_i == 2
+        abort "wrong columns for #{name}" unless row.fetch("columns").split(",") == ["field_id", value_column, "entity_id"]
+        abort "wrong opclasses for #{name}" unless row.fetch("opclasses").split(",") == ["int8_ops", value_opclass]
+        predicate = row.fetch("predicate").delete("()")
+        abort "wrong predicate for #{name}" unless predicate == "#{value_column} IS NOT NULL"
+      end
     RUBY
+    run_unbundled!(*rails, "runner", schema_check, chdir: host, env: app_env)
+    migration_path = first_install.find { |path| path.end_with?("_use_partial_covering_scalar_indexes.typed_eav.rb") }
+    raise "missing installed partial-covering migration" unless migration_path
+
+    migration_version = File.basename(migration_path).split("_", 2).first
+    run_unbundled!(*rails, "db:migrate:down", "VERSION=#{migration_version}", chdir: host, env: app_env)
+    legacy_schema_check = index_catalog_helper + <<~'RUBY'
+      connection = ActiveRecord::Base.connection
+      expected = {
+        "idx_te_values_field_int" => ["integer_value", "int8_ops"],
+        "idx_te_values_field_dec" => ["decimal_value", "numeric_ops"],
+        "idx_te_values_field_date" => ["date_value", "date_ops"],
+        "idx_te_values_field_dt" => ["datetime_value", "timestamp_ops"],
+        "idx_te_values_field_bool" => ["boolean_value", "bool_ops"],
+        "idx_te_values_field_str" => ["string_value", "text_pattern_ops"],
+      }
+      expected.each do |name, (value_column, value_opclass)|
+        row = typed_eav_smoke_index(connection, name)
+        abort "missing legacy index #{name}" unless row
+        abort "invalid legacy index #{name}" unless row.fetch("valid") && row.fetch("ready")
+        abort "wrong access method for #{name}" unless row.fetch("method") == "btree"
+        abort "unexpected unique index #{name}" if row.fetch("unique")
+        abort "wrong keys for #{name}" unless row.fetch("key_count").to_i == 2
+        expected_columns = ["field_id", value_column, "entity_id", "entity_type"]
+        abort "wrong columns for #{name}" unless row.fetch("columns").split(",") == expected_columns
+        abort "wrong opclasses for #{name}" unless row.fetch("opclasses").split(",") == ["int8_ops", value_opclass]
+        abort "unexpected predicate for #{name}" if row.fetch("predicate")
+      end
+    RUBY
+    run_unbundled!(*rails, "runner", legacy_schema_check, chdir: host, env: app_env)
+    run_unbundled!(*rails, "db:migrate:up", "VERSION=#{migration_version}", chdir: host, env: app_env)
     run_unbundled!(*rails, "runner", schema_check, chdir: host, env: app_env)
   ensure
     run_unbundled!(*rails, "db:drop", chdir: host, env: app_env) if database_created
