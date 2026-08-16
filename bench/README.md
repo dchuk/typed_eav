@@ -89,3 +89,20 @@ Run this only from a consuming application's nontransactional migration after ve
 The operator boundary is deliberate: `=` stays on the shipped B-tree; positive `ILIKE` prefix/contains/suffix searches are candidates only when their literals yield useful trigrams and their selectivity makes the plan worthwhile; escaped `%`/`_` probes benefited only when the remaining literal did so. GIN did not serve `NOT ILIKE` or one/two-character probes, and the evidence does not promise it for every positive or high-match query.
 
 Versus the current B-tree candidate, the additive GIN increased median candidate index bytes 61.417% and build WAL 50.293%. Median insert/update throughput fell 56.995%/58.060%, while insert/update WAL rose 156.499%/195.441%. The artifact retains full raw plans, checksums, sizes, and build measurements for trial 1, plus cross-trial metric arrays and rotation metadata. Raw trial 2/3 plans, checksums, sizes, and build times were not retained, so those claims are not independently auditable from this artifact; rerun the harness for application decisions.
+
+## Phase 4A planner extended statistics
+
+`planner_statistics_benchmark.rb` measures field/value cardinality estimates without changing production schema or queries. Seed `4601` generates 300,000 entities and deterministic uniform plus skewed integer, string, and date fields; unrelated field-family rows retain NULL typed cells. The preregistered representative protocol fixes `default_statistics_target`, the four relevant column targets, and every extended-statistics target at 100. Its ten-sequence Williams schedule runs 50 blocks across baseline, dependencies, MCV, ndistinct, and their combination.
+
+Each block performs exactly one `ANALYZE`. An extended candidate is planned first, its statistics objects are dropped without another `ANALYZE`, an exact `pg_stats` hash proves the ordinary sample unchanged, and the paired base plans are then captured. Baseline blocks capture two base suites. The retained artifact contains 1,100 raw JSON plans for 11 public field/value predicates, exact DDL, ANALYZE cost, catalog metadata, targets, checksums, zero classes, signed/absolute/relative/log errors, and paired plan signatures.
+
+Run a local smoke block with:
+
+```sh
+TYPED_EAV_TRIAL=1 \
+TYPED_EAV_CANDIDATE_ORDER=baseline,dependencies,dependencies_mcv_ndistinct,mcv,ndistinct \
+bundle exec ruby bench/planner_statistics_benchmark.rb \
+  --tier smoke --seed 4601 --output /tmp/planner-statistics-smoke.json
+```
+
+The authorized runner is `bench/docker/planner-statistics/run_remote.sh`. It uses only T051-labeled internal Docker objects, resource caps, an owned output volume, closed-file SHA-256 manifests, explicit tar streaming, unchanged existing-container checks, and exact cleanup. Absolute co-tenant timing is diagnostic. PostgreSQL 17 is the only planner evidence, classifications may be inconclusive, and mechanical completeness—not a favorable result—accepts the artifact.
