@@ -25,23 +25,32 @@ class MultiFilterBenchmark
   LARGE_FILTER_COUNTS = [10, 20].freeze
   GROUPED_INELIGIBLE_SCENARIOS = %w[include_missing empty_filters].freeze
   SEMANTIC_CLASSIFICATIONS = %w[proven_equal unproved_timeout].freeze
+  BUFFER_KEYS = [
+    "Shared Hit Blocks", "Shared Read Blocks", "Shared Dirtied Blocks", "Shared Written Blocks",
+    "Local Hit Blocks", "Local Read Blocks", "Local Dirtied Blocks", "Local Written Blocks",
+    "Temp Read Blocks", "Temp Written Blocks"
+  ].freeze
+  CORRECTIVE_SCENARIOS = %w[high_10 high_20 low_10 low_20 mixed_10 mixed_20 skewed_10 skewed_20].freeze
 
   def self.run(argv)
-    options = { tier: nil, seed: nil, output: nil }
+    options = { tier: nil, seed: nil, output: nil, matrix: "historical" }
     OptionParser.new do |parser|
       parser.on("--tier TIER", %w[smoke representative]) { |value| options[:tier] = value }
       parser.on("--seed SEED", Integer) { |value| options[:seed] = value }
       parser.on("--output PATH") { |value| options[:output] = value }
+      parser.on("--matrix MATRIX", %w[historical corrective]) { |value| options[:matrix] = value }
     end.parse!(argv)
     abort "--tier, --seed, and --output are required" unless options.values.all?
     abort "representative tier requires TYPED_EAV_REPRESENTATIVE_OK=1" if options[:tier] == "representative" && ENV["TYPED_EAV_REPRESENTATIVE_OK"] != "1"
     new(**options).call
   end
 
-  def initialize(tier:, seed:, output:)
+  def initialize(tier:, seed:, output:, matrix:)
     @tier = tier
     @seed = seed
     @output = output
+    @matrix = matrix
+    @corrective = matrix == "corrective"
     @entities = tier == "representative" ? REPRESENTATIVE_ENTITIES : SMOKE_ENTITIES
     @repetitions = 10
     @trial_count = tier == "representative" ? 3 : 1
@@ -115,6 +124,7 @@ class MultiFilterBenchmark
       "error_controls" => error_controls(definitions),
       "trials" => trials,
       "semantic_smoke" => semantic_smoke_evidence,
+      "corrective_smoke" => corrective_smoke_evidence,
       "summary" => summarize(trials),
       "practical_comparisons" => practical_comparisons(trials),
       "replacement_decision" => replacement_decision(trials),
@@ -157,17 +167,19 @@ class MultiFilterBenchmark
     @db.exec_params("INSERT INTO hosts_bench SELECT 'BenchmarkHost', g FROM generate_series(1,$1) g", [@entities])
     @db.exec_params("INSERT INTO hosts_bench SELECT 'OtherHost', g FROM generate_series(1,$1) g", [[@entities / 20, 100].max])
     insert_definitions
-    @db.exec_params(<<~SQL, [@entities, @seed])
+    loaded_field_count = @corrective ? 30 : 20
+    string_field_end = @corrective ? 30 : 15
+    @db.exec_params(<<~SQL, [@entities, @seed, loaded_field_count, string_field_end])
       INSERT INTO typed_eav_values_bench (entity_type, entity_id, field_id, integer_value, string_value, date_value)
       SELECT 'BenchmarkHost', entity_id, 1000 + field_no,
              CASE WHEN field_no <= 10 THEN ((entity_id + $2) % 100) END,
-             CASE WHEN field_no BETWEEN 11 AND 15 THEN
+             CASE WHEN field_no BETWEEN 11 AND $4 THEN
                CASE WHEN ((entity_id + $2) % 10) < 7 THEN 'popular-' || lpad((((entity_id + $2) % 100))::text, 2, '0')
                     ELSE 'rare-' || lpad((((entity_id + $2) % 100))::text, 2, '0') END
              END,
-             CASE WHEN field_no BETWEEN 16 AND 20 THEN DATE '2024-01-01' + ((entity_id + $2) % 100) END
+             CASE WHEN $3 = 20 AND field_no BETWEEN 16 AND 20 THEN DATE '2024-01-01' + ((entity_id + $2) % 100) END
       FROM generate_series(1,$1) entity_id
-      CROSS JOIN generate_series(1,20) field_no
+      CROSS JOIN generate_series(1,$3) field_no
     SQL
     # Explicit NULL rows and missing rows replace ordinary field-1001 values.
     @db.exec_params("UPDATE typed_eav_values_bench SET integer_value=NULL WHERE entity_type='BenchmarkHost' AND field_id=1001 AND entity_id % 20=0 AND entity_id <= $1", [@entities])
@@ -192,7 +204,7 @@ class MultiFilterBenchmark
     1.upto(FIELD_COUNT) do |number|
       kind = if number <= 10
                "integer"
-             elsif number <= 15
+             elsif number <= (@corrective ? 30 : 15)
                "string"
              else
                number <= 20 ? "date" : "integer"
@@ -226,7 +238,7 @@ class MultiFilterBenchmark
 
   def resolved_definition_evidence
     requests = [
-      ["benchmark_default", "BenchmarkHost", nil, nil, (1..20).map { |i| "field_#{i}" }],
+      ["benchmark_default", "BenchmarkHost", nil, nil, (1..(@corrective ? 30 : 20)).map { |i| "field_#{i}" }],
       ["benchmark_full_tuple", "BenchmarkHost", "tenant-a", "parent-a", ["shadow"]],
       ["benchmark_scope_only", "BenchmarkHost", "tenant-a", nil, ["shadow"]],
       ["benchmark_global", "BenchmarkHost", nil, nil, ["shadow"]],
@@ -262,6 +274,8 @@ class MultiFilterBenchmark
   end
 
   def build_scenarios(definitions)
+    return build_corrective_scenarios(definitions) if @corrective
+
     scenarios = []
     [1, 3, 10, 20].each do |count|
       scenarios << scenario("high_#{count}", "high", count, equality_filters(count, 7), definitions)
@@ -281,6 +295,48 @@ class MultiFilterBenchmark
       scenario("empty_filters", "semantic", 0, [], definitions),
     )
     scenarios
+  end
+
+  def build_corrective_scenarios(definitions)
+    [10, 20].flat_map do |count|
+      [
+        scenario("high_#{count}", "high", count, corrective_high_filters(count), definitions),
+        scenario("low_#{count}", "low", count, corrective_low_filters(count), definitions),
+        scenario("mixed_#{count}", "mixed", count, corrective_mixed_filters(count), definitions),
+        scenario("skewed_#{count}", "skewed", count, corrective_skewed_filters(count), definitions),
+      ]
+    end
+  end
+
+  def corrective_high_filters(count)
+    Array.new(count) do |index|
+      number = index + 1
+      { name: "field_#{number}", operator: :eq, value: number <= 10 ? 7 : "rare-07" }
+    end
+  end
+
+  def corrective_low_filters(count)
+    Array.new(count) do |index|
+      number = index + 1
+      number <= 10 ? { name: "field_#{number}", operator: :between, value: [0, 89] } : { name: "field_#{number}", operator: :between, value: %w[popular-00 rare-99] }
+    end
+  end
+
+  def corrective_mixed_filters(count)
+    Array.new(count) do |index|
+      number = index + 1
+      if number == 1
+        { name: "field_1", operator: :eq, value: 7 }
+      elsif number <= 10
+        { name: "field_#{number}", operator: :lteq, value: 89 }
+      else
+        { name: "field_#{number}", operator: :lteq, value: "rare-99" }
+      end
+    end
+  end
+
+  def corrective_skewed_filters(count)
+    Array.new(count) { |index| { name: "field_#{index + 11}", operator: :starts_with, value: "popular-" } }
   end
 
   def equality_filters(count, value)
@@ -306,6 +362,13 @@ class MultiFilterBenchmark
       resolution = filter.fetch(:resolution, "benchmark_default")
       fields = definitions.fetch(resolution).fetch("fields").fetch(filter.fetch(:name))
       resolved_filter(filter, index + 1, fields)
+    end
+    if @corrective
+      names = filters.map { |filter| filter.fetch(:name) }
+      ids = filters.flat_map { |filter| filter.fetch(:field_ids) }
+      abort "corrective scenario #{name} does not have #{count} distinct names" unless names.length == count && names.uniq.length == count
+      abort "corrective scenario #{name} does not resolve one definition per predicate" unless filters.all? { |filter| filter.fetch(:field_ids).length == 1 }
+      abort "corrective scenario #{name} does not have #{count} distinct field IDs" unless ids.length == count && ids.uniq.length == count
     end
     { name: name, family: family, filter_count: count, host_type: host_type, filters: filters }
   end
@@ -650,7 +713,7 @@ class MultiFilterBenchmark
       "primary_hosts" => @entities,
       "host_counts" => host_counts,
       "field_definitions" => @db.exec("SELECT count(*) FROM typed_eav_fields_bench").getvalue(0, 0).to_i,
-      "values_per_primary_host_nominal" => VALUES_PER_HOST,
+      "values_per_primary_host_nominal" => @corrective ? 30 : VALUES_PER_HOST,
       "value_rows" => value_count,
       "explicit_null_rows" => @db.exec("SELECT count(*) FROM typed_eav_values_bench WHERE field_id=1001 AND integer_value IS NULL").getvalue(0, 0).to_i,
       "missing_field_1001_hosts" => @db.exec("SELECT count(*) FROM hosts_bench h WHERE entity_type='BenchmarkHost' AND NOT EXISTS (SELECT 1 FROM typed_eav_values_bench v WHERE v.entity_type=h.entity_type AND v.entity_id=h.id AND v.field_id=1001)").getvalue(0, 0).to_i,
@@ -661,6 +724,7 @@ class MultiFilterBenchmark
   def environment
     {
       "tier" => @tier,
+      "matrix" => @matrix,
       "ruby" => RUBY_DESCRIPTION,
       "pg_gem" => PG.library_version,
       "postgresql" => @db.exec("SHOW server_version").getvalue(0, 0),
@@ -680,6 +744,7 @@ class MultiFilterBenchmark
   def protocol
     {
       "strategies" => STRATEGIES,
+      "matrix" => @matrix,
       "trials" => @trial_count,
       "repetitions_per_strategy_scenario_trial" => @repetitions,
       "measured_statement_timeout_ms" => MEASURED_TIMEOUT_MS,
@@ -802,6 +867,29 @@ class MultiFilterBenchmark
     { "seed" => 4502, "oracle_count" => oracles.length, "scenario_summary_count" => summaries.length, "fully_equal" => true, "oracles" => oracles, "scenario_summaries" => summaries, "validation" => smoke.fetch("validation") }
   end
 
+  def corrective_smoke_evidence
+    return nil unless @tier == "representative" && @corrective
+
+    path = ENV.fetch("TYPED_EAV_CORRECTIVE_SMOKE_PATH")
+    smoke = JSON.parse(File.read(path), max_nesting: false)
+    oracles = smoke.fetch("trials").flat_map do |trial|
+      trial.fetch("scenarios").flat_map do |scenario|
+        scenario.fetch("strategies").filter_map do |strategy, evidence|
+          next unless evidence.fetch("eligible")
+
+          { "trial" => trial.fetch("trial"), "scenario" => scenario.fetch("name"), "strategy" => strategy, "resolved_filter_sha256" => evidence.fetch("resolved_filter_sha256"), "oracle" => evidence.fetch("result") }
+        end
+      end
+    end
+    summaries = smoke.fetch("trials").flat_map do |trial|
+      trial.fetch("scenarios").map { |scenario| { "trial" => trial.fetch("trial"), "scenario" => scenario.fetch("name"), **scenario.fetch("semantic_summary") } }
+    end
+    fully_equal = smoke.dig("dataset", "seed") == 4502 && smoke.dig("environment", "matrix") == "corrective" && oracles.length == 32 && oracles.all? { |item| item.dig("oracle", "outcome") == "completed" } && summaries.length == 8 && summaries.all? { |summary| summary.fetch("classification") == "proven_equal" && summary.fetch("equivalence_proven") }
+    abort "corrective semantic smoke is not fully equal" unless fully_equal
+
+    { "seed" => 4502, "oracle_count" => oracles.length, "scenario_summary_count" => summaries.length, "fully_equal" => true, "oracles" => oracles, "scenario_summaries" => summaries, "validation" => smoke.fetch("validation") }
+  end
+
   def conservative_improvement(current, candidate)
     return candidate.fetch("value_ms") <= (current.fetch("value_ms") * 0.8) ? "proven" : "not_met" if current.fetch("status") == "exact" && candidate.fetch("status") == "exact"
     return candidate.fetch("value_ms") <= (current.fetch("lower_bound_ms") * 0.8) ? "proven_lower_bound" : "inconclusive" if current.fetch("status") == "lower_bound" && candidate.fetch("status") == "exact"
@@ -810,7 +898,9 @@ class MultiFilterBenchmark
   end
 
   def validate_result(trials, scenarios)
-    required_names = REQUIRED_FAMILIES.product([1, 3, 10, 20]).map { |family, count| "#{family}_#{count}" }
+    required_names = @corrective ? CORRECTIVE_SCENARIOS : REQUIRED_FAMILIES.product([1, 3, 10, 20]).map { |family, count| "#{family}_#{count}" }
+    eligible_groups_per_trial = @corrective ? 32 : 98
+    scenarios_per_trial = @corrective ? 8 : 25
     trial_complete = trials.length == @trial_count && trials.all? do |trial|
       trial.fetch("scenarios").length == scenarios.length && trial.fetch("dataset_checksum") == dataset_checksum
     end
@@ -864,8 +954,18 @@ class MultiFilterBenchmark
       end
     end
     smoke_semantics_valid = @tier != "smoke" || trials.all? { |trial| trial.fetch("scenarios").all? { |scenario| scenario.dig("semantic_summary", "equivalence_proven") } }
+    distinct_corrective_fields = !@corrective || scenarios.all? do |scenario|
+      names = scenario.fetch(:filters).map { |filter| filter.fetch(:name) }
+      ids = scenario.fetch(:filters).flat_map { |filter| filter.fetch(:field_ids) }
+      names.length == scenario.fetch(:filter_count) && names.uniq.length == names.length && scenario.fetch(:filters).all? { |filter| filter.fetch(:field_ids).length == 1 } && ids.uniq.length == ids.length
+    end
+    required_scenarios_present = if @corrective
+                                   scenarios.map { |scenario| scenario.fetch(:name) }.sort == required_names.sort
+                                 else
+                                   required_names.all? { |name| scenarios.any? { |scenario| scenario.fetch(:name) == name } }
+                                 end
     {
-      "accepted" => trial_complete && repetitions_complete && grouped_assertions && censor_shapes_valid && oracle_shapes_valid && summaries_valid && smoke_semantics_valid && attempt_count == (@trial_count * 98 * @repetitions) && oracle_count == (@trial_count * 98) && semantic_summary_count == (@trial_count * 25) && required_names.all? { |name| scenarios.any? { |scenario| scenario.fetch(:name) == name } },
+      "accepted" => trial_complete && repetitions_complete && grouped_assertions && censor_shapes_valid && oracle_shapes_valid && summaries_valid && smoke_semantics_valid && distinct_corrective_fields && attempt_count == (@trial_count * eligible_groups_per_trial * @repetitions) && oracle_count == (@trial_count * eligible_groups_per_trial) && semantic_summary_count == (@trial_count * scenarios_per_trial) && required_scenarios_present,
       "trial_complete" => trial_complete,
       "repetitions_complete" => repetitions_complete,
       "required_workloads_complete" => required_names,
@@ -878,6 +978,7 @@ class MultiFilterBenchmark
       "semantic_oracle_shapes_valid" => oracle_shapes_valid,
       "semantic_summaries_valid" => summaries_valid,
       "smoke_semantics_fully_equal" => smoke_semantics_valid,
+      "distinct_corrective_fields" => distinct_corrective_fields,
       "censor_shapes_valid" => censor_shapes_valid,
       "timing_threshold_applied" => false,
     }
@@ -935,9 +1036,8 @@ class MultiFilterBenchmark
   end
 
   def buffer_summary(plan)
-    nodes = plan_nodes(plan)
-    %w[Shared Hit Blocks Shared Read Blocks Shared Dirtied Blocks Shared Written Blocks Local Hit Blocks Temp Read Blocks Temp Written Blocks].to_h do |key|
-      [key.downcase.tr(" ", "_"), nodes.sum { |node| node.fetch(key, 0) }]
+    BUFFER_KEYS.to_h do |key|
+      [key.downcase.tr(" ", "_"), plan.fetch(key, 0)]
     end
   end
 end

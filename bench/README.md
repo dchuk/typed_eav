@@ -207,6 +207,32 @@ therefore proves neither valid zero-buffer behavior nor 20-distinct-field
 scaling. PostgreSQL 17 co-tenant plans and diagnostic timings do not establish
 other-version or clean-room behavior.
 
+The bounded corrective artifact repairs those two evidence defects without
+replacing the historical artifact. It measures only high/low/mixed/skewed ×
+10/20, with exactly one distinct field definition per predicate. Across three
+rotations it retains 960 attempts, 96 representative oracles, and 24 summaries.
+Of those attempts, 340 completed and 620 were right-censored; 63 groups retain
+a matching non-ANALYZE fallback plan. Of the oracles, 81 completed and 15 timed
+out with null identity; no completed oracle mismatched and no oracle errored.
+The historical smoke completed 98/98 eligible identities and the corrective
+smoke completed 32/32.
+
+`validate_multi_filter_corrective_artifact.rb` inflates every completed raw
+plan, verifies its SHA-256, and independently recomputes the ten exact root
+keys for shared, local, and temporary block counters. All 340 completed plans
+had at least one nonzero counter, proving the extractor no longer reports the
+historical false zeros. Independent duplicate-field, altered-buffer,
+missing-plan, and corrupted-hash mutations were all rejected. The artifact is
+`bench/results/phase-4-multi-filter-corrective-representative.json`; the runner
+is `bench/docker/multi-filter-corrective/run_remote.sh`.
+
+The corrective result still has `representative_equivalence_proven=false`,
+`production_replacement_eligible=false`, and `retain_current_sql=true`. It is
+co-tenant PostgreSQL 17 research evidence for later Gate 4 review, not an
+adaptive or production authorization. Its one official Ruby base-image pull
+was digest/version verified, the build disabled pulling, and the introduced
+tag and image ID were removed after export without pruning.
+
 Any future adaptive or replacement experiment must pre-register and pass the
 full gate in [ADR 0011](../docs/adr/0011-multi-filter-query-strategy.md):
 identical resolution and full scope/shadowing/operator/NULL/missing/complement/
