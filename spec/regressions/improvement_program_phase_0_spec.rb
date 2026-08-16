@@ -141,7 +141,6 @@ RSpec.describe "Improvement program Phase 0 correctness probes", type: :model do
     it "applies the field domain validator to defaults" do
       field = build(:percentage_field, name: "phase0_percentage", default_value_meta: { "v" => 1.5 })
 
-      pending("field default validation currently checks castability but not validate_typed_value")
       expect(field).not_to be_valid
       expect(field.errors[:default_value]).to be_present
     end

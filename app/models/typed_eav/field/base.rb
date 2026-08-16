@@ -11,6 +11,8 @@ module TypedEAV
     # bases (`Field::ValidatedString`, `Field::RangeBounded`,
     # `Field::Optionable`) per ADR-0004; `validate_array_size` stays here
     # because its callers span unrelated families.
+    # rubocop:disable Metrics/ClassLength -- Base retains the public field
+    # lifecycle API; this change only adds the shared default-validation adapter.
     class Base < ApplicationRecord
       self.table_name = "typed_eav_fields"
 
@@ -42,6 +44,7 @@ module TypedEAV
       # ── Validations ──
 
       RESERVED_NAMES = %w[id type class created_at updated_at].freeze
+      DefaultValidationTarget = Struct.new(:errors).freeze
 
       validates :name, presence: true, uniqueness: { scope: %i[entity_type scope parent_scope] }
       validates :name, exclusion: { in: RESERVED_NAMES, message: "is reserved" }
@@ -447,8 +450,35 @@ module TypedEAV
         raw = default_value_meta["v"]
         return if raw.nil?
 
-        _, invalid = cast(raw)
-        errors.add(:default_value, "is not valid for this field type") if invalid
+        casted, invalid = cast(raw)
+        if invalid
+          errors.add(:default_value, "is not valid for this field type")
+          return
+        end
+
+        # An unsaved optionable field may receive its options after this
+        # validation (for example through nested attributes). In that case
+        # there is no domain to validate against yet; once options are
+        # persisted or built on the association, the shared validator runs.
+        return if option_domain_undetermined?
+
+        validate_default_domain(casted)
+      end
+
+      def option_domain_undetermined?
+        return false unless optionable? && new_record?
+
+        association = association(:field_options)
+        !association.loaded? && association.target.empty?
+      end
+
+      def validate_default_domain(casted)
+        association = association(:field_options)
+        association.loaded! if optionable? && association.target.any?
+
+        target = DefaultValidationTarget.new(ActiveModel::Errors.new(self))
+        validate_typed_value(target, casted)
+        target.errors.each { |error| errors.add(:default_value, error.type, **error.options) }
       end
 
       # Enforces type restrictions set via `has_typed_eav types: [...]`.
@@ -675,5 +705,6 @@ module TypedEAV
         TypedEAV::EventDispatcher.dispatch_field_change(self, change_type)
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end
