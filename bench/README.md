@@ -157,3 +157,32 @@ refresh and remeasure the baseline:
 DROP STATISTICS IF EXISTS app_te_values_field_integer_dependencies;
 ANALYZE typed_eav_values;
 ```
+
+## Phase 4B multi-filter query shapes
+
+`multi_filter_benchmark.rb` compares the shipped chained host `IN` shape with
+`INTERSECT`, correlated `EXISTS`, and direct grouped `HAVING` where the latter
+can preserve semantics. Seed `4502` fixes 100,000 primary hosts, more than 50
+field definitions, nominally 20 values per host, 25 scenarios, three cyclic
+strategy rotations, and ten attempts per eligible strategy group. The corpus
+covers 1/3/10/20-filter high-, low-, mixed-, and skewed-selectivity workloads,
+plus scope resolution, shadowing, polymorphic hosts, NULL, missing values,
+duplicate internal matches, empty filters, and error controls.
+
+Each of the 2,940 measured attempts uses a uniform 1,000 ms
+`statement_timeout`. A SQLSTATE 57014 result is retained as a Type-1
+right-censored lower bound, never retried or imputed. Only after all ten
+attempts does the group run one non-retried 5,000 ms sorted host-identity
+oracle. Representative oracle timeouts retain null identity and mean
+`unproved_timeout`; they neither prove nor disprove equivalence. The embedded
+2,000-host smoke completed all 98 eligible oracles with equal identities.
+
+The representative artifact retained 2,940 attempts, 294 oracle outcomes, 75
+scenario/trial summaries, 622 censored attempts, and 64 first-timeout fallback
+plans. Of the representative oracles, 282 completed and 12 timed out; none
+mismatched or errored. Therefore representative equivalence is not proven,
+production replacement is ineligible, and current SQL is retained. These are
+mechanically complete co-tenant PostgreSQL 17 results, not an authorization to
+change production queries. The artifact is
+`bench/results/phase-4-multi-filter-representative.json`; the isolated Tailscale
+runner is `bench/docker/multi-filter/run_remote.sh`.
