@@ -5,7 +5,7 @@
 ## Active Context
 
 **Work:** No active milestone
-**Last shipped:** Milestone "Enhancement plan v1" archived 2026-08-15 (`.vbw-planning/milestones/01-two-level-scope-partitioning-phase-1-pipeline-completions/SHIPPED.md`) — 7 phases: scope partitioning, pipeline completions, events, versioning, field types, bulk ops, field display label. Read optimization (REQ-05) removed from that milestone; candidate for the next one. Gem release status: 0.6.0 (2026-07-13); `lib/typed_eav/version.rb` and `CHANGELOG.md` are the canonical release-status sources, `RELEASING.md` defines when publication is complete.
+**Last shipped:** 0.6.0 (2026-07-13) — Milestone "Enhancement plan v1" archived 2026-08-15 (`.vbw-planning/milestones/01-two-level-scope-partitioning-phase-1-pipeline-completions/SHIPPED.md`) — 7 phases: scope partitioning, pipeline completions, events, versioning, field types, bulk ops, field display label. Read optimization (REQ-05) removed from that milestone; candidate for the next one. `lib/typed_eav/version.rb` and `CHANGELOG.md` are the canonical release-status sources, `RELEASING.md` defines when publication is complete.
 **Next action:** Run /vbw:vibe to start a new milestone, or /vbw:status to review progress
 
 ## VBW Rules
