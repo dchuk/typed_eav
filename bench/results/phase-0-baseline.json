@@ -1,0 +1,1219 @@
+{
+  "generated_at_utc": "2026-08-16T05:18:25Z",
+  "environment": {
+    "server_version": "17.7 (Postgres.app)",
+    "server_encoding": "UTF8",
+    "shared_buffers": "128MB",
+    "work_mem": "4MB",
+    "ruby": "3.4.4",
+    "rails": "8.1.3",
+    "adapter": "PostgreSQL",
+    "database": "typed_eav_test"
+  },
+  "caveats": [
+    "Counts and sizes are a point-in-time read of the configured database.",
+    "An empty database is valid baseline evidence: zero rows, zero logical values, and NULL bytes_per_logical_value are reported rather than inferred.",
+    "Ordinary PostgreSQL B-tree indexes include rows whose indexed key is NULL; INCLUDE columns do not determine participation. Partial predicates do.",
+    "bytes_per_logical_value divides typed_eav_values total relation bytes by rows with at least one non-NULL typed value; it is a coarse footprint, not an allocation cost.",
+    "pg_stat_user_indexes is cumulative for this database and is not reset by this helper; NULL statistics are preserved when PostgreSQL has no observation."
+  ],
+  "relations": {
+    "typed_eav_fields": {
+      "total_bytes": 450560,
+      "heap_bytes": 0,
+      "index_bytes": 425984
+    },
+    "typed_eav_options": {
+      "total_bytes": 114688,
+      "heap_bytes": 0,
+      "index_bytes": 90112
+    },
+    "typed_eav_sections": {
+      "total_bytes": 122880,
+      "heap_bytes": 0,
+      "index_bytes": 98304
+    },
+    "typed_eav_value_versions": {
+      "total_bytes": 278528,
+      "heap_bytes": 0,
+      "index_bytes": 253952
+    },
+    "typed_eav_values": {
+      "total_bytes": 1548288,
+      "heap_bytes": 0,
+      "index_bytes": 1523712
+    }
+  },
+  "indexes": [
+    {
+      "relation": "typed_eav_fields",
+      "index_name": "idx_te_fields_lookup",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_fields_lookup ON public.typed_eav_fields USING btree (entity_type, scope, parent_scope, sort_order, name)",
+      "predicate": null,
+      "size_pretty": "104 kB",
+      "size_bytes": 106496,
+      "key_columns": [
+        "entity_type",
+        "scope",
+        "parent_scope",
+        "sort_order",
+        "name"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_fields",
+      "index_name": "idx_te_fields_uniq_global",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX idx_te_fields_uniq_global ON public.typed_eav_fields USING btree (name, entity_type) WHERE (scope IS NULL)",
+      "predicate": "(scope IS NULL)",
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "name",
+        "entity_type"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_fields",
+      "index_name": "idx_te_fields_uniq_scoped_full",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX idx_te_fields_uniq_scoped_full ON public.typed_eav_fields USING btree (name, entity_type, scope, parent_scope) WHERE ((scope IS NOT NULL) AND (parent_scope IS NOT NULL))",
+      "predicate": "((scope IS NOT NULL) AND (parent_scope IS NOT NULL))",
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "name",
+        "entity_type",
+        "scope",
+        "parent_scope"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_fields",
+      "index_name": "idx_te_fields_uniq_scoped_only",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX idx_te_fields_uniq_scoped_only ON public.typed_eav_fields USING btree (name, entity_type, scope) WHERE ((scope IS NOT NULL) AND (parent_scope IS NULL))",
+      "predicate": "((scope IS NOT NULL) AND (parent_scope IS NULL))",
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "name",
+        "entity_type",
+        "scope"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_fields",
+      "index_name": "index_typed_eav_fields_on_entity_type",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX index_typed_eav_fields_on_entity_type ON public.typed_eav_fields USING btree (entity_type)",
+      "predicate": null,
+      "size_pretty": "48 kB",
+      "size_bytes": 49152,
+      "key_columns": [
+        "entity_type"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_fields",
+      "index_name": "index_typed_eav_fields_on_section_id",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX index_typed_eav_fields_on_section_id ON public.typed_eav_fields USING btree (section_id)",
+      "predicate": null,
+      "size_pretty": "56 kB",
+      "size_bytes": 57344,
+      "key_columns": [
+        "section_id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_fields",
+      "index_name": "typed_eav_fields_pkey",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX typed_eav_fields_pkey ON public.typed_eav_fields USING btree (id)",
+      "predicate": null,
+      "size_pretty": "64 kB",
+      "size_bytes": 65536,
+      "key_columns": [
+        "id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_options",
+      "index_name": "idx_te_options_field_value",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX idx_te_options_field_value ON public.typed_eav_options USING btree (field_id, value)",
+      "predicate": null,
+      "size_pretty": "32 kB",
+      "size_bytes": 32768,
+      "key_columns": [
+        "field_id",
+        "value"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_options",
+      "index_name": "index_typed_eav_options_on_field_id",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX index_typed_eav_options_on_field_id ON public.typed_eav_options USING btree (field_id)",
+      "predicate": null,
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "field_id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_options",
+      "index_name": "typed_eav_options_pkey",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX typed_eav_options_pkey ON public.typed_eav_options USING btree (id)",
+      "predicate": null,
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_sections",
+      "index_name": "idx_te_sections_entity_active",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_sections_entity_active ON public.typed_eav_sections USING btree (entity_type, active)",
+      "predicate": null,
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "entity_type",
+        "active"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_sections",
+      "index_name": "idx_te_sections_lookup",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_sections_lookup ON public.typed_eav_sections USING btree (entity_type, scope, parent_scope, sort_order, name)",
+      "predicate": null,
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "entity_type",
+        "scope",
+        "parent_scope",
+        "sort_order",
+        "name"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_sections",
+      "index_name": "idx_te_sections_uniq_global",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX idx_te_sections_uniq_global ON public.typed_eav_sections USING btree (entity_type, code) WHERE (scope IS NULL)",
+      "predicate": "(scope IS NULL)",
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "entity_type",
+        "code"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_sections",
+      "index_name": "idx_te_sections_uniq_scoped_full",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX idx_te_sections_uniq_scoped_full ON public.typed_eav_sections USING btree (entity_type, code, scope, parent_scope) WHERE ((scope IS NOT NULL) AND (parent_scope IS NOT NULL))",
+      "predicate": "((scope IS NOT NULL) AND (parent_scope IS NOT NULL))",
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "entity_type",
+        "code",
+        "scope",
+        "parent_scope"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_sections",
+      "index_name": "idx_te_sections_uniq_scoped_only",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX idx_te_sections_uniq_scoped_only ON public.typed_eav_sections USING btree (entity_type, code, scope) WHERE ((scope IS NOT NULL) AND (parent_scope IS NULL))",
+      "predicate": "((scope IS NOT NULL) AND (parent_scope IS NULL))",
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "entity_type",
+        "code",
+        "scope"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_sections",
+      "index_name": "typed_eav_sections_pkey",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX typed_eav_sections_pkey ON public.typed_eav_sections USING btree (id)",
+      "predicate": null,
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_value_versions",
+      "index_name": "idx_te_vvs_entity",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_vvs_entity ON public.typed_eav_value_versions USING btree (entity_type, entity_id, changed_at DESC)",
+      "predicate": null,
+      "size_pretty": "32 kB",
+      "size_bytes": 32768,
+      "key_columns": [
+        "entity_type",
+        "entity_id",
+        "changed_at"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_value_versions",
+      "index_name": "idx_te_vvs_field",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_vvs_field ON public.typed_eav_value_versions USING btree (field_id, changed_at DESC)",
+      "predicate": null,
+      "size_pretty": "32 kB",
+      "size_bytes": 32768,
+      "key_columns": [
+        "field_id",
+        "changed_at"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_value_versions",
+      "index_name": "idx_te_vvs_group",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_vvs_group ON public.typed_eav_value_versions USING btree (version_group_id)",
+      "predicate": null,
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "version_group_id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_value_versions",
+      "index_name": "idx_te_vvs_value",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_vvs_value ON public.typed_eav_value_versions USING btree (value_id, changed_at DESC)",
+      "predicate": null,
+      "size_pretty": "32 kB",
+      "size_bytes": 32768,
+      "key_columns": [
+        "value_id",
+        "changed_at"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_value_versions",
+      "index_name": "index_typed_eav_value_versions_on_entity",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX index_typed_eav_value_versions_on_entity ON public.typed_eav_value_versions USING btree (entity_type, entity_id)",
+      "predicate": null,
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "entity_type",
+        "entity_id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_value_versions",
+      "index_name": "index_typed_eav_value_versions_on_field_id",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX index_typed_eav_value_versions_on_field_id ON public.typed_eav_value_versions USING btree (field_id)",
+      "predicate": null,
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "field_id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_value_versions",
+      "index_name": "index_typed_eav_value_versions_on_value_id",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX index_typed_eav_value_versions_on_value_id ON public.typed_eav_value_versions USING btree (value_id)",
+      "predicate": null,
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "value_id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_value_versions",
+      "index_name": "typed_eav_value_versions_pkey",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX typed_eav_value_versions_pkey ON public.typed_eav_value_versions USING btree (id)",
+      "predicate": null,
+      "size_pretty": "16 kB",
+      "size_bytes": 16384,
+      "key_columns": [
+        "id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_entity_field",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX idx_te_values_entity_field ON public.typed_eav_values USING btree (entity_type, entity_id, field_id)",
+      "predicate": null,
+      "size_pretty": "104 kB",
+      "size_bytes": 106496,
+      "key_columns": [
+        "entity_type",
+        "entity_id",
+        "field_id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Value uniqueness and entity/field lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_bool",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_values_field_bool ON public.typed_eav_values USING btree (field_id, boolean_value) INCLUDE (entity_id, entity_type)",
+      "predicate": null,
+      "size_pretty": "152 kB",
+      "size_bytes": 155648,
+      "key_columns": [
+        "field_id",
+        "boolean_value"
+      ],
+      "include_columns": [
+        "entity_id",
+        "entity_type"
+      ],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "QueryBuilder typed column comparisons and null checks",
+        "EntityQuery/FilterQuery entity-id subqueries"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_date",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_values_field_date ON public.typed_eav_values USING btree (field_id, date_value) INCLUDE (entity_id, entity_type)",
+      "predicate": null,
+      "size_pretty": "152 kB",
+      "size_bytes": 155648,
+      "key_columns": [
+        "field_id",
+        "date_value"
+      ],
+      "include_columns": [
+        "entity_id",
+        "entity_type"
+      ],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "QueryBuilder typed column comparisons and null checks",
+        "EntityQuery/FilterQuery entity-id subqueries"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_dec",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_values_field_dec ON public.typed_eav_values USING btree (field_id, decimal_value) INCLUDE (entity_id, entity_type)",
+      "predicate": null,
+      "size_pretty": "152 kB",
+      "size_bytes": 155648,
+      "key_columns": [
+        "field_id",
+        "decimal_value"
+      ],
+      "include_columns": [
+        "entity_id",
+        "entity_type"
+      ],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "QueryBuilder typed column comparisons and null checks",
+        "EntityQuery/FilterQuery entity-id subqueries"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_dt",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_values_field_dt ON public.typed_eav_values USING btree (field_id, datetime_value) INCLUDE (entity_id, entity_type)",
+      "predicate": null,
+      "size_pretty": "152 kB",
+      "size_bytes": 155648,
+      "key_columns": [
+        "field_id",
+        "datetime_value"
+      ],
+      "include_columns": [
+        "entity_id",
+        "entity_type"
+      ],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "QueryBuilder typed column comparisons and null checks",
+        "EntityQuery/FilterQuery entity-id subqueries"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_int",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_values_field_int ON public.typed_eav_values USING btree (field_id, integer_value) INCLUDE (entity_id, entity_type)",
+      "predicate": null,
+      "size_pretty": "184 kB",
+      "size_bytes": 188416,
+      "key_columns": [
+        "field_id",
+        "integer_value"
+      ],
+      "include_columns": [
+        "entity_id",
+        "entity_type"
+      ],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "QueryBuilder typed column comparisons and null checks",
+        "EntityQuery/FilterQuery entity-id subqueries"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_str",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_values_field_str ON public.typed_eav_values USING btree (field_id, string_value text_pattern_ops) INCLUDE (entity_id, entity_type)",
+      "predicate": null,
+      "size_pretty": "144 kB",
+      "size_bytes": 147456,
+      "key_columns": [
+        "field_id",
+        "string_value"
+      ],
+      "include_columns": [
+        "entity_id",
+        "entity_type"
+      ],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "QueryBuilder typed column comparisons and null checks",
+        "EntityQuery/FilterQuery entity-id subqueries"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_json_gin",
+      "access_method": "gin",
+      "unique": false,
+      "definition": "CREATE INDEX idx_te_values_json_gin ON public.typed_eav_values USING gin (\"json_value\") WHERE (\"json_value\" IS NOT NULL)",
+      "predicate": "(\"json_value\" IS NOT NULL)",
+      "size_pretty": "24 kB",
+      "size_bytes": 24576,
+      "key_columns": [
+        "json_value"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "high (GIN maintenance; partial)",
+      "dependent_query_paths": [
+        "QueryBuilder :any_eq/:all_eq on json_value"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "index_typed_eav_values_on_entity",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX index_typed_eav_values_on_entity ON public.typed_eav_values USING btree (entity_type, entity_id)",
+      "predicate": null,
+      "size_pretty": "56 kB",
+      "size_bytes": 57344,
+      "key_columns": [
+        "entity_type",
+        "entity_id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "index_typed_eav_values_on_field_id",
+      "access_method": "btree",
+      "unique": false,
+      "definition": "CREATE INDEX index_typed_eav_values_on_field_id ON public.typed_eav_values USING btree (field_id)",
+      "predicate": null,
+      "size_pretty": "40 kB",
+      "size_bytes": 40960,
+      "key_columns": [
+        "field_id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    },
+    {
+      "relation": "typed_eav_values",
+      "index_name": "typed_eav_values_pkey",
+      "access_method": "btree",
+      "unique": true,
+      "definition": "CREATE UNIQUE INDEX typed_eav_values_pkey ON public.typed_eav_values USING btree (id)",
+      "predicate": null,
+      "size_pretty": "64 kB",
+      "size_bytes": 65536,
+      "key_columns": [
+        "id"
+      ],
+      "include_columns": [],
+      "row_participation": {
+        "indexed_rows": 0,
+        "rows_with_all_key_columns_non_null": 0,
+        "rows_with_any_key_null": 0
+      },
+      "likely_write_cost": "medium (B-tree maintenance; nullable key)",
+      "dependent_query_paths": [
+        "Field/Section/Option association and partition lookup"
+      ]
+    }
+  ],
+  "row_counts": {
+    "typed_eav_sections": 0,
+    "typed_eav_fields": 0,
+    "typed_eav_options": 0,
+    "typed_eav_values": 0,
+    "typed_eav_value_versions": 0
+  },
+  "typed_column_non_null_counts": {
+    "string_value": 0,
+    "text_value": 0,
+    "boolean_value": 0,
+    "integer_value": 0,
+    "decimal_value": 0,
+    "date_value": 0,
+    "datetime_value": 0,
+    "json_value": 0
+  },
+  "bytes_per_logical_value": {
+    "relation_total_bytes": 1548288,
+    "logical_value_rows": 0,
+    "value_rows": 0,
+    "bytes_per_logical_value": null
+  },
+  "pg_stat_user_indexes": [
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_fields",
+      "index_name": "idx_te_fields_lookup",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_fields",
+      "index_name": "idx_te_fields_uniq_global",
+      "idx_scan": 40,
+      "idx_tup_read": 22,
+      "idx_tup_fetch": 2
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_fields",
+      "index_name": "idx_te_fields_uniq_scoped_full",
+      "idx_scan": 251,
+      "idx_tup_read": 171,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_fields",
+      "index_name": "idx_te_fields_uniq_scoped_only",
+      "idx_scan": 251,
+      "idx_tup_read": 172,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_fields",
+      "index_name": "index_typed_eav_fields_on_entity_type",
+      "idx_scan": 132,
+      "idx_tup_read": 2606,
+      "idx_tup_fetch": 307
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_fields",
+      "index_name": "index_typed_eav_fields_on_section_id",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_fields",
+      "index_name": "typed_eav_fields_pkey",
+      "idx_scan": 26,
+      "idx_tup_read": 28,
+      "idx_tup_fetch": 26
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_options",
+      "index_name": "idx_te_options_field_value",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_options",
+      "index_name": "index_typed_eav_options_on_field_id",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_options",
+      "index_name": "typed_eav_options_pkey",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_sections",
+      "index_name": "idx_te_sections_entity_active",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_sections",
+      "index_name": "idx_te_sections_lookup",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_sections",
+      "index_name": "idx_te_sections_uniq_global",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_sections",
+      "index_name": "idx_te_sections_uniq_scoped_full",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_sections",
+      "index_name": "idx_te_sections_uniq_scoped_only",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_sections",
+      "index_name": "typed_eav_sections_pkey",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_value_versions",
+      "index_name": "idx_te_vvs_entity",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_value_versions",
+      "index_name": "idx_te_vvs_field",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_value_versions",
+      "index_name": "idx_te_vvs_group",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_value_versions",
+      "index_name": "idx_te_vvs_value",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_value_versions",
+      "index_name": "index_typed_eav_value_versions_on_entity",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_value_versions",
+      "index_name": "index_typed_eav_value_versions_on_field_id",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_value_versions",
+      "index_name": "index_typed_eav_value_versions_on_value_id",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_value_versions",
+      "index_name": "typed_eav_value_versions_pkey",
+      "idx_scan": 118,
+      "idx_tup_read": 118,
+      "idx_tup_fetch": 118
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_entity_field",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_bool",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_date",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_dec",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_dt",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_int",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_field_str",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "idx_te_values_json_gin",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "index_typed_eav_values_on_entity",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "index_typed_eav_values_on_field_id",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    },
+    {
+      "schemaname": "public",
+      "relation": "typed_eav_values",
+      "index_name": "typed_eav_values_pkey",
+      "idx_scan": 0,
+      "idx_tup_read": 0,
+      "idx_tup_fetch": 0
+    }
+  ]
+}
