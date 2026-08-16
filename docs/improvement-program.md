@@ -1,5 +1,11 @@
 # TypedEAV improvement program ledger
 
+## T032 co-tenant representative execution
+
+T032 provides a standalone, label-owned Docker runner for three same-seed trials with rotated candidate order. The designated host is continuously co-tenanted; load is recorded rather than rejected. PostgreSQL is capped at 2 CPUs/8 GiB/256 shares and the runner at 1 CPU/2 GiB/128 shares, both with best-effort I/O weight 100. Memory, Docker-root storage, sustained I/O wait, and inspect-based existing-container ID/state/health/restart invariants remain hard abort gates. Results are relative co-tenant evidence only, not clean-room absolute latency claims; no layout or migration decision is made here.
+
+The accepted result is recorded in `bench/results/phase-2-scalar-representative.json`: seed 2201, 100,000 entities, 595,000 rows per candidate, three rotated trials, and equal candidate checksums. Primary insert/update dispersion is 0.081888 relative population standard deviation against the 0.25 gate. Query dispersion is 0.398261 and is retained as diagnostic evidence. The run preserved the existing-container invariant and verified exact owned cleanup after transfer. This is relative layout evidence under active co-tenants only; it does not establish clean-room absolute latency or choose a winner, index, ADR, or migration.
+
 This ledger is the durable Phase 0 baseline for the correctness-first TypedEAV improvement program. It is evidence-led: no schema or architecture change is approved from this snapshot alone. The nested repository is currently version 0.6.0; the checked-in CI contract is the support authority.
 
 ## Support and execution baseline

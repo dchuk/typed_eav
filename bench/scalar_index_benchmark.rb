@@ -50,6 +50,8 @@ class ScalarIndexBenchmark
     @candidate_checksums = {}
     @created = false
     @cleanup = { created_by_run: false, attempted: false, database_prefix_validated: false, dropped: false }
+    @candidate_order = ENV.fetch("TYPED_EAV_CANDIDATE_ORDER", CANDIDATES.keys.join(",")).split(",")
+    abort "invalid candidate order" unless @candidate_order.sort == CANDIDATES.keys.sort
   end
 
   def call
@@ -122,7 +124,10 @@ class ScalarIndexBenchmark
     candidates = {}
     measurements = {}
     explain_plans = {}
-    CANDIDATES.each do |name, ddl|
+    candidate_timestamps = {}
+    @candidate_order.each do |name|
+      ddl = CANDIDATES.fetch(name)
+      candidate_timestamps[name] = { "started_at_utc" => Time.now.utc.iso8601 }
       ensure_representative_reserve!
       exact_ddl = TYPES.map do |type|
         column = "#{type}_value"
@@ -136,6 +141,7 @@ class ScalarIndexBenchmark
       measurements[name] = measure(name, rows)
       @db.exec("VACUUM (ANALYZE) scalar_values_#{name}")
       explain_plans[name] = explain(name)
+      candidate_timestamps[name]["ended_at_utc"] = Time.now.utc.iso8601
       candidates[name]["index_sizes"] = index_sizes("scalar_values_#{name}")
       candidates[name]["pg_stat_user_indexes"] = index_stats("scalar_values_#{name}")
       ensure_representative_reserve!
@@ -161,6 +167,9 @@ class ScalarIndexBenchmark
       "measurements" => measurements,
       "explain_plans" => explain_plans,
       "caveats" => caveats,
+      "candidate_timestamps" => candidate_timestamps,
+      "trial" => ENV.fetch("TYPED_EAV_TRIAL", "1").to_i,
+      "candidate_order" => @candidate_order,
     }
   end
 
@@ -385,7 +394,10 @@ class ScalarIndexBenchmark
   end
 
   def caveats
-    ["Smoke-tier evidence only; no layout winner or production recommendation is made.", "Each candidate receives the same deterministic seed/data and exact candidate DDL, but candidates are separate tables in one disposable database.", "Latency is local single-session wall-clock timing with three repeated samples, not representative workload evidence.", "WAL and pg_stat_user_indexes are PostgreSQL-local observations; planner behavior and visibility-map state are not cross-version evidence.", "Explicit NULL-row and missing-row/include_missing plans are reported separately.", "Representative tier refuses without TYPED_EAV_REPRESENTATIVE_OK=1 and an explicitly sized environment."]
+    base = ["Each candidate receives the same deterministic seed/data and exact candidate DDL, but candidates are separate tables in one disposable database.", "WAL and pg_stat_user_indexes are PostgreSQL-local observations; planner behavior and visibility-map state are not cross-version evidence.", "Explicit NULL-row and missing-row/include_missing plans are reported separately."]
+    return base + ["Smoke-tier evidence only; no layout winner or production recommendation is made.", "Latency is local single-session wall-clock timing, not representative workload evidence."] if @tier == "smoke"
+
+    base + ["Representative evidence is a co-tenant relative comparison under continuously active host workloads; it must not be read as clean-room absolute latency.", "Three rotated same-seed trials and dispersion are recorded; no layout winner or production recommendation is made."]
   end
 end
 
