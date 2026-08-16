@@ -174,4 +174,67 @@ RSpec.describe TypedEAV::Value, "versioning integration", :event_callbacks, :rea
       end.to change(TypedEAV::ValueVersion, :count).by(1)
     end
   end
+
+  describe "pending version-group cleanup when an earlier commit callback raises" do
+    it "clears the public marker even when dispatch is skipped" do
+      first_contact = Contact.create!(name: "first", tenant_id: "t1")
+      second_contact = Contact.create!(name: "second", tenant_id: "t1")
+      first = described_class.new(entity: first_contact, field: field, value: 42)
+      second = described_class.new(entity: second_contact, field: field, value: 43)
+      callback = proc { |record| raise "earlier after_commit failure" if record.id == first.id }
+      described_class.set_callback(:commit, :after, callback, prepend: true)
+
+      first.pending_version_group_id = "first-group"
+      second.pending_version_group_id = "second-group"
+
+      expect do
+        ActiveRecord::Base.transaction do
+          first.save!
+          second.save!
+        end
+      end.to raise_error(RuntimeError, /earlier after_commit failure/)
+      expect(first.pending_version_group_id).to be_nil
+      expect(second.pending_version_group_id).to be_nil
+    ensure
+      described_class.skip_callback(:commit, :after, callback, prepend: true)
+    end
+
+    it "consumes the marker when registry opt-out skips the version row" do
+      TypedEAV.registry.register("Contact", types: nil, versioned: false)
+      value = described_class.new(entity: contact, field: field, value: 42)
+      value.pending_version_group_id = "registry-skipped"
+      expect { value.save! }.not_to change(TypedEAV::ValueVersion, :count)
+      expect(value.pending_version_group_id).to be_nil
+    end
+
+    it "consumes the marker when the subscriber is unregistered" do
+      TypedEAV::EventDispatcher.value_change_internals.clear
+      value = described_class.new(entity: contact, field: field, value: 42)
+      value.pending_version_group_id = "unregistered"
+      expect { value.save! }.not_to change(TypedEAV::ValueVersion, :count)
+      expect(value.pending_version_group_id).to be_nil
+    end
+
+    it "consumes the marker for a committed no-op with no version row" do
+      value = described_class.create!(entity: contact, field: field, value: 42)
+      initial_count = TypedEAV::ValueVersion.count
+      value.pending_version_group_id = "no-op"
+      value.touch
+
+      expect(TypedEAV::ValueVersion.count).to eq(initial_count)
+      expect(value.pending_version_group_id).to be_nil
+    end
+
+    it "consumes the marker when the outer transaction rolls back" do
+      value = described_class.new(entity: contact, field: field, value: 42)
+      value.pending_version_group_id = "rolled-back"
+      expect do
+        ActiveRecord::Base.transaction do
+          value.save!
+          raise ActiveRecord::Rollback
+        end
+      end.not_to change(TypedEAV::ValueVersion, :count)
+      expect(value.pending_version_group_id).to be_nil
+    end
+  end
 end

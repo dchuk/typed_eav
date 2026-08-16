@@ -21,7 +21,6 @@ RSpec.describe "Improvement program Phase 0 correctness probes", type: :model do
     it "preserves false when value precedes field in the constructor" do
       value = TypedEAV::Value.new(value: false, field: field, entity: contact)
 
-      pending("value-first false is currently lost by deferred pending-value dispatch")
       value.save!
       expect(value.value).to be(false)
     end
@@ -53,7 +52,6 @@ RSpec.describe "Improvement program Phase 0 correctness probes", type: :model do
       value = TypedEAV::Value.new(entity: create(:contact), field: create(:integer_field))
       value.value = 3.7
 
-      pending("invalid-cast state is currently cleared after the first validation")
       expect(value).not_to be_valid
       expect(value).not_to be_valid
     end
@@ -62,7 +60,6 @@ RSpec.describe "Improvement program Phase 0 correctness probes", type: :model do
       value = TypedEAV::Value.new(entity: create(:contact), field: create(:integer_field))
       value.value = 3.7
 
-      pending("invalid-cast state is currently cleared before save")
       expect(value).not_to be_valid
       expect { value.save! }.to raise_error(ActiveRecord::RecordInvalid)
     end
@@ -119,7 +116,6 @@ RSpec.describe "Improvement program Phase 0 correctness probes", type: :model do
       second_group = value.versions.order(:id).last.version_group_id
 
       expect(first_group).to be_present
-      pending("bulk correlation marker remains on the reused in-memory Value")
       expect(second_group).not_to eq(first_group)
     end
   end

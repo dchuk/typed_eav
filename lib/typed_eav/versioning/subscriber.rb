@@ -72,6 +72,8 @@ module TypedEAV
           return unless TypedEAV.registry.versioned?(value.entity_type)
 
           write_version_row(value, change_type, context)
+        ensure
+          value.consume_pending_version_group_id if value.respond_to?(:consume_pending_version_group_id)
         end
 
         private
@@ -133,6 +135,10 @@ module TypedEAV
           # When neither path supplies a UUID the column (added in
           # `db/migrate/20260506000001`) stays NULL — backward-compatible:
           # unchanged subscribers and unchanged callers continue to work.
+          pending_group_id = if value.respond_to?(:consume_pending_version_group_id)
+                               value.consume_pending_version_group_id
+                             end
+
           TypedEAV::ValueVersion.create!(
             value_id: version_value_id,
             field_id: value.field_id,
@@ -142,7 +148,7 @@ module TypedEAV
             before_value: before_value,
             after_value: after_value,
             context: context.to_h, # frozen → unfrozen jsonb-serializable hash
-            version_group_id: value.pending_version_group_id || context[:version_group_id],
+            version_group_id: pending_group_id || context[:version_group_id],
             change_type: change_type.to_s,
             changed_at: Time.current,
           )

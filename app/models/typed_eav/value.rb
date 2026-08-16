@@ -152,6 +152,16 @@ module TypedEAV
     # unchanged.
     attr_accessor :pending_version_group_id
 
+    # Consume the correlation marker exactly once. The public reader/writer
+    # remain available for bulk callers, while the subscriber gets an
+    # atomic-in-process read-and-clear operation that cannot contaminate a
+    # later mutation of the same AR object.
+    def consume_pending_version_group_id
+      group_id = pending_version_group_id
+      self.pending_version_group_id = nil
+      group_id
+    end
+
     # Append-only audit log of mutations to this Value, ordered most-
     # recent-first. Returns a relation that can be chained (`.where`,
     # `.limit`, `.pluck`).
@@ -348,13 +358,33 @@ module TypedEAV
     # (Field::File, every other built-in) explicitly do NOT fire this
     # hook — File-attached has no parallel hook by ROADMAP design.
     after_commit :_dispatch_image_attached, on: %i[create update]
+    after_rollback :clear_pending_version_group_id
+
+    # Active Record invokes these transaction-record hooks from an ensure
+    # path even when another callback raises. Finalize here rather than in a
+    # trailing after_commit callback so a skipped dispatch cannot leave a
+    # correlation marker attached to an object reused by the caller.
+    def committed!(should_run_callbacks: true)
+      super
+    ensure
+      clear_pending_version_group_id
+    end
+
+    def rolledback!(force_restore_state: false, should_run_callbacks: true)
+      super
+    ensure
+      clear_pending_version_group_id
+    end
 
     private
 
     def apply_pending_value
-      return unless @pending_value && field
+      return unless instance_variable_defined?(:@pending_value) && field
 
-      if @pending_value.equal?(UNSET_VALUE)
+      pending_value = @pending_value
+      remove_instance_variable(:@pending_value)
+
+      if pending_value.equal?(UNSET_VALUE)
         # Sentinel-pending branch: dispatch directly to apply_field_default.
         # We deliberately do NOT route through `self.value =` here because
         # value= would re-trigger the sentinel branch with field present,
@@ -363,9 +393,12 @@ module TypedEAV
         # easy to follow.
         apply_field_default
       else
-        self.value = @pending_value
+        self.value = pending_value
       end
-      @pending_value = nil
+    end
+
+    def clear_pending_version_group_id
+      self.pending_version_group_id = nil
     end
 
     # Writes the field's configured default to the typed column(s) via the
@@ -390,7 +423,6 @@ module TypedEAV
 
       if @cast_was_invalid
         errors.add(:value, :invalid)
-        @cast_was_invalid = false
         return
       end
 
@@ -523,6 +555,8 @@ module TypedEAV
       return unless field
 
       TypedEAV::EventDispatcher.dispatch_value_change(self, :create)
+    ensure
+      clear_pending_version_group_id
     end
 
     def _dispatch_value_change_update
@@ -543,12 +577,16 @@ module TypedEAV
       return unless field.value_changed?(self)
 
       TypedEAV::EventDispatcher.dispatch_value_change(self, :update)
+    ensure
+      clear_pending_version_group_id
     end
 
     def _dispatch_value_change_destroy
       return unless field
 
       TypedEAV::EventDispatcher.dispatch_value_change(self, :destroy)
+    ensure
+      clear_pending_version_group_id
     end
 
     # Phase 05 on_image_attached dispatch.

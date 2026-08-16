@@ -345,6 +345,21 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
     ensure
       TypedEAV.registry.register("Contact", types: nil, versioned: false)
     end
+
+    it "clears a real Value marker when version-row creation raises" do
+      TypedEAV.registry.register("Contact", types: nil, versioned: true)
+      value = TypedEAV::Value.create!(entity: contact, field: field, value: 42)
+      value.pending_version_group_id = "failed-row"
+      allow(TypedEAV::ValueVersion).to receive(:create!).and_raise(
+        ActiveRecord::RecordInvalid.new(TypedEAV::ValueVersion.new),
+      )
+
+      expect { described_class.call(value, :update, {}) }
+        .to raise_error(ActiveRecord::RecordInvalid)
+      expect(value.pending_version_group_id).to be_nil
+    ensure
+      TypedEAV.registry.register("Contact", types: nil, versioned: false)
+    end
   end
 
   describe "context capture" do

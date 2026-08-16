@@ -781,6 +781,9 @@ RSpec.describe TypedEAV::Value, type: :model do
         v.field = field
         v.send(:apply_pending_value)
         expect(v.value).to eq(42)
+        expect(v.instance_variable_defined?(:@pending_value)).to be(false)
+        v.send(:apply_pending_value)
+        expect(v.value).to eq(42)
       end
     end
   end
