@@ -23,3 +23,5 @@ PATH=/Users/darrindemchuk/.rbenv/versions/3.4.4/bin:$PATH \
 ```
 
 Every checked-in result is smoke-only and cannot select a layout, justify a NULL index, or authorize a migration. A representative run refuses unless `TYPED_EAV_REPRESENTATIVE_OK=1` is explicitly configured; a qualified larger host and sizing evidence remain required.
+
+The harness streams rows directly into PostgreSQL and computes incremental SHA-256 checksums, so candidate tables receive byte-for-byte equivalent logical rows without materializing the dataset in Ruby. Smoke projected and actual database sizes remain capped at 500 MiB. Representative execution additionally requires at least `max(30 GiB, projected footprint + 8 GiB)` free on the PostgreSQL data volume before `CREATE DATABASE`, records the data directory/free-space qualification, and rechecks the 8 GiB reserve while running. A refused representative attempt writes its qualification evidence and creates no database.

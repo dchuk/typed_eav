@@ -8,6 +8,7 @@ require "securerandom"
 require "time"
 require "date"
 require "digest"
+require "open3"
 
 class ScalarIndexBenchmark
   CANDIDATES = {
@@ -21,6 +22,10 @@ class ScalarIndexBenchmark
   MEASUREMENTS = 3
   LITERALS = { "integer" => "42", "decimal" => "42.00", "boolean" => "TRUE", "date" => "'2020-01-10'", "datetime" => "'2020-01-10T00:00:00Z'", "string" => "'value-10'" }.freeze
   DB_PREFIX = "typed_eav_phase2_smoke_"
+  GIB = 1024**3
+  SMOKE_MAX_BYTES = 500 * 1024 * 1024
+  REPRESENTATIVE_MIN_FREE_BYTES = 30 * GIB
+  REPRESENTATIVE_RESERVE_BYTES = 8 * GIB
 
   def self.run(argv)
     options = { tier: nil, seed: nil, output: nil }
@@ -49,7 +54,8 @@ class ScalarIndexBenchmark
 
   def call
     projected = projected_bytes
-    abort "projected smoke footprint exceeds 500 MiB" if projected > 500 * 1024 * 1024
+    abort "projected smoke footprint exceeds 500 MiB" if @tier == "smoke" && projected > SMOKE_MAX_BYTES
+    qualify_environment!(projected)
     create_database
     @db = PG.connect(connection_options.merge(dbname: @database))
     result = build_result(projected)
@@ -71,6 +77,25 @@ class ScalarIndexBenchmark
     @admin.exec("CREATE DATABASE #{@admin.quote_ident(@database)}")
     @created = true
     @cleanup[:created_by_run] = true
+  end
+
+  def qualify_environment!(projected)
+    metadata = environment_metadata(projected)
+    return if @tier == "smoke" || metadata.dig("representative_storage", "qualified")
+
+    File.write(@output, "#{JSON.pretty_generate("generated_at_utc" => Time.now.utc.iso8601,
+                                                "environment" => metadata.merge("cleanup" => @cleanup),
+                                                "dataset" => dataset_metadata.merge("tier" => @tier, "seed" => @seed, "projected_bytes" => projected),
+                                                "caveats" => caveats,
+                                                "refusal" => "Representative database creation refused before CREATE DATABASE.")}\n")
+    abort "representative storage is not qualified: #{metadata.fetch("observed_free_bytes")} free bytes; #{metadata.fetch("required_free_bytes")} required"
+  end
+
+  def ensure_representative_reserve!
+    return unless @tier == "representative"
+
+    observed = free_bytes(@data_directory)
+    abort "representative reserve breached: #{observed} free bytes" if observed < REPRESENTATIVE_RESERVE_BYTES
   end
 
   def cleanup
@@ -98,6 +123,7 @@ class ScalarIndexBenchmark
     measurements = {}
     explain_plans = {}
     CANDIDATES.each do |name, ddl|
+      ensure_representative_reserve!
       exact_ddl = TYPES.map do |type|
         column = "#{type}_value"
         indexed_column = type == "string" ? "#{column} text_pattern_ops" : column
@@ -112,6 +138,7 @@ class ScalarIndexBenchmark
       explain_plans[name] = explain(name)
       candidates[name]["index_sizes"] = index_sizes("scalar_values_#{name}")
       candidates[name]["pg_stat_user_indexes"] = index_stats("scalar_values_#{name}")
+      ensure_representative_reserve!
     end
     dataset["null_distribution"] = null_distribution
     dataset["cardinalities"] = cardinalities
@@ -125,7 +152,7 @@ class ScalarIndexBenchmark
       abort "invalid WAL delta" unless [measurement.fetch("insert_wal_bytes"), *measurement.fetch("update_wal_bytes")].all? { |bytes| bytes.nil? || bytes >= 0 }
     end
     environment["actual_disposable_database_bytes"] = @db.exec("SELECT pg_database_size(current_database())").getvalue(0, 0).to_i
-    abort "actual disposable database exceeds 500 MiB" if environment["actual_disposable_database_bytes"] > 500 * 1024 * 1024
+    abort "actual disposable database exceeds 500 MiB" if @tier == "smoke" && environment["actual_disposable_database_bytes"] > SMOKE_MAX_BYTES
     {
       "generated_at_utc" => Time.now.utc.iso8601,
       "environment" => environment.merge("database" => @database, "cleanup" => @cleanup),
@@ -139,15 +166,33 @@ class ScalarIndexBenchmark
 
   def environment_metadata(projected)
     settings = Hash[%w[server_version server_encoding shared_buffers work_mem maintenance_work_mem].map { |s| [s, @admin.exec("SHOW #{s}").getvalue(0, 0)] }]
+    @data_directory = @admin.exec("SHOW data_directory").getvalue(0, 0)
+    free = free_bytes(@data_directory)
+    required = [REPRESENTATIVE_MIN_FREE_BYTES, projected + REPRESENTATIVE_RESERVE_BYTES].max
     settings.merge("ruby" => RUBY_VERSION, "pg" => PG.library_version, "tier" => @tier, "projected_bytes" => projected,
-                   "host_free_space_note" => "Smoke only; projected footprint is bounded below 500 MiB.")
+                   "data_directory" => @data_directory, "observed_free_bytes" => free,
+                   "required_free_bytes" => @tier == "representative" ? required : nil,
+                   "reserve_bytes" => @tier == "representative" ? REPRESENTATIVE_RESERVE_BYTES : 0,
+                   "representative_storage" => { "data_directory" => @data_directory, "observed_free_bytes" => free,
+                                                 "required_free_bytes" => required, "reserve_bytes" => REPRESENTATIVE_RESERVE_BYTES,
+                                                 "qualified" => free >= required },
+                   "host_free_space_note" => @tier == "smoke" ? "Smoke footprint is bounded below 500 MiB; representative storage qualification is informational." : "Representative execution requires the configured storage gate.")
+  end
+
+  def free_bytes(path)
+    output, status = Open3.capture2("df", "-Pk", path)
+    abort "unable to inspect PostgreSQL data volume free space" unless status.success?
+
+    output.lines.last.split.fetch(3).to_i * 1024
   end
 
   def dataset_metadata
     { "entities" => @tier == "smoke" ? SMOKE_ENTITIES : Integer(ENV.fetch("TYPED_EAV_REPRESENTATIVE_ENTITIES", "100000")),
       "fields" => TYPES.each_with_index.to_h { |type, i| [type, i + 1] }, "rows_per_candidate" => nil,
       "value_types" => TYPES, "seed_checksum" => nil, "candidate_checksums" => {},
-      "generation" => "deterministic per seed; one identical logical dataset per candidate" }
+      "generation" => "streaming deterministic per seed; one identical logical dataset per candidate",
+      "rows_materialized" => false,
+      "checksum" => "incremental SHA-256 over each logical row's Ruby inspection" }
   end
 
   def create_table(name, ddl)
@@ -171,17 +216,24 @@ class ScalarIndexBenchmark
   end
 
   def insert_rows(table)
-    rows = generated_rows
-    @candidate_checksums[table] = Digest::SHA256.hexdigest(rows.map(&:inspect).join)
+    checksum = Digest::SHA256.new
+    inserted_rows = 0
     @db.copy_data("COPY #{table} (entity_type, entity_id, field_id, integer_value, decimal_value, boolean_value, date_value, datetime_value, string_value) FROM STDIN WITH (FORMAT csv, NULL '\\N')") do
-      rows.each { |values| @db.put_copy_data("#{values.map { |v| v.nil? ? "\\N" : v }.join(",")}\n") }
+      each_generated_row do |values|
+        checksum << values.inspect
+        @db.put_copy_data("#{values.map { |v| v.nil? ? "\\N" : v }.join(",")}\n")
+        inserted_rows += 1
+        ensure_representative_reserve! if (inserted_rows % 100_000).zero?
+      end
     end
-    rows.length
+    @candidate_checksums[table] = checksum.hexdigest
+    @dataset_checksum ||= @candidate_checksums[table]
+    abort "candidate dataset checksum mismatch" unless @candidate_checksums[table] == @dataset_checksum
+    inserted_rows
   end
 
-  def generated_rows
+  def each_generated_row
     rng = Random.new(@seed)
-    rows = []
     entities.times do |entity|
       TYPES.each_with_index do |type, index|
         next if type == "integer" && (entity % 20).zero?
@@ -196,11 +248,9 @@ class ScalarIndexBenchmark
         when "datetime" then values[7] = (Time.utc(2020, 1, 1) + (rng.rand(365) * 86_400)).iso8601
         when "string" then values[8] = "value-#{rng.rand(31)}"
         end
-        rows << values
+        yield values
       end
     end
-    @dataset_checksum ||= Digest::SHA256.hexdigest(rows.map(&:inspect).join)
-    rows
   end
 
   def entities
