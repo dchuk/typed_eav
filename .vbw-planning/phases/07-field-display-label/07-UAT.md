@@ -1,5 +1,5 @@
 ---
-phase: 8
+phase: 7
 plan_count: 1
 status: complete
 started: 2026-06-01
@@ -10,7 +10,7 @@ skipped: 0
 issues: 0
 ---
 
-Phase 8 UAT — human-judgment acceptance for the Field display label feature (issue #21).
+Phase 7 UAT — human-judgment acceptance for the Field display label feature (issue #21).
 Behavioral correctness is covered by the 820+ (now 1158) example RSpec suite; this UAT
 covers what only the user can judge: intent, portability semantics, and documentation clarity.
 
@@ -18,7 +18,7 @@ covers what only the user can judge: intent, portability semantics, and document
 
 ### P01-T1: display_name fallback semantics match issue #21 intent
 
-- **Plan:** 08-01 — Field#display_name (label fallback)
+- **Plan:** 07-01 — Field#display_name (label fallback)
 - **Scenario:** A Field with `label "Sub-Category"` and `name "sub_category"` renders
   `display_name "Sub-Category"`; a Field with no label renders `"Sub category"`
   (`name.humanize`); `name` stays the API/CSV/JSON key.
@@ -27,7 +27,7 @@ covers what only the user can judge: intent, portability semantics, and document
 
 ### P01-T2: schema portability round-trip semantics
 
-- **Plan:** 08-01 — schema portability (export/import/snapshot)
+- **Plan:** 07-01 — schema portability (export/import/snapshot)
 - **Scenario:** Regular export carries the raw `label` (round-trip fidelity); snapshot export
   carries the resolved `display_name` (render convenience); legacy export payloads with no
   `label` key import as `NULL`.
@@ -37,7 +37,7 @@ covers what only the user can judge: intent, portability semantics, and document
 
 ### P01-T3: README contract documentation clarity
 
-- **Plan:** 08-01 — docs (README §"Validation Behavior", line 813)
+- **Plan:** 07-01 — docs (README §"Validation Behavior", line 813)
 - **Scenario:** The README bullet documents: `label` cosmetic / `name` machine key, render via
   `display_name`, no uniqueness/format constraints (255 max), `label` never affects
   ordering/lookup/partitioning/rename, edit-only-`label` fires `:update` not `:rename`,
@@ -47,4 +47,4 @@ covers what only the user can judge: intent, portability semantics, and document
 
 ## Outcome
 
-All 3 checkpoints passed. Phase 8 (Field display label, issue #21) is accepted.
+All 3 checkpoints passed. Phase 7 (Field display label, issue #21) is accepted.

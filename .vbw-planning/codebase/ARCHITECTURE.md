@@ -218,7 +218,7 @@ Each leaf subclass: declares `value_column` (or inherits one), optionally narrow
 | `Reference` | `integer_value` (FK) | `:references` operator accepts AR records OR ids. Constant-shadow hazard: uses `::Integer`/`::String`. |
 | `Image` / `File` | `string_value` (AS `signed_id`) | Soft-detect via `defined?(::ActiveStorage::Blob)`. `cast` raises `NotImplementedError` when AS absent; `validate_typed_value` no-ops. |
 
-## Field display label (Phase 8, issue #21)
+## Field display label (Phase 7, issue #21)
 
 `Field#display_name` returns `label.presence || name.humanize`. `label` is an additive nullable free-text column (`20260507000000_add_label_to_typed_eav_fields.rb`); `name` stays the immutable machine key. A blank label falls back to humanizing `name`, so existing rows (label NULL) render unchanged. A label-only edit pins to the `:update` event (NOT `:rename` — `:rename` is reserved for `name` changes; regression-pinned in `spec/regressions/issue_21_label_no_rename_spec.rb`).
 
@@ -282,4 +282,4 @@ Two `Rails::Generators::Base` subclasses with explicit `namespace` + `source_roo
 
 ## What's still on the roadmap
 
-`typed_eav-enhancement-plan.md` enumerates planned phases. Shipped: Phases 01–06 (partitioning, cascade/ordering/backfill, events, versioning, multi-cell+AS types, bulk import/export). Phase 07 (materialized index for read-heavy/dashboard use — would register a second internal subscriber on `EventDispatcher` at slot ≥ 1) was **deferred** during the roadmap reconciliation (commit `fb15a77`). Phase 8 (field display label) shipped out-of-band as issue #21.
+`typed_eav-enhancement-plan.md` enumerates planned phases. Shipped: Phases 01–06 (partitioning, cascade/ordering/backfill, events, versioning, multi-cell+AS types, bulk import/export). The originally-planned read-optimization phase (materialized index for read-heavy/dashboard use — would register a second internal subscriber on `EventDispatcher` at slot ≥ 1) was **deferred** during the roadmap reconciliation (commit `fb15a77`) and **removed** from the milestone on 2026-08-15. Phase 7 (field display label, formerly Phase 8) shipped out-of-band as issue #21.

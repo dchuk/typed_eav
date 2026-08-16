@@ -1,6 +1,6 @@
 ---
-phase: 8
-plan: "08-01"
+phase: 7
+plan: "07-01"
 title: Field display label (label column + display_name + schema round-trip)
 status: complete
 completed: 2026-06-01

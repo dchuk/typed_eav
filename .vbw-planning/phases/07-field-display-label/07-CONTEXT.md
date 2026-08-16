@@ -1,12 +1,12 @@
 ---
-phase: 8
+phase: 7
 gathered: 2026-06-01
 calibration: architect
 source: GitHub issue #21
 pre_seeded: false
 ---
 
-# Phase 8 Context — Field display label (issue #21)
+# Phase 7 Context — Field display label (issue #21)
 
 ## Problem
 

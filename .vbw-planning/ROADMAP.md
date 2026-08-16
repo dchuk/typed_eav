@@ -2,7 +2,7 @@
 
 Execution order for the items in `typed_eav-enhancement-plan.md`, reconciled against the codebase mapping at `.vbw-planning/codebase/` and externally reviewed via Codex Plan Reviewer (Apr 2026).
 
-This roadmap is dependency-ordered, not category-grouped. The plan organizes items by category (foundational, field types, bulk, perf, events). The roadmap orders them by what unblocks what: scope partitioning first (it changes the partition key everything else uses); then "complete the pipeline" Phase-1 items; events before versioning (versioning depends on the event/context contract); versioning before bulk (bulk's `version_grouping:` option is undefinable without versioning); field types in parallel; bulk after versioning; read-perf last (materialized index depends on field-change events).
+This roadmap is dependency-ordered, not category-grouped. The plan organizes items by category (foundational, field types, bulk, perf, events). The roadmap orders them by what unblocks what: scope partitioning first (it changes the partition key everything else uses); then "complete the pipeline" Phase-1 items; events before versioning (versioning depends on the event/context contract); versioning before bulk (bulk's `version_grouping:` option is undefinable without versioning); field types in parallel; bulk after versioning. (Read optimization — eager-load helpers, cache primitives, materialized-view index — was originally scoped as the final phase but removed from this milestone on 2026-08-15; it remains a candidate for a future milestone.)
 
 The plan's foundational principle — no hardcoded attribute references; everything runtime-defined and accessed through generic accessors — is binding for every phase below. Cross-cutting requirements from the plan §"Cross-cutting requirements" apply to every item.
 
@@ -14,8 +14,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 - [x] Phase 4: Versioning
 - [x] Phase 5: Field type expansion
 - [x] Phase 6: Bulk operations & import/export
-- [ ] Phase 7: Read optimization _(deferred to a future milestone — 2026-06-01)_
-- [x] Phase 8: Field display label (issue #21)
+- [x] Phase 7: Field display label (issue #21)
 
 ### Phase 1: Two-level scope partitioning
 **Goal:** Extend the canonical partition tuple from `(entity_type, scope)` to `(entity_type, scope, parent_scope)` for fields AND sections, so every later phase keys off the same identity.
@@ -39,7 +38,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 - Cascade behavior: default behavior unchanged (`:destroy`); `field_dependent: :nullify` leaves orphans for existing read-path guards (requires coordinated column-nullable + FK-on-delete migration); `:restrict_with_error` blocks destroy when any value rows reference the field.
 
 ### Phase 3: Event system
-**Goal:** Define the event/context contract that Phase 4 versioning and Phase 7 materialized index both depend on. Defining it before its consumers is cheaper than refactoring it twice.
+**Goal:** Define the event/context contract that Phase 4 versioning (and any future materialized-index work) depends on. Defining it before its consumers is cheaper than refactoring it twice.
 **Deps:** Phase 2.
 **Reqs:** REQ-01
 **Success:**
@@ -82,20 +81,9 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 - **CSV mapping helper:** `TypedEAV::CSVMapper.row_to_attributes(row, mapping)` → params for `typed_eav_attributes=`. Type coercion through existing `Field#cast`. Per-row error reporting; never fail-whole-import.
 - **Bulk read API:** `Entity.typed_eav_hash_for(records)` → `{ entity_id => { name => value } }`. Internally: one preload of `typed_values: :field`, group by entity, apply `definitions_by_name` collision precedence.
 
-### Phase 7: Read optimization
-**Status:** Deferred to a future milestone (decided 2026-06-01). Scoped here but never built; carried forward intact for a later milestone. The milestone's six built phases (1–6) shipped through v0.4.0.
-**Goal:** Eager-load helpers, cache primitives, materialized-view index, and query-plan helpers. Last because the materialized view depends on Phase 3's `on_field_change`.
-**Deps:** Phase 3 (`on_field_change` for DDL regeneration timing); benefits from Phase 4 (versioning) for cache invalidation primitives.
-**Reqs:** REQ-05
-**Success:**
-- **Eager-load helpers:** `Entity.with_all_typed_values` scope wrapping `includes(typed_values: :field)`; optional `typed_eav_hash_cached` public alias. (Reframe from plan: `loaded_typed_values_with_fields` and `typed_eav_hash` / `typed_eav_value` are already preload-aware — this phase ships ergonomic API, not new caching logic.)
-- **Materialized value index:** Optional `typed_eav_value_index_<entity>` materialized view per `(entity_type, scope, parent_scope)`. Opt-in via `TypedEAV.config.materialize_index = true`. DDL regeneration triggered by `on_field_change` (`:create` / `:destroy` / `:rename`); via Active Job by default with sync fallback when AJ unavailable. Data refresh: `REFRESH MATERIALIZED VIEW CONCURRENTLY` on configurable schedule (default 5 min) or on demand. **SQL-injection safety:** restrict field name to `[A-Za-z0-9_]`, reject reserved SQL identifiers, always quote with `format("%I", name)`, reject names that collide with synthetic columns.
-- **Query result caching primitives:** `Field#cache_version` → `"#{id}-#{updated_at.to_i}"`; `Value#cache_version` same shape; `TypedEAV.cache_key_for(entity, field_names)` composite key threading entity → values → fields.
-- **Query plan helpers:** `.explain` already works on AR relations — keep the plan item only if a TypedEAV-specific interpretation layer adds value (highlight `idx_te_values_field_*` index hits, summarize scope hits); otherwise drop. `TypedEAV.benchmark(name) { block }` wrapping `Benchmark.realtime` with EAV-aware structured output.
-
-### Phase 8: Field display label (issue #21)
+### Phase 7: Field display label (issue #21)
 **Goal:** Give `TypedEAV::Field` an optional free-text `label` column distinct from the slug `name`, plus a canonical `display_name` accessor (`label.presence || name.humanize`) for all human-facing rendering. Fully additive and backwards-compatible: `name` stays the immutable machine key; `label` never participates in uniqueness, lookup, partitioning, rename-detection, or ordering. Mirrors `Option`'s machine/human (`value`/`label`) split.
-**Deps:** none — additive on top of the shipped Field model. Independent of deferred Phase 7.
+**Deps:** none — additive on top of the shipped Field model.
 **Reqs:** Issue #21 (not part of the original enhancement plan).
 **Success:**
 - `typed_eav_fields.label` column exists: nullable, no default, no index, no backfill; reversible.
@@ -114,8 +102,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 | 4 - Versioning | 3/3 | complete | 2026-05-06 |
 | 5 - Field type expansion | 4/4 | complete | 2026-05-06 |
 | 6 - Bulk operations & import/export | 5/5 | complete | 2026-05-07 |
-| 7 - Read optimization | 0/0 | deferred | — |
-| 8 - Field display label (issue #21) | 1/1 | complete | 2026-06-01 |
+| 7 - Field display label (issue #21) | 1/1 | complete | 2026-06-01 |
 
 ---
 
@@ -123,7 +110,7 @@ The plan's foundational principle — no hardcoded attribute references; everyth
 
 - ✓ **No hardcoded attribute references** — verified across the codebase mapping; every accessor takes name/id parameter.
 - ✓ **Backwards compatibility** — every phase preserves current API surface. Phase 2 must alias rather than rename `Field.sorted`. Phase 2 must keep direct `default_value=` callers working. Phase 2 cascade default unchanged. Phase 1 `parent_scope` is nullable.
-- ✓ **Postgres-only** committed. Phase 1 (paired partial indexes) and Phase 7.2 (materialized views) deepen the dependency. Adapter portability is explicitly out of scope.
+- ✓ **Postgres-only** committed. Phase 1 (paired partial indexes) deepens the dependency; any future materialized-view read optimization would deepen it further. Adapter portability is explicitly out of scope.
 - ✓ **Testing discipline** — `spec/regressions/` pattern keeps an audit trail of analysis-round bugs.
 - ✓ **Documentation discipline** — README §"Validation Behavior" is the existing model for "non-obvious contracts." Each phase lands a new bullet there.
 
@@ -134,7 +121,7 @@ Plan-level decisions that must land in `typed_eav-enhancement-plan.md` before an
 - Phase 1 partition tuple, semantics, sentinel pattern, migration / index strategy for fields AND sections.
 - Phase 2 default-auto-populate sentinel (unset vs. explicit nil).
 - Phase 2 cascade migration two-step amendment (column nullable + FK change for `:nullify`).
-- Phase 3 → Phase 4 → Phase 7 hook ordering (versioning's `after_commit` ordering relative to user callbacks; materialized-view DDL regeneration triggered by `on_field_change`).
+- Phase 3 → Phase 4 hook ordering (versioning's `after_commit` ordering relative to user callbacks; also the intended trigger for any future materialized-view DDL regeneration via `on_field_change`).
 - Postgres-only commitment.
 
 Decisions deferrable to phase start (still required before that phase's code, but not blocking the plan):
@@ -144,7 +131,7 @@ Decisions deferrable to phase start (still required before that phase's code, bu
 - Phase 5 Currency Value-shape and operator narrowing.
 - Phase 6 schema-import conflict behavior on idempotence-key collision.
 - Phase 6 CSV result-object shape.
-- Phase 7 DDL regeneration job vs sync fallback configuration.
+- (Removed 2026-08-15 with the read-optimization phase: DDL regeneration job vs sync fallback configuration — revisit if that work is rescoped.)
 
 ## Housekeeping (independent of phases)
 

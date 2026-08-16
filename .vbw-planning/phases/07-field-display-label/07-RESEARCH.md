@@ -1,5 +1,5 @@
 ---
-phase: 8
+phase: 7
 title: Field display label (issue #21)
 created: 2026-06-01
 source: GitHub issue #21 + codebase verification (2026-06-01)

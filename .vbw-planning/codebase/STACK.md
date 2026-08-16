@@ -77,7 +77,7 @@ Release arc since the v0.2.0 map:
 - **0.3.0** — four-refactor architecture cleanup arc (#9–#13), anchored by ADRs 0001–0005. No public-API breakage except the documented `FieldStorageContract` removal (ADR-0001).
 - **0.3.1 / 0.3.2** — docs-only patches (0.3.2 fixed a hallucinated `typed_eav_changes` API reference in 0.3.1's README).
 - **0.4.0** (2026-05-26) — closes four follow-up gaps (PRD #15): per-record bulk-write entry point, in-memory dedup fix, `include_missing:` "is empty" semantic (ADR-0006), and a restore-oriented snapshot schema shape. All additive.
-- **Phase 8** (issue #21) — additive nullable `label` column + `Field#display_name`.
+- **Phase 7** (issue #21; was Phase 8 before the deferred read-optimization phase was removed 2026-08-15) — additive nullable `label` column + `Field#display_name`.
 
 ## Architecture Decision Records
 

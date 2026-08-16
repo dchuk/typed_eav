@@ -4,7 +4,7 @@
 **Milestone:** Enhancement plan v1
 
 ## Current Phase
-Phase: 8 of 8 (Field Display Label)
+Phase: 7 of 7 (Field Display Label)
 Plans: 1/1
 Progress: 100%
 Status: complete
@@ -16,14 +16,13 @@ Status: complete
 - **Phase 4 (Versioning):** Complete
 - **Phase 5 (Field Type Expansion):** Complete
 - **Phase 6 (Bulk Operations):** Complete
-- **Phase 7 (Read Optimization):** Deferred to a future milestone (2026-06-01)
-- **Phase 8 (Field Display Label):** Complete
+- **Phase 7 (Field Display Label):** Complete
 
 ## Key Decisions
 | Decision | Date | Rationale |
 |----------|------|-----------|
-| Postgres-only commitment is binding | 2026-04-28 | Partition tuple (paired partial unique indexes), GIN on jsonb, `text_pattern_ops`, and Phase 7's materialized views are all PG-specific. Adapter portability is explicitly out of scope. |
-| Hook ordering is locked at Phase 3 | 2026-04-28 | Phase 4 (versioning) and Phase 7 (materialized index) both consume `on_value_change` / `on_field_change`. Defining the contract once prevents two refactors later. |
+| Postgres-only commitment is binding | 2026-04-28 | Partition tuple (paired partial unique indexes), GIN on jsonb, `text_pattern_ops` are all PG-specific (as would be any future materialized-view read optimization). Adapter portability is explicitly out of scope. |
+| Hook ordering is locked at Phase 3 | 2026-04-28 | Phase 4 (versioning) consumes `on_value_change` / `on_field_change`, and any future materialized index would too. Defining the contract once prevents refactoring it later. |
 | Foundational principle: no hardcoded attribute references | 2026-04-28 | Every accessor takes a name/id parameter; every callback receives Value/Field, never assumes attribute names. Binding for every phase. |
 | Backwards compatibility is binding | 2026-04-28 | Every phase preserves current API surface. Phase 2 aliases rather than renames `Field.sorted`; Phase 1 `parent_scope` is nullable; Phase 2 cascade default unchanged. |
 | Idempotence key for Phase 6 schema import is `(name, entity_type, scope, parent_scope)` | 2026-04-28 | Using field name alone collapses two tenants' identically-named fields. Key derives directly from Phase 1's partition tuple. |
@@ -58,3 +57,4 @@ None
 - 2026-05-06: Planned phase 06 (bulk operations) — 5 plans across 3 waves. Wave 1 parallel: 06-01 version_group_id migration + subscriber, 06-02 schema export/import, 06-03 CSV mapper. Wave 2: 06-04 bulk read (typed_eav_hash_for). Wave 3: 06-05 bulk write (bulk_set_typed_eav_values) — depends on 06-01 (migration) and 06-04 (file-level serialization on has_typed_eav.rb ClassQueryMethods). 15 tasks total.
 - 2026-06-01: Reconciled roadmap drift — phases 5 & 6 marked complete in the progress table (were stale: "uat issues"/"pending"; both verified remediated to PASS, UAT rounds complete, shipped through v0.4.0). Phase 7 (Read optimization) deferred to a future milestone. Next active work: issue #21 (Field display label).
 - 2026-06-01: Added Phase 8 (Field display label, issue #21) — additive `label` column + `display_name` accessor + schema-portability round-trip. Pre-seeded 08-CONTEXT.md (binding decisions, both issue open-questions resolved) and 08-RESEARCH.md (issue spec verified against code at v0.4.0). Ready to plan.
+- 2026-08-15: Removed deferred Phase 7 (Read optimization) from the milestone (never planned; no artifacts). Renumbered Phase 8 → Phase 7 (Field display label): dir 08-field-display-label → 07-field-display-label, artifacts 08-* → 07-*, frontmatter/plan IDs updated. Read-optimization scope preserved in CONTEXT.md Deferred Ideas and ROADMAP.md git history.
