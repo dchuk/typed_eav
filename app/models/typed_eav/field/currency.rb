@@ -126,6 +126,49 @@ module TypedEAV
 
         [{ amount: amount_bd, currency: currency_str }, false]
       end
+
+      # Currency query operators target one component of the composite value.
+      def cast_query_operand(operator, raw)
+        return cast_currency_query(raw) if operator.to_sym == :currency_eq
+
+        bounds = if operator.to_sym == :between
+                   if raw.is_a?(Range)
+                     [raw.begin, raw.end]
+                   elsif raw.is_a?(Array) && raw.length == 2
+                     raw
+                   else
+                     raise ArgumentError, ":between expects a Range or two-element Array"
+                   end
+                 end
+        return bounds.map { |bound| cast_amount_query(bound) }.then { |pair| pair.first..pair.last } if bounds
+
+        cast_amount_query(raw)
+      end
+
+      private
+
+      def cast_amount_query(raw)
+        return nil if raw.nil?
+
+        amount = BigDecimal(raw.to_s, exception: false)
+        raise ArgumentError, "Invalid #{self.class.name} query operand: #{raw.inspect}" unless amount
+
+        amount
+      end
+
+      def cast_currency_query(raw)
+        return nil if raw.nil?
+
+        currency = raw.to_s.upcase
+        unless currency.match?(/\A[A-Z]{3}\z/)
+          raise ArgumentError, "Invalid #{self.class.name} query operand: #{raw.inspect}"
+        end
+
+        currency
+      end
+
+      public
+
       # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       # Co-population validation + allowed_currencies inclusion.

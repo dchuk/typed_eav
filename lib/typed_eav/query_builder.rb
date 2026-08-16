@@ -53,6 +53,8 @@ module TypedEAV
         arel_col = values_table[col]
 
         base = value_scope(field)
+        excluded = %i[is_null is_not_null contains not_contains starts_with ends_with]
+        operand = field.cast_query_operand(operator, value) unless excluded.include?(operator)
 
         case operator
         when :eq, :currency_eq
@@ -64,9 +66,9 @@ module TypedEAV
           # dispatch resolved correctly. The operator-validation gate at
           # the top of #filter still narrows :currency_eq to Field::Currency
           # only — no other field type accepts it.
-          eq_predicate(base, arel_col, col, value)
+          eq_predicate(base, arel_col, col, operand)
         when :not_eq
-          not_eq_predicate(base, arel_col, col, value)
+          not_eq_predicate(base, arel_col, col, operand)
         when :references
           # Phase 5 Reference field. `value` may be an Integer FK OR an
           # AR record instance — `field.cast` normalizes both to an
@@ -79,27 +81,21 @@ module TypedEAV
           # The :references operator is registered ONLY on Field::Reference
           # (the operator-validation gate above keeps it from leaking to
           # other types).
-          fk, invalid = field.cast(value)
-          if invalid || fk.nil?
+          if operand.nil?
             base.none
           else
-            base.where(arel_col.eq(fk))
+            base.where(arel_col.eq(operand))
           end
         when :gt
-          base.where(arel_col.gt(value))
+          base.where(arel_col.gt(operand))
         when :gteq
-          base.where(arel_col.gteq(value))
+          base.where(arel_col.gteq(operand))
         when :lt
-          base.where(arel_col.lt(value))
+          base.where(arel_col.lt(operand))
         when :lteq
-          base.where(arel_col.lteq(value))
+          base.where(arel_col.lteq(operand))
         when :between
-          unless value.respond_to?(:first) && value.respond_to?(:last)
-            raise ArgumentError,
-                  ":between expects a Range or two-element Array"
-          end
-
-          base.where(arel_col.between(value.first..value.last))
+          base.where(arel_col.between(operand))
         when :contains
           base.where(arel_col.matches("%#{sanitize_like(value)}%"))
         when :not_contains
@@ -114,10 +110,10 @@ module TypedEAV
           base.where.not(col => nil)
         when :any_eq
           # For json_value arrays: contains the given element
-          base.where("#{col} @> ?", [value].to_json)
+          base.where("#{col} @> ?", [operand].to_json)
         when :all_eq
           # For json_value arrays: contains all given elements
-          base.where("#{col} @> ?", Array(value).to_json)
+          base.where("#{col} @> ?", operand.to_json)
         else
           raise ArgumentError, "Unhandled operator: #{operator}"
         end

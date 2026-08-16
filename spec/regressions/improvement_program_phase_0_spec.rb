@@ -123,7 +123,6 @@ RSpec.describe "Improvement program Phase 0 correctness probes", type: :model do
     it "rejects a fractional integer operand instead of silently narrowing it" do
       field = create(:integer_field, name: "phase0_integer")
 
-      pending("QueryBuilder currently delegates 3.7 to Active Record, which casts it to 3")
       expect { TypedEAV::QueryBuilder.filter(field, :eq, 3.7) }
         .to raise_error(ArgumentError, /invalid|integer|cast/i)
     end
@@ -133,7 +132,6 @@ RSpec.describe "Improvement program Phase 0 correctness probes", type: :model do
     it "rejects arrays that do not contain exactly two bounds" do
       field = create(:integer_field, name: "phase0_between")
 
-      pending("between currently accepts any operand responding to first and last")
       expect { TypedEAV::QueryBuilder.filter(field, :between, [1, 2, 3]) }
         .to raise_error(ArgumentError, /between/i)
     end

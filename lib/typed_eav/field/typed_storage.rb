@@ -155,6 +155,34 @@ module TypedEAV
         value_record[self.class.value_columns.first] = default_value
       end
 
+      # Normalize values before QueryBuilder emits SQL. Keeping this beside
+      # the write caster makes query and write semantics use the same rules.
+      def cast_query_operand(operator, raw)
+        case operator.to_sym
+        when :between
+          bounds = if raw.is_a?(Range)
+                     [raw.begin, raw.end]
+                   elsif raw.is_a?(Array) && raw.length == 2
+                     raw
+                   end
+          raise ArgumentError, ":between expects a Range or two-element Array" unless bounds
+
+          casted = bounds.map { |bound| cast_query_value(bound) }
+          casted.first..casted.last
+        when :any_eq
+          raise ArgumentError, ":any_eq expects a single array element" if raw.is_a?(Array)
+
+          values = cast_query_value([raw])
+          values&.first
+        when :all_eq
+          raise ArgumentError, ":all_eq expects an Array" unless raw.is_a?(Array)
+
+          cast_query_value(raw)
+        else
+          cast_query_value(raw)
+        end
+      end
+
       # ── Concrete snapshot helpers (NOT overridable) ──
 
       # True iff ANY of the field's value_columns had a saved change in the
@@ -199,6 +227,19 @@ module TypedEAV
         else
           raise ArgumentError, "Unsupported change_type: #{change_type.inspect}"
         end
+      end
+
+      private
+
+      def cast_query_value(raw)
+        casted, invalid = cast(raw)
+        raise ArgumentError, "Invalid #{self.class.name} query operand: #{raw.inspect}" if invalid
+
+        casted
+      rescue TypeError, ArgumentError => e
+        raise e if e.is_a?(ArgumentError) && e.message.start_with?("Invalid ")
+
+        raise ArgumentError, "Invalid #{self.class.name} query operand: #{raw.inspect}"
       end
     end
   end

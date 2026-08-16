@@ -125,6 +125,17 @@ module TypedEAV
         [nil, true]
       end
 
+      # A class-mismatched record deliberately retains the historical empty
+      # relation behavior of :references instead of becoming a query error.
+      def cast_query_operand(operator, raw)
+        casted, invalid = cast(raw)
+        return invalid ? nil : casted if operator.to_sym == :references
+
+        raise ArgumentError, "Invalid #{self.class.name} query operand: #{raw.inspect}" if invalid
+
+        casted
+      end
+
       # Value-time validation: when target_scope is set on the field,
       # the target record's typed_eav_scope must match. When target_scope
       # is nil, no cross-scope check fires (the field author is declaring
