@@ -186,3 +186,34 @@ mechanically complete co-tenant PostgreSQL 17 results, not an authorization to
 change production queries. The artifact is
 `bench/results/phase-4-multi-filter-representative.json`; the isolated Tailscale
 runner is `bench/docker/multi-filter/run_remote.sh`.
+
+ADR 0011 retains chained host `IN` as the production strategy. `INTERSECT` and
+correlated `EXISTS` are research-only. Direct grouped `HAVING` is additionally
+ineligible for missing/host-universe complement and empty-filter contracts.
+There is no adaptive strategy. Although all 282 completed representative
+oracles matched, the 12 timeouts have null identities and remain unproved; the
+98 equal smoke identities do not promote them to representative equivalence.
+The alternatives strongly improved `high_10`, but `mixed_10` regressed and
+large low/mixed/skewed cases were commonly censored or inconclusive, so the run
+does not establish a general winner.
+
+Do not use the artifact's derived buffer totals. They are false zeros caused by
+an extractor that split each multiword EXPLAIN block key into individual words.
+The 2,318 retained raw plans contain nonzero block counters and remain
+recoverable for a corrected, source-validated extraction. Workload names also
+describe predicate count, not always distinct-field count: 20-predicate cases
+repeat ten fields, while `skewed_10` and `skewed_20` repeat five. This evidence
+therefore proves neither valid zero-buffer behavior nor 20-distinct-field
+scaling. PostgreSQL 17 co-tenant plans and diagnostic timings do not establish
+other-version or clean-room behavior.
+
+Any future adaptive or replacement experiment must pre-register and pass the
+full gate in [ADR 0011](../docs/adr/0011-multi-filter-query-strategy.md):
+identical resolution and full scope/shadowing/operator/NULL/missing/complement/
+polymorphic/duplicate/empty/error semantics; completed equal identity oracles
+for every representative eligible group; actual 10- and 20-distinct-field
+families; corrected raw-plan-validated buffer totals; uncensored >=20% p95 wins
+at both 10 and 20 filters in at least three families; and bounded, pre-specified
+planning, buffer, and plan-shape regressions. Cross-scope high-cardinality
+planning is still required before Gate 4. Any claim beyond PostgreSQL 17 also
+requires evidence on the PostgreSQL versions for which it is made.

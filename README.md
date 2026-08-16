@@ -271,6 +271,34 @@ objects, and drop only application-owned statistics during rollback. See
 [benchmark guide](bench/README.md#phase-4a-planner-extended-statistics) for safe
 evaluation SQL and evidence limits.
 
+### Multi-filter query strategy
+
+TypedEAV retains its current multi-filter query shape: it resolves each field,
+builds the corresponding typed value subquery, and chains those results onto
+the host relation with `id IN (...)`. There is no adaptive strategy or alternate
+production query API.
+
+A PostgreSQL 17 benchmark compared the shipped shape with `INTERSECT`,
+correlated `EXISTS`, and direct grouped `HAVING` under resource-capped
+co-tenancy. The run retained 2,940 attempts, including 622 right-censored
+timeouts, and 294 representative identity oracles. Twelve oracles timed out, so
+representative equivalence is unproved even though all 282 completed oracles
+matched and the smaller 98-oracle smoke matched. Alternatives remain
+research-only. Grouped `HAVING` is additionally ineligible for missing-value,
+host-universe complement, and empty-filter semantics.
+
+The result also does not establish valid buffer comparisons or 20-distinct-
+field scaling. A parser defect made every derived buffer total a false zero;
+nonzero counters remain recoverable from the retained raw plans. The
+20-predicate workloads repeat ten fields, and the skewed 10/20 workloads repeat
+five. Future research must repair and validate buffer extraction, exercise
+actual 10/20 distinct fields, complete every representative equivalence oracle,
+cover the full scope/NULL/missing/polymorphic/error contract, and show the
+pre-registered p95, planning-time, buffer, and plan-shape gates before any
+adaptive or replacement proposal. See
+[ADR 0011](docs/adr/0011-multi-filter-query-strategy.md) and the
+[benchmark guide](bench/README.md#phase-4b-multi-filter-query-shapes).
+
 ### How Type Inference Works
 
 You don't need to think about types when querying. Rails handles it:
