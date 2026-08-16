@@ -455,6 +455,16 @@ end
 
 Both are exception-safe via `ensure` and nest cleanly.
 
+`unscoped` is an explicit administrative/analytics escape hatch, not the
+ordinary tenant request path. It keeps every same-name definition across the
+visible partitions and unions their matches for each filter. For broad audits
+or migrations, bound the definition universe to the work you actually need and
+batch the job at an application-owned boundary. TypedEAV does not prescribe a
+universal limit or batch size; measure generated SQL, planning/execution,
+memory, and workload interference in your application. Keep normal request
+traffic on scoped resolution so global, scope-only, and full-tuple definitions
+collapse to the most-specific match.
+
 ### Explicit `scope:` override
 
 Any query method accepts `scope:` as an override for admin tools and tests:
@@ -574,6 +584,12 @@ invariant.
 When both a global field (`scope: nil`) and a scoped field share a name, the **scoped definition wins** for the partition that owns it: forms render exactly one input (the scoped one), reads return the scoped value, and writes target the scoped row.
 
 `TypedEAV.unscoped { Contact.where_typed_eav(...) }` OR-across every partition's matching `field_id` per filter (still AND-ing across filters), so cross-tenant audit queries see every partition's matches — they don't collapse to a single tenant.
+
+Because that administrative path constructs work for every matching
+definition, applications should narrow and batch high-cardinality audits rather
+than treating `unscoped` as tenant-request routing. No built-in numeric
+threshold is implied; choose operational bounds from measurements of the
+consuming workload. See [ADR 0012](docs/adr/0012-cross-scope-administrative-query-policy.md).
 
 ## Field Types
 

@@ -94,6 +94,30 @@ ADR 0011 accepts this only as negative/retention evidence. The current chained h
 
 The audit found that all derived buffer totals are false zeros because the extractor split each multiword EXPLAIN block key into individual words; 2,318 retained raw plans contain nonzero counters that can be reparsed. It also found that 20-predicate scenarios repeat ten fields, while `skewed_10` and `skewed_20` repeat five. The PostgreSQL 17 co-tenant run therefore proves neither valid zero-buffer behavior, clean-room/cross-version performance, nor 20-distinct-field scaling. Before future adaptive research can support a production proposal, it must preserve the complete resolution/scope/shadowing/operator/NULL/missing/complement/polymorphic/duplicate/empty/error contract, complete every representative identity oracle, measure actual 10/20 distinct fields, validate corrected buffers against raw plans, show uncensored >=20% p95 gains at both sizes in at least three families, and satisfy pre-registered planning/buffer/plan-shape bounds. Cross-scope high-cardinality evidence remains required before Gate 4; any cross-version claim requires evidence beyond this PostgreSQL 17 run.
 
+## Phase 4C cross-scope administrative policy
+
+Phase 4C closes with a conservative, qualitative guardrail rather than a
+performance result. Code-path analysis establishes that ordinary tenant
+resolution chooses the most-specific definition among global, scope-only, and
+full-tuple candidates. The explicit `ALL_SCOPES` administrative path instead
+materializes all visible same-name definitions, builds their per-definition
+relations, and combines those relations for each filter.
+
+T066 and T069 did not produce an accepted representative artifact. T066
+rejected during artifact validation without retaining its decisive rejection
+detail. T069 rejected at the required checkpoint gate, and assertion ordering
+again prevented the exported rejection diagnostic from being retained. Local
+smoke exercised semantics only. No rejected output is treated as representative
+evidence, and no latency, throughput, planner, cardinality limit, or
+prototype-comparison claim is made.
+
+ADR 0012 keeps `TypedEAV.unscoped` as an explicit administration, analytics,
+migration, and audit escape hatch. Consuming applications should narrow the
+definition universe and batch broad work at application-owned boundaries based
+on their own measurements. TypedEAV adds no threshold, warning, batching API,
+query rewrite, schema object, or dependency, and does not adopt the
+benchmark-only homogeneous `field_id`-array prototype.
+
 ## Nine-column program tracker
 
 | Phase | Task | Owner agent | Status | Dependencies | Decision | Evidence | Commit | Follow-up |
@@ -115,6 +139,7 @@ The audit found that all derived buffer totals are false zeros because the extra
 | 3 | T043–T045 string-search policy | Worker/Judge | done | Gate 2/T042 | Documentation-only, application-owned `pg_trgm` GIN evaluation; preserve shipped B-tree and public SQL | Three rotated PG17 trials; PG15/16/18 lifecycle-only logs; operator plans, write/storage costs, ADR 0009 | task commits | Close Phase 3; no installer, automatic index, GiST, or query change |
 | 4 | T051–T053 extended statistics policy | Worker/Judge | done | T049 protocol | Documentation-only, application-owned evaluation of dependencies statistics; no gem schema/helper change | 10 trials, 50 paired blocks, 1,100 raw PG17 plans; ADR 0010; zero-row date disclosure | task commits | Evaluate only measured equality misestimates; continue multi-filter and cross-scope evidence |
 | 4 | T062–T064 multi-filter query policy | Worker/Judge | done | T059 protocol | ADR 0011: retain chained `IN`; alternatives research-only; no adaptive strategy | 2,940 attempts; 622 censors; 294 oracles (282 completed, 12 timeout); false-zero derived buffers; repeated-field limits | task commits | Repair buffer/distinct-field evidence and complete cross-scope scaling before Gate 4 |
+| 4 | T065–T072 cross-scope administrative policy | Scout/Workers/Judges | done | Phase 4C code-path analysis | ADR 0012: keep `unscoped` administrative; application-owned bounding/batching; no quantitative or prototype claim | T066/T069 representative artifacts rejected; local smoke is semantic-only; rejected harness removed | task commit | Keep production behavior unchanged; use consuming-workload evidence for operational bounds |
 | 4 | Planner/query paths | PM/Workers | queued | Phase 3 policy | Compare statistics and multi-filter plans | Operator-specific benchmark evidence | — | Preserve scope and missing semantics |
 | 5–8 | Read/write/durability/cleanup | PM/Workers | queued | Gates 4/6 | Characterize semantics before optimizing | Profiles, failure proofs, ADRs | — | Preserve callbacks, versioning, tenant isolation |
 | 9–12 | Tournament and documentation | PM/Workers | queued | Prior gates + host | Choose architecture only from fair benchmark | Comparable strategies and final ADRs | — | Final audit and full-outcome proof |
