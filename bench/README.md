@@ -66,4 +66,26 @@ bench/docker/string-search/run_remote.sh
 
 The isolated runner first proves least-privilege `pg_trgm` availability, install, idempotent create, update, drop, and recreate/drop on PostgreSQL 15, 16, and 18, retaining checksummed version-tagged startup logs. PostgreSQL 18 mounts its owned volume at `/var/lib/postgresql`; 15/16 use `/var/lib/postgresql/data`. Only then does it run three rotated PostgreSQL 17 trials. Unique T043 labels, an internal network, conservative resource caps, continuous headroom/no-impact checks, and exact cleanup isolate the run; it uses no published ports, host networking, Compose, privileged mode, restart policy, Docker socket, or media bind.
 
-The accepted artifact is `bench/results/phase-3-string-search-representative.json`. Primary dispersion was 0.150653, below the 0.25 gate without a rerun. Public PostgreSQL 17 plans used GIN for `starts_with`, `contains`, `ends_with`, and escaped-literal patterns, but not `not_contains` or one/two-character probes. The additive lower B-tree was used only by the separate lower/LIKE prototype. Median GIN index bytes were 57,851,904 versus 35,840,000 for current B-tree alone; GIN also increased indexed write WAL and reduced indexed write throughput. Absolute co-tenant timing is diagnostic, and this evidence does not choose extension policy or authorize an index.
+The accepted artifact is `bench/results/phase-3-string-search-representative.json`. Primary dispersion was 0.150653, below the 0.25 gate without a rerun. Public PostgreSQL 17 plans used GIN for `starts_with`, `contains`, `ends_with`, and escaped-literal patterns with extractable trigrams, but not `not_contains` or one/two-character probes. Equality retained the shipped index-only B-tree plan. The additive lower B-tree was used only by the separate lower/LIKE prototype, which is not the public `ILIKE` contract. GiST remained smoke-only and is not authorized.
+
+ADR 0009 selects documentation-only, application-owned evaluation. `pg_trgm` is not a dependency, required extension, installer feature, or automatic index. An application considering it should first reproduce its actual pattern lengths, selectivity, field distribution, and concurrency, then compare `EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS)`, index/total relation bytes, build and write WAL, insert/update throughput, and maintenance cost. PostgreSQL 17 plan choices do not establish behavior on other versions; the PostgreSQL 15/16/18 lanes exercised extension lifecycle only. Absolute timing under continuous co-tenant transcoding is diagnostic, not a headline latency claim.
+
+The measured additive candidate was:
+
+```sql
+SELECT name, default_version, installed_version
+FROM pg_available_extensions
+WHERE name = 'pg_trgm';
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX CONCURRENTLY app_te_values_string_trgm
+ON typed_eav_values USING gin (string_value gin_trgm_ops)
+WHERE string_value IS NOT NULL;
+```
+
+Run this only from a consuming application's nontransactional migration after verifying the target service exposes `pg_trgm` and the deploy role has permission. Use a stable application-owned name and validate the resulting catalog definition. On rollback, use `DROP INDEX CONCURRENTLY IF EXISTS app_te_values_string_trgm`; retain the database-wide extension because other indexes or applications may depend on it. Interrupted concurrent builds can leave an invalid index and must be detected and repaired before retry. A narrower per-field partial index is an application-specific experiment, not a benchmarked recommendation.
+
+The operator boundary is deliberate: `=` stays on the shipped B-tree; positive `ILIKE` prefix/contains/suffix searches are candidates only when their literals yield useful trigrams and their selectivity makes the plan worthwhile; escaped `%`/`_` probes benefited only when the remaining literal did so. GIN did not serve `NOT ILIKE` or one/two-character probes, and the evidence does not promise it for every positive or high-match query.
+
+Versus the current B-tree candidate, the additive GIN increased median candidate index bytes 61.417% and build WAL 50.293%. Median insert/update throughput fell 56.995%/58.060%, while insert/update WAL rose 156.499%/195.441%. The artifact retains full raw plans, checksums, sizes, and build measurements for trial 1, plus cross-trial metric arrays and rotation metadata. Raw trial 2/3 plans, checksums, sizes, and build times were not retained, so those claims are not independently auditable from this artifact; rerun the harness for application decisions.

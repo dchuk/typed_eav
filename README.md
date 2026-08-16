@@ -217,6 +217,33 @@ Contact.where(company_id: 42)
 | `:is_null` | all | Value is NULL |
 | `:is_not_null` | all | Value is not NULL |
 
+### Optional trigram indexing for string search
+
+TypedEAV keeps its partial-covering `text_pattern_ops` B-tree as the default
+string index. Equality uses that B-tree, while `:starts_with`, `:contains`, and
+`:ends_with` use `ILIKE`; `:not_contains` uses `NOT ILIKE`. The gem does not
+require or install `pg_trgm` and does not create a trigram index automatically.
+
+An application with frequent positive `ILIKE` searches containing at least
+three useful characters may evaluate its own partial GIN index. This is a
+workload decision: the representative benchmark used GIN for measured prefix,
+contains, suffix, and escaped-literal patterns, but not for `NOT ILIKE` or
+one/two-character probes. It does not prove that every positive pattern or
+selectivity will benefit. A `lower(string_value) LIKE ...` expression index is
+not equivalent to TypedEAV's public `ILIKE`, and the benchmark did not justify
+GiST.
+
+Application owners should check extension availability and deploy-role
+privileges in preproduction, then create the extension and index in their own
+migrations. Use nontransactional `CREATE INDEX CONCURRENTLY`, a stable
+application-specific name, and workload-specific `EXPLAIN (ANALYZE, BUFFERS,
+WAL, SETTINGS)` plus storage and write-WAL measurements. Rollback should drop
+only the application-owned index concurrently; do not drop the database-wide
+extension because other objects may share it. See
+[ADR 0009](docs/adr/0009-string-search-indexing.md) and the
+[benchmark guide](bench/README.md#phase-3-string-search-benchmark) for the
+operator matrix, measured costs, SQL, and evidence limits.
+
 ### How Type Inference Works
 
 You don't need to think about types when querying. Rails handles it:
