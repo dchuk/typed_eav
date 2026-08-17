@@ -122,6 +122,36 @@ on their own measurements. TypedEAV adds no threshold, warning, batching API,
 query rewrite, schema object, or dependency, and does not adopt the
 benchmark-only homogeneous `field_id`-array prototype.
 
+## Phase 5A BulkRead evidence
+
+T086 characterizes the unchanged public `typed_eav_hash_for` path through real
+Rails/Active Record models. The accepted artifact covers 100 records/1 scope
+and 1,000 records at 1, 100, and 1,000 scopes, with 20 values per host, three
+rotations, 12 warmups, and 120 measured observations. All six semantic controls
+and independent result identities pass. SQL notification row counts are
+complete, and no observation is censored, retried, imputed, mismatched, or
+errored.
+
+Median SQL statements rose from 3 at one scope to 102 at 100 scopes and 1,002
+at 1,000 scopes. Median loaded rows and Active Record instantiations were 2,140,
+20,140, 34,000, and 160,000 across the four cells. Wall-time p50 values were
+52.074, 466.893, 949.885, and 5,284.589 ms respectively. These absolute times
+are diagnostic co-tenant evidence: the Tailscale host continuously transcodes
+video, and the artifact retains 18 anonymous pressure samples. The result
+supports later bounded investigation of query/row/object growth, but authorizes
+no cache, chunking, raw-row path, requested-field API, or production change.
+
+T086 also establishes the prospective benchmark-runner contract without
+rewriting historical runners. Local Ruby 3.4.4 is explicitly resolved and
+verified; injected older-Ruby and validator failures prove rejection plus
+hash-stable payload retention without accepted publication. The live remote
+drill proves seven ordered cancellation stages, export before disposable DB
+cleanup, transferred hashes, and zero leftovers. The representative run passed
+resource caps, internal-only networking, read-only/writable-path boundaries,
+anonymous existing-container invariance, deadline, image lifecycle, sealed
+transfer, and exact cleanup. Artifact SHA-256:
+`28a903902f806b9e3faa5a86a437790f35a049a3a6884df8eeb6e111888a90cb`.
+
 ## Nine-column program tracker
 
 | Phase | Task | Owner agent | Status | Dependencies | Decision | Evidence | Commit | Follow-up |
@@ -146,7 +176,8 @@ benchmark-only homogeneous `field_id`-array prototype.
 | 4 | T073–T076 corrective multi-filter evidence | Judge/Worker | done | ADR 0011/T062 audit | Preserve current chained `IN`; corrected evidence remains research-only and replacement-ineligible | 960 attempts; 620 censors; 96 oracles (81 completed, 15 timeout); 340 validated plans; exact distinct fields | task commit | Post-run Gate 4 review; no production or ADR change |
 | 4 | T065–T072 cross-scope administrative policy | Scout/Workers/Judges | done | Phase 4C code-path analysis | ADR 0012: keep `unscoped` administrative; application-owned bounding/batching; no quantitative or prototype claim | T066/T069 representative artifacts rejected; local smoke is semantic-only; rejected harness removed | task commit | Keep production behavior unchanged; use consuming-workload evidence for operational bounds |
 | 4 | Planner/query paths | PM/Workers | queued | Phase 3 policy | Compare statistics and multi-filter plans | Operator-specific benchmark evidence | — | Preserve scope and missing semantics |
-| 5–8 | Read/write/durability/cleanup | PM/Workers | queued | Gates 4/6 | Characterize semantics before optimizing | Profiles, failure proofs, ADRs | — | Preserve callbacks, versioning, tenant isolation |
+| 5 | T086 BulkRead characterization | Worker | done | Gate 4/T083 | Preserve production path; characterize scope-driven query/row/object growth before optimization | 4-cell matrix; 12 warmups; 120 observations; exact SQL/rows/AR objects; real drill and cleanup | task commit | Review evidence before any cache/read-path design |
+| 6–8 | Write/durability/cleanup | PM/Workers | queued | Gates 4/6 | Characterize semantics before optimizing | Profiles, failure proofs, ADRs | — | Preserve callbacks, versioning, tenant isolation |
 | 9–12 | Tournament and documentation | PM/Workers | queued | Prior gates + host | Choose architecture only from fair benchmark | Comparable strategies and final ADRs | — | Final audit and full-outcome proof |
 
 ## Baseline commands and evidence policy

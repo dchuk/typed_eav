@@ -90,6 +90,60 @@ The operator boundary is deliberate: `=` stays on the shipped B-tree; positive `
 
 Versus the current B-tree candidate, the additive GIN increased median candidate index bytes 61.417% and build WAL 50.293%. Median insert/update throughput fell 56.995%/58.060%, while insert/update WAL rose 156.499%/195.441%. The artifact retains full raw plans, checksums, sizes, and build measurements for trial 1, plus cross-trial metric arrays and rotation metadata. Raw trial 2/3 plans, checksums, sizes, and build times were not retained, so those claims are not independently auditable from this artifact; rerun the harness for application decisions.
 
+## Phase 5A BulkRead characterization
+
+`bulk_read_benchmark.rb` measures the existing public
+`Model.typed_eav_hash_for(materialized_hosts)` path without changing production
+code or adding a cache. The semantic gate covers global/scope/full-tuple
+precedence, explicit NULL versus a missing row, multi-cell Currency values,
+orphan skipping, and the public integer-keyed hash shape. An independent
+per-record identity oracle must match every warmup and observation.
+
+The representative matrix fixes 20 integer values per host and runs 100
+records/1 scope plus 1,000 records at 1, 100, and 1,000 scopes. Three cyclic
+workload rotations each contain one warmup and ten measured calls with the
+Active Record query cache disabled. The artifact retains exact SQL and binds,
+notification row counts, Active Record instantiations, Ruby allocations,
+ObjectSpace deltas, RSS, GC count/time, wall time, dataset/result identities,
+relation sizes, and runtime versions. Host materialization occurs before each
+measurement.
+
+```sh
+bench/docker/bulk-read/run_remote.sh
+
+PATH=/Users/darrindemchuk/.rbenv/versions/3.4.4/bin:$PATH \
+  ruby bench/validate_bulk_read_artifact.rb \
+  bench/results/phase-5-bulk-read-representative.json
+```
+
+The accepted PostgreSQL 17.11, Ruby 3.4.4, Rails 8.1.3.1 artifact contains 120
+measured observations and 12 warmups with no censored/error or semantic
+mismatch. Median statement/returned-row/AR-instantiation counts were 3/2,140/
+2,140 at 100 records/1 scope, 3/20,140/20,140 at 1,000/1, 102/34,000/34,000 at
+1,000/100, and 1,002/160,000/160,000 at 1,000/1,000. Corresponding wall-time
+p50/p95/p99 values were 52.074/62.988/64.647 ms, 466.893/515.471/534.044 ms,
+949.885/1,165.825/1,304.299 ms, and 5,284.589/5,727.954/5,910.779 ms.
+
+These are characterization results, not optimization targets or clean-room
+latency claims. The host was continuously transcoding video; 18 anonymous
+pressure samples accompany the run. Whole-process RSS/ObjectSpace and
+instrumentation overhead limit absolute interpretation. The evidence shows
+query count and loaded-row/object growth with scope cardinality; it does not
+authorize caching, raw-row loading, chunking, a requested-fields API, or a
+production implementation change.
+
+The T086 runner prospectively uses the shared benchmark contract: it pins and
+verifies local Ruby 3.4.4, rejects an interpreter mismatch, preserves a
+hash-verified transferred payload before local validation, and publishes the
+accepted artifact only after validation. Its real task-owned cancellation drill
+records seven ordered stages, observes and terminates a live disposable
+PostgreSQL session, seals/exports evidence before dropping the drill database,
+and audits cleanup. The representative workflow uses only labeled internal
+Docker resources, read-only runner roots with four bounded writable paths, no
+ports or media mounts, fixed caps, anonymous before/after container hashes, and
+exact post-transfer cleanup. The artifact SHA-256 is
+`28a903902f806b9e3faa5a86a437790f35a049a3a6884df8eeb6e111888a90cb`.
+
 ## Phase 4A planner extended statistics
 
 `planner_statistics_benchmark.rb` measures field/value cardinality estimates without changing production schema or queries. Seed `4601` generates 300,000 entities and deterministic uniform plus skewed integer, string, and date fields; unrelated field-family rows retain NULL typed cells. The preregistered representative protocol fixes `default_statistics_target`, the four relevant column targets, and every extended-statistics target at 100. Its ten-sequence Williams schedule runs 50 blocks across baseline, dependencies, MCV, ndistinct, and their combination.
