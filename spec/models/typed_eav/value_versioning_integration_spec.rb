@@ -51,6 +51,44 @@ RSpec.describe TypedEAV::Value, "versioning integration", :event_callbacks, :rea
     end
   end
 
+  describe "stored context parity" do
+    # rubocop:disable RSpec/ExampleLength
+    it "keeps ambient context identical across ordinary, outer, uniform, and per-record writes" do
+      contacts = 4.times.map { |index| Contact.create!(name: "context-#{index}", tenant_id: "t1") }
+      context_for = ->(source) { { "request_id" => "context-parity", "source" => source } }
+
+      TypedEAV.with_context(request_id: "context-parity", source: "ordinary") do
+        described_class.create!(entity: contacts[0], field: field, value: 1)
+      end
+      Contact.transaction do
+        TypedEAV.with_context(request_id: "context-parity", source: "outer") do
+          described_class.create!(entity: contacts[1], field: field, value: 2)
+        end
+      end
+      TypedEAV.with_context(request_id: "context-parity", source: "uniform") do
+        TypedEAV.with_scope("t1") do
+          Contact.bulk_set_typed_eav_values([contacts[2]], { "age" => 3 }, version_grouping: :none)
+        end
+      end
+      TypedEAV.with_context(request_id: "context-parity", source: "per-record") do
+        TypedEAV.with_scope("t1") do
+          Contact.bulk_set_typed_eav_values_per_record(
+            { contacts[3] => { "age" => 4 } }, version_grouping: :none
+          )
+        end
+      end
+
+      rows = TypedEAV::ValueVersion.where(entity_id: contacts.map(&:id)).order(:entity_id)
+      expected_contexts = [
+        context_for.call("ordinary"), context_for.call("outer"),
+        context_for.call("uniform"), context_for.call("per-record")
+      ]
+      expect(rows.map(&:context)).to eq(expected_contexts)
+      expect(rows.map(&:version_group_id)).to all(be_nil)
+    end
+    # rubocop:enable RSpec/ExampleLength
+  end
+
   describe ":update lifecycle (the singular→plural fix matters here)" do
     it "writes a version row when the typed column changes" do
       value = described_class.create!(entity: contact, field: field, value: 41)

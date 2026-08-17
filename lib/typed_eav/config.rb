@@ -122,10 +122,9 @@ module TypedEAV
       end
       attr_writer :require_scope # rubocop:disable Style/AccessorGrouping
 
-      # Master kill-switch for Phase 04 versioning. When false (default), the
-      # Phase 04 internal subscriber is NOT registered with EventDispatcher
-      # at engine boot — zero overhead for apps that don't use versioning.
-      # When true, the subscriber registers but only writes a version row
+      # Boot-time switch for transactional versioning. When false (default),
+      # Value's version callbacks are not installed. When true, the callbacks
+      # install after the host configuration is loaded, but only write a row
       # when value.entity_type belongs to a host model that opted in via
       # `has_typed_eav versioned: true` (per-entity opt-in flows through
       # Registry; both layers land in plan 04-02).
@@ -138,7 +137,7 @@ module TypedEAV
       # Default false because the schema migration only matters for apps that
       # opt in. A v0.1.x deployment that pulls in Phase 04 without changing
       # any config or model declarations sees no behavior change — the
-      # subscriber doesn't register, no version rows are written, no perf
+      # callbacks don't register, no version rows are written, no perf
       # impact at all. The migration is still copied (idempotent), but the
       # table sits empty.
       def versioning
@@ -187,12 +186,12 @@ module TypedEAV
       # Errors raised inside this proc are rescued by EventDispatcher and
       # logged via Rails.logger.error — they do NOT propagate to the
       # user's save call (the row is already committed). Internal subscribers
-      # (Phase 04 versioning, Phase 07 matview) fire BEFORE this proc and
+      # Generic internal observers fire BEFORE this proc and
       # their errors DO propagate. See 03-CONTEXT.md §User-callback error policy.
       #
       # Reassignment after gem initialization does NOT disable internal
-      # subscribers — those live on EventDispatcher.value_change_internals,
-      # not here.
+      # versioning callbacks are installed on Value at boot and are not
+      # controlled by this public callback slot.
       attr_accessor :on_value_change
 
       # Public single-proc slot for field-change events.
@@ -215,7 +214,7 @@ module TypedEAV
       # Field::Image-typed Value gains (or replaces) an attachment. Receives
       # `(value, blob)`. Default nil — no-op when not configured.
       #
-      # Hook ordering: fires AFTER versioning (Phase 04) and AFTER
+      # Hook ordering: fires AFTER the transactional version write and AFTER
       # on_value_change (Phase 03). The hook is informational ("an image
       # was attached"), not mutational; running it last avoids polluting
       # earlier hooks' snapshots / context with attachment-derived state.
@@ -259,22 +258,20 @@ module TypedEAV
         self.field_types = BUILTIN_FIELD_TYPES.dup
         self.scope_resolver = DEFAULT_SCOPE_RESOLVER
         self.require_scope = true
-        # Phase 04 versioning master switch + actor resolver. Reset to defaults
+        # Transactional versioning boot switch + actor resolver. Reset to defaults
         # (false / nil) so test isolation matches `Config.on_value_change` / etc.
-        # Internal subscribers (TypedEAV::Versioning::Subscriber, registered
-        # at engine load by plan 04-02) are deliberately NOT cleared here —
-        # they live on EventDispatcher.value_change_internals and survive
+        # Transactional Value callbacks are deliberately NOT cleared here —
+        # callback installation is boot-latched and survives
         # Config.reset! by design (the snapshot/restore split is locked at
         # 03-CONTEXT.md §Reset split). Test teardown that needs to clear
-        # subscribers too calls EventDispatcher.reset!.
+        # generic observers too calls EventDispatcher.reset!.
         self.versioning = false
         self.actor_resolver = nil
         # Test isolation: scoping_spec/field_spec/etc. call Config.reset! in
         # `after` hooks — this ensures user procs set in earlier tests don't
-        # leak across examples. Internal subscribers
-        # (EventDispatcher.value_change_internals/field_change_internals) are
-        # deliberately NOT reset here — they're populated at engine load by
-        # Phase 04+ and must persist across Config.reset!. Test teardown
+        # leak across examples. Generic EventDispatcher observers
+        # (value_change_internals/field_change_internals) are deliberately NOT
+        # reset here — they persist across Config.reset!. Test teardown
         # that needs to clear EVERYTHING calls EventDispatcher.reset! too.
         self.on_value_change = nil
         self.on_field_change = nil

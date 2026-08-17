@@ -390,7 +390,11 @@ RSpec.describe "Entity.bulk_set_typed_eav_values_per_record" do
     let!(:age_field) { create(:integer_field, name: "age", entity_type: "Contact", scope: "tenant_1") }
     let!(:alice)     { create(:contact, tenant_id: "tenant_1") }
 
-    before { TypedEAV.config.versioning = false }
+    before do
+      TypedEAV.config.versioning = true
+      TypedEAV::Versioning.register_if_enabled
+      TypedEAV.config.versioning = false
+    end
 
     it ":default resolves to :none without raising" do
       expect do

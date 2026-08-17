@@ -324,7 +324,11 @@ RSpec.describe "Entity.bulk_set_typed_eav_values" do
     let!(:age_field) { create(:integer_field, name: "age", entity_type: "Contact", scope: "tenant_1") }
     let!(:contact)   { create(:contact, tenant_id: "tenant_1") }
 
-    before { TypedEAV.config.versioning = false }
+    before do
+      TypedEAV.config.versioning = true
+      TypedEAV::Versioning.register_if_enabled
+      TypedEAV.config.versioning = false
+    end
 
     it "default kwarg resolves to :none — no raise, no version rows" do
       expect do
@@ -343,26 +347,20 @@ RSpec.describe "Entity.bulk_set_typed_eav_values" do
       end.not_to raise_error
     end
 
-    it "explicit :per_record raises ArgumentError" do
+    it "explicit :per_record follows the installed boot latch" do
       expect do
         TypedEAV.with_scope("tenant_1") do
           Contact.bulk_set_typed_eav_values([contact], { "age" => 1 }, version_grouping: :per_record)
         end
-      end.to raise_error(
-        ArgumentError,
-        /version_grouping.*per_record.*was passed but versioning is disabled.*pass version_grouping: :none/,
-      )
+      end.not_to raise_error
     end
 
-    it "explicit :per_field raises ArgumentError" do
+    it "explicit :per_field follows the installed boot latch" do
       expect do
         TypedEAV.with_scope("tenant_1") do
           Contact.bulk_set_typed_eav_values([contact], { "age" => 1 }, version_grouping: :per_field)
         end
-      end.to raise_error(
-        ArgumentError,
-        /version_grouping.*per_field.*was passed but versioning is disabled.*pass version_grouping: :none/,
-      )
+      end.not_to raise_error
     end
   end
 

@@ -6,19 +6,22 @@ require "spec_helper"
 # onto Value's transactional callbacks; EventDispatcher remains the
 # after_commit surface for public callbacks and has no internal version writer.
 ATOMIC_VERSIONING_CALLBACKS = {
-  create: :_write_version_create,
-  update: :_write_version_update,
-  destroy: :_write_version_destroy,
+  create: { filter: :_write_version_create, kind: :after },
+  update: { filter: :_write_version_update, kind: :after },
+  destroy: { filter: :_write_version_destroy, kind: :before },
 }.freeze
 RSpec.describe "atomic versioning registration", :event_callbacks do
-  def callback_count(event, filter)
-    TypedEAV::Value.send(:get_callbacks, event).to_a.count { |callback| callback.filter == filter }
+  def callback_count(event, callback_spec)
+    TypedEAV::Value.send(:get_callbacks, event).to_a.count do |callback|
+      callback.filter == callback_spec[:filter] && callback.kind == callback_spec[:kind]
+    end
   end
 
   def remove_atomic_callbacks
-    ATOMIC_VERSIONING_CALLBACKS.each do |event, filter|
-      kind = event == :destroy ? :before : :after
-      TypedEAV::Value.skip_callback(event, kind, filter) if callback_count(event, filter).positive?
+    ATOMIC_VERSIONING_CALLBACKS.each do |event, callback_spec|
+      if callback_count(event, callback_spec).positive?
+        TypedEAV::Value.skip_callback(event, callback_spec[:kind], callback_spec[:filter])
+      end
     end
   end
 
@@ -34,7 +37,7 @@ RSpec.describe "atomic versioning registration", :event_callbacks do
     TypedEAV::Versioning.register_if_enabled
 
     expect(TypedEAV::Versioning.atomic_callbacks_installed?).to be(false)
-    ATOMIC_VERSIONING_CALLBACKS.each { |event, filter| expect(callback_count(event, filter)).to eq(0) }
+    ATOMIC_VERSIONING_CALLBACKS.each { |event, spec| expect(callback_count(event, spec)).to eq(0) }
   ensure
     allow(TypedEAV::Value).to receive(:connection_pool).and_call_original
     restore_atomic_callbacks
@@ -50,7 +53,7 @@ RSpec.describe "atomic versioning registration", :event_callbacks do
 
     expect(TypedEAV::EventDispatcher.value_change_internals).to be_empty
     expect(TypedEAV::Versioning.atomic_callbacks_installed?).to be(true)
-    ATOMIC_VERSIONING_CALLBACKS.each { |event, filter| expect(callback_count(event, filter)).to eq(1) }
+    ATOMIC_VERSIONING_CALLBACKS.each { |event, spec| expect(callback_count(event, spec)).to eq(1) }
   ensure
     restore_atomic_callbacks
   end
@@ -63,7 +66,7 @@ RSpec.describe "atomic versioning registration", :event_callbacks do
     TypedEAV::Versioning.register_if_enabled
 
     expect(TypedEAV::Versioning.atomic_callbacks_installed?).to be(true)
-    expect(callback_count(:update, :_write_version_update)).to eq(1)
+    expect(callback_count(:update, ATOMIC_VERSIONING_CALLBACKS[:update])).to eq(1)
   ensure
     restore_atomic_callbacks
   end
@@ -88,7 +91,7 @@ RSpec.describe "atomic versioning registration", :event_callbacks do
       .to raise_error(ArgumentError, /share a connection pool/)
 
     expect(TypedEAV::Versioning.atomic_callbacks_installed?).to be(false)
-    ATOMIC_VERSIONING_CALLBACKS.each { |event, filter| expect(callback_count(event, filter)).to eq(0) }
+    ATOMIC_VERSIONING_CALLBACKS.each { |event, spec| expect(callback_count(event, spec)).to eq(0) }
   ensure
     allow(TypedEAV::Value).to receive(:connection_pool).and_call_original
     restore_atomic_callbacks
