@@ -38,25 +38,30 @@ module TypedEAV
 
     def delete_batch!(field, last_id, batch_size)
       field.class.transaction do
-        ids = value_ids(field.id, last_id, batch_size)
-        ids.each { |value_id| TypedEAV::Value.find(value_id).destroy! }
-        ids
+        values = locked_values(field.id, last_id, batch_size).to_a
+        values.each(&:destroy!)
+        values.map(&:id)
       end
     end
     private_class_method :delete_batch!
 
-    def value_ids(field_id, last_id, limit)
-      TypedEAV::Value.where(field_id: field_id).where("id > ?", last_id).order(:id).limit(limit).pluck(:id)
+    def locked_values(field_id, last_id, limit)
+      TypedEAV::Value
+        .where(field_id: field_id)
+        .where("id > ?", last_id)
+        .order(:id)
+        .limit(limit)
+        .lock
     end
-    private_class_method :value_ids
+    private_class_method :locked_values
 
     def finalize!(field, batch_size)
       field.class.transaction do
         field.lock!
-        ids = value_ids(field.id, 0, batch_size + 1)
-        raise "field deletion residual drain exceeded batch_size" if ids.size > batch_size
+        values = locked_values(field.id, 0, batch_size + 1).to_a
+        raise "field deletion residual drain exceeded batch_size" if values.size > batch_size
 
-        ids.each { |value_id| TypedEAV::Value.find(value_id).destroy! }
+        values.each(&:destroy!)
         raise "field deletion residual proof failed" if TypedEAV::Value.exists?(field_id: field.id)
 
         field.destroy!

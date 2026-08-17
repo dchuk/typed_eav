@@ -42,14 +42,16 @@ RSpec.describe TypedEAV::FieldDeletion, :event_callbacks, :real_commits do
     failure_pending = true
     failing_id = values.last.id
 
-    allow(TypedEAV::Value).to receive(:find).and_wrap_original do |original, value_id|
-      value = original.call(value_id)
-      if value_id == failing_id && failure_pending
+    original_destroy = TypedEAV::Value.instance_method(:destroy!)
+    # rubocop:disable RSpec/AnyInstance -- inject one deterministic later-batch failure.
+    allow_any_instance_of(TypedEAV::Value).to receive(:destroy!) do |value|
+      if value.id == failing_id && failure_pending
         failure_pending = false
-        allow(value).to receive(:destroy!).and_raise(RuntimeError, "forced batch failure")
+        raise "forced batch failure"
       end
-      value
+      original_destroy.bind_call(value)
     end
+    # rubocop:enable RSpec/AnyInstance
 
     expect { field.destroy_with_values_in_batches!(batch_size: 2) }
       .to raise_error(RuntimeError, "forced batch failure")
@@ -63,7 +65,6 @@ RSpec.describe TypedEAV::FieldDeletion, :event_callbacks, :real_commits do
     )
       .to eq(contacts.first(2).to_h { |contact| [contact.id, 1] })
 
-    allow(TypedEAV::Value).to receive(:find).and_call_original
     expect { field.reload.destroy_with_values_in_batches!(batch_size: 2) }.not_to raise_error
     expect(TypedEAV::Field::Base.where(id: field.id)).to be_empty
     expect(TypedEAV::Value.where(field_id: field.id)).to be_empty
@@ -143,6 +144,49 @@ RSpec.describe TypedEAV::FieldDeletion, :event_callbacks, :real_commits do
 
     expect { field.destroy_with_values_in_batches!(batch_size: 1) }.not_to raise_error
     expect(TypedEAV::Value.where(field_id: field.id)).to be_empty
+  end
+
+  it "blocks concurrent re-parenting until the locked batch destroys the Value" do
+    contact = create(:contact)
+    field = build_field(name: "reparent_target")
+    sibling = build_field(name: "reparent_sibling")
+    target = TypedEAV::Value.create!(entity: contact, field: field, value: "target")
+    result = Queue.new
+    ready = Queue.new
+    barrier_used = false
+
+    allow(described_class).to receive(:locked_values).and_wrap_original do |original, field_id, last_id, limit|
+      relation = original.call(field_id, last_id, limit)
+      if field_id == field.id && last_id.zero? && limit == 1 && !barrier_used
+        barrier_used = true
+        locked = relation.to_a
+        thread = Thread.new do
+          TypedEAV::Value.connection_pool.with_connection do
+            connection = TypedEAV::Value.connection
+            connection.execute("SET lock_timeout = '250ms'")
+            ready << :attempting
+            begin
+              TypedEAV::Value.where(id: target.id).update_all(field_id: sibling.id)
+              result << :reparented
+            rescue ActiveRecord::LockWaitTimeout
+              result << :blocked
+            ensure
+              connection.execute("SET lock_timeout = '0'")
+            end
+          end
+        end
+        expect(ready.pop).to eq(:attempting)
+        thread.join
+        expect(result.pop).to eq(:blocked)
+        locked
+      else
+        relation
+      end
+    end
+
+    expect { field.destroy_with_values_in_batches!(batch_size: 1) }.not_to raise_error
+    expect(TypedEAV::Value.where(id: target.id)).to be_empty
+    expect(TypedEAV::Value.where(field_id: sibling.id)).to be_empty
   end
   # rubocop:enable RSpec/ExampleLength
 end
