@@ -18,6 +18,7 @@ module TypedEAV
   autoload :FilterQuery
   autoload :BulkRead
   autoload :BulkWrite
+  autoload :BulkUpsert
   autoload :Partition
   autoload :QueryBuilder
   autoload :SchemaPortability

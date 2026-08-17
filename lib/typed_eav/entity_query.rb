@@ -203,6 +203,21 @@ module TypedEAV
       )
     end
 
+    # Reduced-semantics SQL bulk upsert. This is deliberately separate from
+    # the callback- and validation-preserving APIs above.
+    def bulk_upsert_typed_eav_values(
+      records, values_by_field_name, acknowledge_reduced_semantics: false, transaction: :all, chunk_size: nil
+    )
+      TypedEAV::BulkUpsert.execute(
+        host_class: self,
+        records: records,
+        values_by_field_name: values_by_field_name,
+        acknowledge_reduced_semantics: acknowledge_reduced_semantics,
+        transaction: transaction,
+        chunk_size: chunk_size,
+      )
+    end
+
     private
 
     # Translates a resolved scope into the `(scope, parent_scope)` pair
