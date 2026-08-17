@@ -191,3 +191,35 @@ No Phase 2 or tournament result may be treated as representative until a larger 
 `bench/scalar_index_benchmark.rb` provides a benchmark-only smoke tier for the three scalar layouts: current covering `(field_id, value) INCLUDE (entity_id, entity_type)`, partial non-covering `(field_id, value) WHERE value IS NOT NULL`, and partial covering `(field_id, value) INCLUDE (entity_id) WHERE value IS NOT NULL`. It creates a uniquely prefixed disposable database, validates the prefix before cleanup, and records a post-drop proof. The deterministic seed-2201 dataset covers integer, decimal, boolean, date, datetime, and string values, with explicit NULL and missing-row controls. The checked-in result is smoke-only: it reports bytes, bytes/live logical value, insert/update and equality/range samples, WAL, EXPLAIN JSON, index-only indicators, and `pg_stat_user_indexes`, but does not select a layout, justify a NULL index, or authorize a migration. Representative tier execution is gated on an explicitly qualified environment.
 
 The accepted harness streams deterministic rows directly into PostgreSQL and computes incremental per-candidate SHA-256 checksums without retaining the complete dataset in Ruby. Smoke projected and actual disposable-database ceilings remain 500 MiB. Representative creation requires `TYPED_EAV_REPRESENTATIVE_OK=1` and `max(30 GiB, projected footprint + 8 GiB)` free on the PostgreSQL data volume; evidence records the data directory, observed/required bytes, reserve, and qualification. The reserve is rechecked during execution, and an unqualified current host refuses before `CREATE DATABASE`.
+### T091 bulk-write surface
+
+T091 adds a separately named, explicitly acknowledged reduced-semantics bulk
+upsert and opt-in chunked semantic transactions while preserving the default
+transaction behavior. The benchmark protocol compares isolated insert and
+update workloads, validates exact logical identity, and records callback,
+version, SQL, resource, and transaction evidence. Local latency remains
+single-session evidence and must not be read as an absolute production claim.
+The reduced path retains cast/domain/entity/partition validation and validation
+callbacks, requires one connection pool and the entity/field conflict target,
+but skips host/Value persistence callbacks, host saves, versioning, and delete
+shorthand. Semantic `:all` is one outer transaction with savepoint isolation;
+`:chunks` repeats that envelope per chunk with earlier chunk commits durable.
+
+### T092 bounded local bulk-write closure
+
+T092 closes the available local Phase 6 evidence ceiling with an isolated
+100/1,000-host tier. The local runner uses project Ruby 3.4.4, an explicit
+unique `DATABASE_URL`, a 2 GiB disk floor, schema/current-database/table
+identity checks, and an early cleanup trap. It never selects or mutates
+`typed_eav_test`. The validated artifact contains 18 cells across insert,
+update without versioning, and update with versioning for semantic, fast, and
+chunked surfaces. Every cell has exact logical identity and semantic/chunk
+parity. At 1,000 hosts, fast records 4 SQL statements and one typed-value
+write versus 23,001/10,000 for non-versioned semantic/chunk paths; versioned
+semantic/chunk paths record 63,001 statements and 10,000 audit rows, while
+fast records zero audit rows. RSS is unsupported on the local macOS host and
+WAL is supported. This is bounded local diagnostic evidence only: it does not
+claim representative latency, production throughput, 10,000 hosts, or
+100,000 values. The remote runner is statically corrected to use the unique
+database through `DATABASE_URL` and a host-side tar-to-stdout export, but is
+not executed by T092.

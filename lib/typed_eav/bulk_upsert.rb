@@ -3,8 +3,9 @@
 module TypedEAV
   # Reduced-semantics, SQL-oriented bulk value writer.
   #
-  # This API intentionally does not run host callbacks, host validations,
-  # Value callbacks, versioning, or per-record error isolation. Callers must
+  # This API runs casting/domain/entity/partition validation and validation
+  # callbacks, but does not run host callbacks/validations or host saves, Value
+  # persistence callbacks, versioning, or per-record error isolation. Callers must
   # acknowledge those semantics explicitly. It pre-casts and validates every
   # row in a transaction unit before issuing one upsert batch on the host
   # model's connection. Scope resolution and field casting remain authoritative.

@@ -1492,3 +1492,17 @@ The definitions helpers used to live as class methods on `HasTypedEav` before 0.
 ## License
 
 MIT
+## Bulk writes
+
+`bulk_upsert_typed_eav_values` is an explicit reduced-semantics API: it
+prevalidates/casts values and performs a PostgreSQL upsert, while intentionally
+omitting host callbacks and versioning. Use the regular bulk writer when those
+semantics are required; chunked semantic transactions are opt-in.
+
+The fast path still casts and runs domain, entity, partition, and validation
+callbacks before its single upsert against the exact entity/field conflict
+target; it omits host saves/host callbacks, Value persistence callbacks,
+delete shorthand, and versioning. It requires one shared connection pool and
+returns validation errors before SQL. `:all` is one unit; `:chunks` commits
+completed chunks before a later failure. Semantic writes retain host saves,
+per-record savepoint/error isolation, and one outer `:all` transaction.

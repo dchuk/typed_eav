@@ -436,3 +436,5 @@ Initial release.
 [0.2.1]: https://github.com/dchuk/typed_eav/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.1.0
+* Add explicit reduced-semantics bulk upsert and opt-in semantic transaction
+  chunking, with isolated characterization evidence for insert/update workloads.

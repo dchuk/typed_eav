@@ -297,3 +297,39 @@ at both 10 and 20 filters in at least three families; and bounded, pre-specified
 planning, buffer, and plan-shape regressions. Cross-scope high-cardinality
 planning is still required before Gate 4. Any claim beyond PostgreSQL 17 also
 requires evidence on the PostgreSQL versions for which it is made.
+### T091 bulk-write characterization
+
+`bulk_write_benchmark.rb` compares the unchanged semantic writer with the
+explicitly acknowledged reduced-semantics `bulk_upsert` and opt-in chunked
+semantic transactions. The protocol records isolated insert and update
+workloads, exact logical checksums, callback/version/result evidence, SQL
+counts, allocations, GC, RSS/WAL support, and semantic/chunk parity. Fast
+upsert intentionally omits host callbacks and version rows; callers must opt
+into that reduced contract. Local timing is single-session evidence and is not
+an absolute latency claim. The representative wrapper uses the shared T086
+runner contract and does not repeat its cancellation drill.
+
+Fast upsert validates casting, domain/entity/partition constraints, and Value
+validation callbacks, but intentionally skips host persistence callbacks,
+Value persistence callbacks, versioning, and delete shorthand. It requires the
+host, Value, and Field pools to match and targets the entity/field conflict
+index. Semantic `:all` keeps one outer transaction with per-record savepoints;
+`:chunks` repeats that envelope per chunk, so prior chunks survive later errors.
+
+### T092 bounded local bulk-write evidence
+
+`bench/docker/bulk-write/run_local.sh` creates one exact-prefix disposable
+PostgreSQL database, verifies `current_database()` and the required TypedEAV
+tables, runs the dummy Rails configuration through an explicit `DATABASE_URL`,
+and drops the database from an early cleanup trap. It refuses below a 2 GiB
+source-volume floor and never selects or mutates `typed_eav_test`.
+
+The bounded `--tier bounded` protocol measures 18 cells: hosts_100 and
+hosts_1000 crossed with insert/versioning-off, update/versioning-off, and
+update/versioning-on across semantic, fast, and chunks. Every cell has exact
+logical digest and semantic/chunk identity. At 1,000 hosts, fast uses 4 SQL
+statements and one typed-value write versus 23,001/10,000 for non-versioned
+semantic/chunks; versioned semantic/chunks use 63,001 statements and produce
+10,000 audit rows, while fast produces zero. RSS is unsupported on macOS; WAL
+is available. These are local single-session diagnostics, not representative
+or production-throughput claims.
