@@ -76,27 +76,30 @@ repair process if a consumer needs one. Version rows remain append-only;
 retention, archival, and deletion are application-owned policies and are not
 automated here.
 
-## Field deletion contract for a later implementation
+## Implemented bounded Field deletion contract
 
 Field-dependent destruction must not use `delete_all`, broad unscoped deletes,
-or early Field removal. A later implementation should:
+or early Field removal. The explicit
+`Field#destroy_with_values_in_batches!(batch_size: 1_000)` API:
 
 1. identify the exact `field_id` and process dependent Values in bounded
    primary-key keyset batches (`id > last_id`, ordered by `id`);
 2. destroy each Value through Active Record so Value callbacks and the selected
    versioning boundary run, while retaining exact-field and source-transaction
    isolation;
-3. commit each bounded batch, recording only the last successfully drained
-   key, so a failure resumes from remaining rows without skipping or repeating
-   committed work;
+3. commits each bounded batch independently; a retry re-derives the remaining
+   rows from the exact-field keyset without skipping or repeating committed
+   work;
 4. retry/resume until an exact-field query proves no dependent Values remain;
 5. destroy the Field only after the final drain proof, preserving its own
    callbacks and policy semantics.
 
-The operation must be idempotent, preserve ordering by keyset position, and
-retain enough logs/metrics to distinguish a committed batch from a failed or
-unattempted batch. It must not claim that an after-commit callback failure
-rolled back source data.
+The operation is idempotent and preserves ordering by keyset position. It is
+explicitly rejected inside an open transaction or when Field, Value, and
+ValueVersion do not share one connection pool. The final drain locks the Field,
+accepts at most one bounded residual batch, proves zero exact-field rows, and
+only then invokes ordinary Field destruction. It does not claim that an
+after-commit callback failure rolled back source data.
 
 After the final Field deletion, the foreign keys intentionally null both
 `ValueVersion.value_id` (when its Value is subsequently gone) and

@@ -307,6 +307,11 @@ internal helper relocation (see "Changed" below). Anchored by ADRs
 
 ### Internal
 
+- Added the opt-in `Field#destroy_with_values_in_batches!` API for exact-field,
+  callback-preserving keyset deletion. It commits bounded Value destroy batches,
+  retains the Field across failure, and performs locked bounded finalization;
+  ordinary Field destruction and dependency policies remain unchanged.
+
 - Atomic ValueVersion writes are installed from the Value callback chains at
   boot, with an identical-pool guard and idempotent recovery if a callback is
   removed. BulkWrite keeps caller context unchanged while correlating version

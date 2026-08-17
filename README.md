@@ -965,6 +965,17 @@ bypasses AR callbacks. Only the Field `:destroy` event fires. Use
 `field_dependent: :destroy` if your consumer needs per-Value events on
 field deletion.
 
+For a persisted `field_dependent: :destroy` field with a large population,
+call `field.destroy_with_values_in_batches!(batch_size: 1_000)` outside an
+open transaction. The opt-in API selects only that exact `field_id` in ordered
+primary-key batches, calls `Value#destroy!` for callback/version behavior, and
+commits each batch independently. A retry resumes from the remaining rows. The
+Field is retained until a locked, bounded residual drain proves zero rows, then
+its ordinary callback-preserving `destroy!` runs. The API rejects unsaved or
+non-destroy fields, open transactions, invalid batch sizes, and mismatched
+connection pools. Existing `destroy`/`destroy!`, `:nullify`, and `:restrict`
+behavior is unchanged.
+
 ### Thread-local context with `with_context`
 
 ```ruby

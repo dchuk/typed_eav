@@ -247,11 +247,14 @@ checkpoint, cross-transaction total order, or historical-gap repair is promised.
 Version rows are append-only with application-owned retention, and model/
 registry/tenant/snapshot drift is not silently rewritten.
 
-ADR 0013 also defers scalable field deletion: exact-field bounded primary-key
-keyset batches must destroy Values through callbacks/versioning, commit each
-batch, resume from the last committed key, prove the exact field is drained,
-and delete the Field only after that final proof. No production durability,
-outbox, queue, migration, or deletion implementation is included here.
+ADR 0013 now records the implemented scalable field deletion seam:
+`Field#destroy_with_values_in_batches!(batch_size: 1_000)` uses exact-field
+bounded primary-key keyset batches, destroys Values through callbacks/versioning,
+commits each batch, resumes from remaining rows after failure, and retains the
+Field until locked bounded finalization proves the exact field is drained. It
+is rejected inside open transactions and on mismatched Field/Value/ValueVersion
+connection pools. No queue, checkpoint, migration, or bulk-delete shortcut is
+introduced; existing dependency behavior remains unchanged.
 After final Field deletion, nullable `value_id`/`field_id` can remove direct
 Value/Field identity from retained version rows; entity identity and payload are
 the remaining audit keys, and this tradeoff is explicit.

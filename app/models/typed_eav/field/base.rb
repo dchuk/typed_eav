@@ -80,6 +80,13 @@ module TypedEAV
       # and `throw(:abort)`s, mirroring AR's `dependent: :restrict_with_error`.
       before_destroy :dispatch_field_dependent
 
+      # Explicit large-population deletion. The default `destroy` and
+      # `destroy!` lifecycle remains unchanged; callers opt into resumable
+      # keyset batches through this method.
+      def destroy_with_values_in_batches!(batch_size: 1_000)
+        TypedEAV::FieldDeletion.destroy!(self, batch_size: batch_size)
+      end
+
       # Phase 03 event dispatch. SINGLE callback (no `on:` filter) that
       # branches across the four change_types in `_dispatch_field_change`.
       # Three reasons for one-callback-with-branch over the three-callback-
