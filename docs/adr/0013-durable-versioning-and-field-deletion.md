@@ -31,17 +31,46 @@ fail closed.
 ## Decision
 
 Characterization selects synchronous `ValueVersion` writes inside the source
-transaction as the smallest follow-up boundary, conditional on proving that
-`TypedEAV::Value` and `TypedEAV::ValueVersion` use the same connection pool.
-That is a proposal for the next implementation task, not a production change in
-this ADR task. The implementation must preserve the public callback contract:
-application callbacks remain best-effort, rescued and logged after commit, and
-must not be presented as durable or fail-closed delivery.
+transaction as the smallest follow-up boundary. Enablement remains
+boot-latched: when versioning is disabled at boot, no subscriber is registered
+and the disabled path adds no per-mutation hot-path predicate. When enabled,
+activation must fail closed unless
+`TypedEAV::Value.connection_pool.equal?(TypedEAV::ValueVersion.connection_pool)`
+is true. A pool mismatch is a startup/configuration error, not a permitted
+best-effort mode. This is a proposal for the next implementation task, not a
+production change in this ADR task.
+
+The implementation must preserve the existing write contract: registry opt-in,
+exact entity/field tuple and tenant/partition semantics, before/after typed
+snapshots, context, actor resolution, `changed_at`, version-group selection,
+and pending-marker cleanup on both commit and rollback. A source rollback must
+roll back its synchronous version rows; a successful source mutation produces
+exactly one corresponding version row. Public application callbacks remain
+best-effort, rescued and logged after commit, and must not be presented as
+durable or fail-closed delivery.
 
 The generic outbox is deferred. It becomes appropriate only if version events
 must cross a database/process boundary or require an independently operated
 consumer. Until then, its additional queue, retry, idempotency, ordering, and
 retention surface is not justified.
+
+## Durability boundaries and historical limits
+
+Idempotency is one version row per successful source mutation. A caller owns a
+whole-source retry: retry the complete source transaction after a rollback or
+connection failure, rather than replaying an individual version write. There is
+no asynchronous replay cursor, checkpoint protocol, or durable event identity
+in this proposal. Ordering is the order of mutations within one source
+transaction; no total order is promised across concurrent transactions or
+databases.
+
+The synchronous boundary does not repair historical gaps created by the current
+after-commit path, and it does not infer or rewrite history after model,
+registry, tenant, field, or snapshot semantics drift. Existing gaps remain
+observable historical gaps and require a separately approved, application-owned
+repair process if a consumer needs one. Version rows remain append-only;
+retention, archival, and deletion are application-owned policies and are not
+automated here.
 
 ## Field deletion contract for a later implementation
 
@@ -64,6 +93,13 @@ The operation must be idempotent, preserve ordering by keyset position, and
 retain enough logs/metrics to distinguish a committed batch from a failed or
 unattempted batch. It must not claim that an after-commit callback failure
 rolled back source data.
+
+After the final Field deletion, the foreign keys intentionally null both
+`ValueVersion.value_id` (when its Value is subsequently gone) and
+`ValueVersion.field_id` (when the Field is gone). The durable `entity_type`,
+`entity_id`, and payload can remain queryable, but direct Value/Field identity is
+then lost. This is an accepted identity tradeoff, not something the ADR hides
+or promises to reconstruct with a schema snapshot.
 
 ## Evidence and limits
 

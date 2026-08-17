@@ -230,15 +230,28 @@ writer raises, and a field-dependent Value cascade can likewise remain
 committed with no version row. This evidence does not claim rollback from an
 `after_commit` failure. ADR 0013 compares the current after-commit path, a
 synchronous source-transaction version write, and a generic outbox. It selects
-synchronous version writes for a later implementation only if `Value` and
-`ValueVersion` share one connection pool; public application callbacks remain
-best-effort rescued/logged after-commit hooks.
+synchronous version writes for a later implementation with boot-latched
+enablement and a fail-closed identical `Value.connection_pool`/
+`ValueVersion.connection_pool` guard. Disabled boot has no hot-path predicate.
+Registry opt-in, exact tenant/entity/field semantics, snapshots, context, actor,
+changed_at, version groups, marker cleanup, and rollback behavior remain
+preserved. Public application callbacks remain best-effort rescued/logged
+after-commit hooks.
+
+The proposed boundary is one version row per successful mutation. Retry belongs
+to the caller at the whole-source-transaction level; no async replay,
+checkpoint, cross-transaction total order, or historical-gap repair is promised.
+Version rows are append-only with application-owned retention, and model/
+registry/tenant/snapshot drift is not silently rewritten.
 
 ADR 0013 also defers scalable field deletion: exact-field bounded primary-key
 keyset batches must destroy Values through callbacks/versioning, commit each
 batch, resume from the last committed key, prove the exact field is drained,
 and delete the Field only after that final proof. No production durability,
 outbox, queue, migration, or deletion implementation is included here.
+After final Field deletion, nullable `value_id`/`field_id` can remove direct
+Value/Field identity from retained version rows; entity identity and payload are
+the remaining audit keys, and this tradeoff is explicit.
 
 ### T092 bounded local bulk-write closure
 
