@@ -2,22 +2,17 @@
 
 Add dynamic custom fields to ActiveRecord models at runtime, backed by **native database typed columns** instead of jsonb blobs.
 
-TypedEAV uses a hybrid EAV (Entity-Attribute-Value) pattern where each value type gets its own column (`integer_value`, `date_value`, `string_value`, etc.) in the values table. This means the database can natively index, sort, and enforce constraints on your custom field data with zero runtime type casting.
+TypedEAV uses a hybrid EAV (Entity-Attribute-Value) pattern where each value type gets its own column (`integer_value`, `date_value`, `string_value`, etc.) in the values table. This lets PostgreSQL index, sort, and enforce constraints on custom field data while the Field owns input normalization and validation.
 
 ## Why Typed Columns?
 
-Most Rails custom field gems serialize everything into a single `jsonb` column. When you query, they generate SQL like:
+JSONB is a useful fit when an application owns stable paths and wants expression B-tree indexes or GIN containment indexes. A single JSONB document is not inherently faster or slower than TypedEAV; the right choice depends on access patterns, selectivity, update shape, and operational constraints. For example, an application-owned expression index may support a stable path:
 
 ```sql
 CAST(value_meta->>'const' AS bigint) = 42
 ```
 
-This works, but:
-
-- **No B-tree indexes** on the actual values (only GIN for jsonb containment)
-- **Runtime CAST overhead** on every query
-- **No database-level type enforcement** (a "number" could be stored as a string)
-- **The query planner can't optimize** range scans, sorts, or joins
+This can work well for stable, known paths. It does not provide the same column-level schema and typed-value contract as TypedEAV, and arbitrary paths still require application-owned index and validation decisions. GIN is useful for containment workloads; expression B-trees are useful for selected stable scalar paths.
 
 TypedEAV stores values in native columns, so queries become:
 
@@ -25,7 +20,7 @@ TypedEAV stores values in native columns, so queries become:
 WHERE integer_value = 42
 ```
 
-Standard B-tree indexes work. Range scans work. The query planner is happy. ActiveRecord handles all type casting automatically through the column's registered type.
+TypedEAV supplies stable typed columns and ordinary per-type indexes. Range scans and sorts can use those indexes, while each Field casts and validates the operand according to its own semantics before the query reaches the typed column. Neither design is a universal storage winner; choose from measured workload fit.
 
 ## Compatibility
 
@@ -157,7 +152,7 @@ contact.typed_eav_hash              # => { "age" => 40, "status" => "active", ..
 
 ### 4. Query with the DSL
 
-This is where typed columns pay off. All queries go through native columns with proper indexes.
+Queries use native typed columns and the indexes shipped for each type. The Field remains the owner of operand casting and validation; the query builder receives a field-normalized value rather than applying a generic Active Record cast.
 
 ```ruby
 # Short form - single field filter
@@ -304,20 +299,20 @@ adaptive or replacement proposal. See
 You don't need to think about types when querying. Rails handles it:
 
 ```ruby
-# You pass a string, Rails casts to integer via the column type
+# The Integer Field casts and validates the operand before SQL generation
 Contact.with_field("age", :gt, "21")
 # SQL: WHERE integer_value > 21  (not '21')
 
-# You pass a string, Rails casts to date
+# The Date Field owns date parsing and validation
 Contact.with_field("birthday", :lt, "2000-01-01")
 # SQL: WHERE date_value < '2000-01-01'::date
 
-# Boolean columns handle truthy/falsy casting
+# The Boolean Field owns truthy/falsy casting
 Contact.with_field("active", "true")
 # SQL: WHERE boolean_value = TRUE
 ```
 
-This works because `ActiveRecord::Base.columns_hash` knows every column's type from the schema, and `where()` / Arel predicates automatically cast values through the column's registered `ActiveRecord::Type`.
+Field-owned casting keeps query operands aligned with write semantics, including strict range/array shapes and specialized fields such as Currency and Reference. The resulting normalized operand is bound against the Field's typed column; Active Record supplies SQL bind plumbing, not the field's domain semantics.
 
 ## Forms
 
@@ -1410,6 +1405,11 @@ TypedEAV::QueryBuilder                ← low altitude: per-field SQL primitive
 2. Issues one batched `WHERE entity_id IN (...) AND field_id IN (...)` query per partition.
 3. Returns a `{record_id => {field_name => value}}` map.
 
+The final production characterization reduced the 1,002 SQL statements observed
+across 1,000 scopes to three for the same BulkRead shape. This is a statement-
+count result, not a representative throughput claim; applications should still
+measure their own scope cardinality, selected fields, hydration, and contention.
+
 Single-record reads (`typed_eav_value`, `typed_eav_hash`) live on `InstanceMethods` and use the same partition helpers but without batching.
 
 ### Bulk writes: `BulkWrite`
@@ -1508,10 +1508,28 @@ delete shorthand, and versioning. It requires one shared connection pool and
 returns validation errors before SQL. `:all` is one unit; `:chunks` commits
 completed chunks before a later failure. Semantic writes retain host saves,
 per-record savepoint/error isolation, and one outer `:all` transaction.
+
+BulkWrite evidence is intentionally bounded to the exercised 100- and 1,000-host
+lanes. It does not establish 10,000- or 100,000-host throughput, nor does it
+justify a universal batch size or storage choice.
+
+### Operational guarantees
+
+The semantic writer preserves the caller's transaction and callback/versioning
+contract. Version rows are written in the source transaction, so a rollback
+rolls back the Value mutation and its audit row together. The reduced-semantics
+upsert is intentionally separate and does not claim those callbacks or audit
+guarantees.
+
+Field deletion has a callback-preserving, keyset-batched path that locks and
+destroys only the exact field's Values before bounded finalization. It scales by
+bounded primary-key batches and preserves the Field if a batch fails; it is not
+a claim of unbounded deletion throughput.
+
 ### Default backfill narrowing
 
 `Field::Base#backfill_default!` optionally accepts an exact-host
-`ActiveRecord::Relation` to narrow eligible entities in SQL. The default
+`ActiveRecord::Relation` to SQL-narrow eligible entities before batching. The default
 all-host behavior remains unchanged; partition checks, batch transactions,
 callbacks, validations, idempotence, versions, and errors remain in force.
 Typed storage defines logical missingness across all declared cells, so a

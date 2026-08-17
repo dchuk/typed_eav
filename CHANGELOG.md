@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Architecture-independent release hardening after 0.6.0. This section records
+the implemented program work without changing the gem version or release metadata.
+
+### Changed
+
+- Query operands are normalized and validated by the owning Field before SQL is
+  built. This keeps scalar, range, array, Currency, Reference, and text-search
+  operands aligned with write semantics; Active Record remains responsible for
+  SQL bind plumbing.
+- JSONB and TypedEAV are documented as workload-dependent storage choices.
+  Applications can own expression B-tree indexes for stable JSONB paths and GIN
+  indexes for containment; TypedEAV supplies stable typed columns and ordinary
+  per-type indexes. No final storage winner is claimed without representative
+  workload evidence.
+
+### Added
+
+- SQL-narrowed default backfills through an exact-host relation, while retaining
+  partition checks, batching, callbacks, validations, idempotence, versions,
+  error reporting, and Field-owned logical-missing detection across multi-cell
+  storage.
+- Callback-preserving, keyset-batched exact-field deletion with locked bounded
+  finalization.
+- Explicit reduced-semantics bulk upsert plus opt-in semantic transaction
+  chunking, while transaction `:all` remains the default.
+
+### Performance
+
+- BulkRead characterization reduced the 1,002 statements observed across 1,000
+  scopes to three for the same shape. This is a statement-count result, not a
+  representative throughput claim.
+- BulkWrite evidence remains bounded to the exercised 100- and 1,000-host
+  lanes; no 10k/100k throughput or universal batch-size claim is made.
+
+### Reliability
+
+- ValueVersion rows are written in the source transaction, preserving atomic
+  rollback with the Value mutation and avoiding a false after-commit rollback
+  assumption.
+
 ## [0.6.0] - 2026-07-13
 
 Hardens correctness, query efficiency, installation confidence, and release
@@ -447,6 +487,3 @@ Initial release.
 [0.2.1]: https://github.com/dchuk/typed_eav/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.1.0
-* Add explicit reduced-semantics bulk upsert and opt-in semantic transaction
-  chunking, with isolated characterization evidence for insert/update workloads.
-* Add optional exact-host relation narrowing for default backfills and field-owned logical-missing detection for multi-cell storage.
