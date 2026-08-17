@@ -24,19 +24,25 @@ module TypedEAV
   # `execute`'s byte-for-byte behavior contract.
   module BulkWrite
     class << self
-      def execute(host_class:, records:, values_by_field_name:, version_grouping: :default)
-        validate_inputs!(records, values_by_field_name, version_grouping)
+      # rubocop:disable Metrics/ParameterLists -- transaction controls are explicit API contract.
+      def execute(
+        host_class:, records:, values_by_field_name:, version_grouping: :default, transaction: :all, chunk_size: nil
+      )
+        validate_inputs!(records, values_by_field_name, version_grouping, transaction, chunk_size)
 
         records = records.to_a
         return { successes: [], errors_by_record: {} } if records.empty?
 
         validate_record_classes!(host_class, records)
+        ensure_connection_owner!(host_class)
 
         effective_grouping = resolve_grouping(version_grouping)
         vbn = values_by_field_name.transform_keys(&:to_s)
         field_uuids = effective_grouping == :per_field ? vbn.keys.index_with { SecureRandom.uuid } : nil
 
-        execute_pairs(records.map { |r| [r, vbn] }, effective_grouping, field_uuids)
+        execute_pairs(
+          host_class, records.map { |r| [r, vbn] }, effective_grouping, field_uuids, transaction, chunk_size
+        )
       end
 
       # Per-record-varying sibling to `execute`. Accepts a `Hash<host_record,
@@ -45,12 +51,15 @@ module TypedEAV
       #
       # Empty `values_by_record` short-circuits to the empty result without
       # opening a transaction (matches `execute`'s empty-records contract).
-      def execute_per_record(host_class:, values_by_record:, version_grouping: :default)
-        validate_per_record_inputs!(values_by_record, version_grouping)
+      def execute_per_record(
+        host_class:, values_by_record:, version_grouping: :default, transaction: :all, chunk_size: nil
+      )
+        validate_per_record_inputs!(values_by_record, version_grouping, transaction, chunk_size)
 
         return { successes: [], errors_by_record: {} } if values_by_record.empty?
 
         validate_record_classes!(host_class, values_by_record.keys, method: :bulk_set_typed_eav_values_per_record)
+        ensure_connection_owner!(host_class)
 
         effective_grouping = resolve_grouping(version_grouping)
         pairs = values_by_record.map { |record, vbn| [record, vbn.transform_keys(&:to_s)] }
@@ -58,8 +67,9 @@ module TypedEAV
                         pairs.flat_map { |(_record, vbn)| vbn.keys }.uniq.index_with { SecureRandom.uuid }
                       end
 
-        execute_pairs(pairs, effective_grouping, field_uuids)
+        execute_pairs(host_class, pairs, effective_grouping, field_uuids, transaction, chunk_size)
       end
+      # rubocop:enable Metrics/ParameterLists
 
       def apply_record_save(record:, vbn:, effective_grouping:, uuids:, accumulator:)
         push_uuid = case effective_grouping
@@ -97,26 +107,31 @@ module TypedEAV
       # the same persisted row iterate each instance separately — matters
       # for `execute`'s byte-for-byte behavior contract on
       # `[Entity.find(1), Entity.find(1)]`-shaped input.
-      def execute_pairs(pairs, effective_grouping, field_uuids)
+      # rubocop:disable Metrics/MethodLength -- transaction wrapper retains one readable semantic loop.
+      # rubocop:disable Metrics/ParameterLists -- internal transaction controls stay explicit.
+      def execute_pairs(host_class, pairs, effective_grouping, field_uuids, transaction, chunk_size)
         successes = []
         errors_by_record = {}
 
         with_bulk_definitions_memo do
-          ActiveRecord::Base.cache do
-            ActiveRecord::Base.transaction do
-              pairs.each do |(record, vbn)|
-                record_uuid = effective_grouping == :per_record ? SecureRandom.uuid : nil
-                record_field_uuids = record_scoped_field_uuids(field_uuids, vbn)
+          host_class.cache do
+            units = transaction == :all ? [pairs] : pairs.each_slice(chunk_size)
+            units.each do |unit|
+              host_class.transaction do
+                unit.each do |(record, vbn)|
+                  record_uuid = effective_grouping == :per_record ? SecureRandom.uuid : nil
+                  record_field_uuids = record_scoped_field_uuids(field_uuids, vbn)
 
-                with_record_scope(record) do
-                  ActiveRecord::Base.transaction(requires_new: true) do
-                    apply_record_save(
-                      record: record,
-                      vbn: vbn,
-                      effective_grouping: effective_grouping,
-                      uuids: { record: record_uuid, field: record_field_uuids },
-                      accumulator: { successes: successes, errors_by_record: errors_by_record },
-                    )
+                  with_record_scope(record) do
+                    host_class.transaction(requires_new: true) do
+                      apply_record_save(
+                        record: record,
+                        vbn: vbn,
+                        effective_grouping: effective_grouping,
+                        uuids: { record: record_uuid, field: record_field_uuids },
+                        accumulator: { successes: successes, errors_by_record: errors_by_record },
+                      )
+                    end
                   end
                 end
               end
@@ -126,6 +141,8 @@ module TypedEAV
 
         { successes: successes, errors_by_record: errors_by_record }
       end
+      # rubocop:enable Metrics/ParameterLists
+      # rubocop:enable Metrics/MethodLength
 
       # For `:per_field`, the global `field_uuids` map covers the union of
       # field names across all records' value hashes. The per-record save
@@ -184,7 +201,7 @@ module TypedEAV
         ActiveRecord::Type::Boolean.new.cast(flag)
       end
 
-      def validate_inputs!(records, values_by_field_name, version_grouping)
+      def validate_inputs!(records, values_by_field_name, version_grouping, transaction, chunk_size)
         if records.nil?
           raise ArgumentError,
                 "bulk_set_typed_eav_values requires an Enumerable of records, got nil"
@@ -197,9 +214,17 @@ module TypedEAV
         end
 
         validate_grouping!(version_grouping)
+        validate_transaction!(transaction, chunk_size)
       end
 
-      def validate_per_record_inputs!(values_by_record, version_grouping)
+      def ensure_connection_owner!(host_class)
+        pools = [host_class.connection_pool, TypedEAV::Value.connection_pool, TypedEAV::Field::Base.connection_pool]
+        return if pools.map(&:object_id).uniq.one?
+
+        raise ArgumentError, "bulk_write requires host, value, and field connections to share a pool"
+      end
+
+      def validate_per_record_inputs!(values_by_record, version_grouping, transaction, chunk_size)
         unless values_by_record.is_a?(Hash)
           raise ArgumentError,
                 "bulk_set_typed_eav_values_per_record requires a Hash of values_by_record, " \
@@ -215,6 +240,14 @@ module TypedEAV
         end
 
         validate_grouping!(version_grouping)
+        validate_transaction!(transaction, chunk_size)
+      end
+
+      def validate_transaction!(transaction, chunk_size)
+        return if transaction == :all
+        return if transaction == :chunks && chunk_size.is_a?(Integer) && chunk_size.positive?
+
+        raise ArgumentError, "transaction must be :all or :chunks with a positive chunk_size"
       end
 
       def validate_grouping!(version_grouping)

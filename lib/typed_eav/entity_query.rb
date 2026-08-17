@@ -124,12 +124,16 @@ module TypedEAV
     # SAVEPOINT-PER-RECORD failure-isolation envelope. See `TypedEAV::BulkWrite`
     # for the transaction shape, error-aggregation contract, and the
     # `version_grouping:` semantics.
-    def bulk_set_typed_eav_values(records, values_by_field_name, version_grouping: :default)
+    def bulk_set_typed_eav_values(
+      records, values_by_field_name, version_grouping: :default, transaction: :all, chunk_size: nil
+    )
       TypedEAV::BulkWrite.execute(
         host_class: self,
         records: records,
         values_by_field_name: values_by_field_name,
         version_grouping: version_grouping,
+        transaction: transaction,
+        chunk_size: chunk_size,
       )
     end
 
@@ -195,11 +199,15 @@ module TypedEAV
     # write `"name"` share one UUID for that cell; a record writing
     # `"city"` (that no other record writes) gets its own UUID for
     # `"city"`. Overlapping fields share a version group across records.
-    def bulk_set_typed_eav_values_per_record(values_by_record, version_grouping: :default)
+    def bulk_set_typed_eav_values_per_record(
+      values_by_record, version_grouping: :default, transaction: :all, chunk_size: nil
+    )
       TypedEAV::BulkWrite.execute_per_record(
         host_class: self,
         values_by_record: values_by_record,
         version_grouping: version_grouping,
+        transaction: transaction,
+        chunk_size: chunk_size,
       )
     end
 

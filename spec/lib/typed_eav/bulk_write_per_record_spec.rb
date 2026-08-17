@@ -86,6 +86,45 @@ RSpec.describe "Entity.bulk_set_typed_eav_values_per_record" do
     end
   end
 
+  describe "chunk transaction boundaries" do
+    let!(:age_field) { create(:integer_field, name: "age", entity_type: "Contact", scope: "tenant_1") }
+    let!(:alice) { create(:contact, tenant_id: "tenant_1") }
+    let!(:bob) { create(:contact, tenant_id: "tenant_1") }
+
+    it "commits the prior per-record chunk before a later exception" do
+      original = TypedEAV::BulkWrite.method(:apply_record_save)
+      allow(TypedEAV::BulkWrite).to receive(:apply_record_save) do |**kwargs|
+        raise "forced chunk failure" if kwargs[:record] == bob
+
+        original.call(**kwargs)
+      end
+      expect do
+        Contact.bulk_set_typed_eav_values_per_record(
+          { alice => { age: 1 }, bob => { age: 2 } }, transaction: :chunks, chunk_size: 1
+        )
+      end.to raise_error("forced chunk failure")
+      expect(TypedEAV::Value.where(entity_id: alice.id).count).to eq(1)
+      expect(TypedEAV::Value.where(entity_id: bob.id).count).to eq(0)
+    end
+
+    it "rejects invalid chunk options" do
+      expect { Contact.bulk_set_typed_eav_values_per_record({ alice => { age: 1 } }, transaction: :chunks) }
+        .to raise_error(ArgumentError)
+      expect { Contact.bulk_set_typed_eav_values_per_record({ alice => { age: 1 } }, transaction: :bogus) }
+        .to raise_error(ArgumentError)
+    end
+
+    it "fails closed before per-record writes on a pool mismatch" do
+      allow(Contact).to receive(:connection_pool).and_return(
+        instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool),
+      )
+      expect do
+        Contact.bulk_set_typed_eav_values_per_record({ alice => { age: 1 } })
+      end.to raise_error(ArgumentError, /share a pool/)
+      expect(TypedEAV::Value.where(entity_id: alice.id)).to be_empty
+    end
+  end
+
   # ────────────────────────────────────────────────────────────
   # Thread-local memo lifecycle
   # ────────────────────────────────────────────────────────────

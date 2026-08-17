@@ -54,11 +54,18 @@ module TypedEAV
 
     # ── Validations ──
 
-    validates :field, uniqueness: { scope: %i[entity_type entity_id] }
+    # BulkUpsert rejects duplicate input keys globally and uses one database
+    # upsert for the unit. Skip only this persisted-row probe in that explicit
+    # context; all cast, entity, partition, and domain validators still run.
+    validates :field, uniqueness: { scope: %i[entity_type entity_id] }, unless: :bulk_upsert_validation?
     validate :validate_value
     validate :validate_entity_matches_field
     validate :validate_field_scope_matches_entity
     validate :validate_json_size
+
+    def bulk_upsert_validation?
+      validation_context == :bulk_upsert
+    end
 
     # ── Value access ──
     #

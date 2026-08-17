@@ -467,6 +467,19 @@ RSpec.describe "Entity.bulk_set_typed_eav_values" do
         email_uuid = rows_by_field_name["email"].first.version_group_id
         expect(age_uuid).not_to eq(email_uuid)
       end
+
+      it "shares the field UUID across committed chunks" do
+        TypedEAV.with_scope("tenant_1") do
+          Contact.bulk_set_typed_eav_values(
+            [alice, bob], { "age" => 22 }, version_grouping: :per_field, transaction: :chunks, chunk_size: 1
+          )
+        end
+
+        rows = TypedEAV::ValueVersion.where(entity_id: [alice.id, bob.id])
+        expect(rows.count).to eq(2)
+        expect(rows.map(&:version_group_id).uniq.size).to eq(1)
+        expect(rows.first.version_group_id).to be_present
+      end
     end
 
     describe "explicit :none" do
@@ -664,6 +677,54 @@ RSpec.describe "Entity.bulk_set_typed_eav_values" do
         expect(v).to be_a(Array)
         expect(v).to all(be_a(String))
       end
+    end
+  end
+
+  describe "chunk transaction boundaries" do
+    let!(:age_field) { create(:integer_field, name: "age", entity_type: "Contact", scope: "tenant_1") }
+    let!(:alice) { create(:contact, tenant_id: "tenant_1") }
+    let!(:bob) { create(:contact, tenant_id: "tenant_1") }
+
+    def raise_on_record(record)
+      original = TypedEAV::BulkWrite.method(:apply_record_save)
+      allow(TypedEAV::BulkWrite).to receive(:apply_record_save) do |**kwargs|
+        raise "forced chunk failure" if kwargs[:record] == record
+
+        original.call(**kwargs)
+      end
+    end
+
+    it "commits prior uniform chunks before a later exception" do
+      raise_on_record(bob)
+      expect do
+        Contact.bulk_set_typed_eav_values([alice, bob], { age: 7 }, transaction: :chunks, chunk_size: 1)
+      end.to raise_error("forced chunk failure")
+      expect(TypedEAV::Value.where(entity_id: alice.id).count).to eq(1)
+      expect(TypedEAV::Value.where(entity_id: bob.id).count).to eq(0)
+    end
+
+    it "rolls back all uniform work under :all" do
+      raise_on_record(bob)
+      expect do
+        Contact.bulk_set_typed_eav_values([alice, bob], { age: 7 }, transaction: :all)
+      end.to raise_error("forced chunk failure")
+      expect(TypedEAV::Value.where(entity_id: [alice.id, bob.id])).to be_empty
+    end
+
+    it "rejects invalid transaction options" do
+      expect { Contact.bulk_set_typed_eav_values([alice], { age: 1 }, transaction: :chunks) }
+        .to raise_error(ArgumentError)
+      expect { Contact.bulk_set_typed_eav_values([alice], { age: 1 }, transaction: :bogus) }
+        .to raise_error(ArgumentError)
+    end
+
+    it "fails closed before semantic writes on a pool mismatch" do
+      allow(Contact).to receive(:connection_pool).and_return(
+        instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool),
+      )
+      expect { Contact.bulk_set_typed_eav_values([alice], { age: 1 }) }
+        .to raise_error(ArgumentError, /share a pool/)
+      expect(TypedEAV::Value.where(entity_id: alice.id)).to be_empty
     end
   end
 end
