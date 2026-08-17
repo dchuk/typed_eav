@@ -328,9 +328,11 @@ idempotent skip behavior, and error propagation.
 Logical missingness is owned by `Field::TypedStorage`: a value is missing only
 when every declared physical cell is nil. Thus a fully empty Currency value is
 backfilled, while a partially populated amount/currency pair is preserved.
-The local benchmark covers default and relation paths at 100, 1,000, and
-10,000 hosts with exact normalized value digests. It is disposable local
-evidence only; latency and throughput are not production claims.
+The rejected T099 benchmark package has been withdrawn. The clean f1d4cb9
+commit therefore has behavioral support for this API and missingness semantics,
+but no accepted comparative-performance or throughput evidence. A fair
+default-versus-SQL-narrowed measurement over equivalent total populations is
+deferred to T100; no local scaling result should be used as a performance claim.
 
 ### T092 bounded local bulk-write evidence
 

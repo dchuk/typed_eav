@@ -216,11 +216,11 @@ validation, idempotence, version, and error behavior.
 
 Missingness now comes from Field typed-storage semantics: all physical cells
 must be nil. This treats fully empty Currency as missing while preserving a
-partially populated Currency row. A six-observation local actual-path artifact
-(100, 1,000, and 10,000 hosts × default/relation) validates exact normalized
-identities and reports SQL, rows, writes, transactions, allocations, RSS/WAL
-support, and throughput. It is disposable local scaling evidence, not a
-representative latency or production-throughput claim.
+partially populated Currency row. The rejected T099 benchmark package is
+withdrawn: f1d4cb9 has behavioral support only, with no accepted comparative-
+performance or throughput evidence. T100 must perform the fair
+default-versus-SQL-narrowed comparison over equivalent total populations before
+any performance claim is made.
 
 ### T092 bounded local bulk-write closure
 
