@@ -237,4 +237,39 @@ RSpec.describe TypedEAV::Value, "versioning integration", :event_callbacks, :rea
       expect(value.pending_version_group_id).to be_nil
     end
   end
+
+  describe "source durability when ValueVersion after_commit fails" do
+    it "keeps a committed Value create while leaving its version row absent" do
+      value = described_class.new(entity: contact, field: field, value: 42)
+      allow(TypedEAV::ValueVersion).to receive(:create!).and_raise(RuntimeError, "version write failed")
+
+      expect { value.save! }.to raise_error(RuntimeError, "version write failed")
+
+      expect(described_class.where(id: value.id)).to exist
+      expect(TypedEAV::ValueVersion.where(entity_id: contact.id)).to be_empty
+    end
+
+    it "keeps a committed Value update while leaving its version row absent" do
+      value = described_class.create!(entity: contact, field: field, value: 41)
+      TypedEAV::ValueVersion.delete_all
+      allow(TypedEAV::ValueVersion).to receive(:create!).and_raise(RuntimeError, "version write failed")
+
+      expect { value.update!(value: 42) }.to raise_error(RuntimeError, "version write failed")
+
+      expect(value.reload.integer_value).to eq(42)
+      expect(TypedEAV::ValueVersion.where(entity_id: contact.id)).to be_empty
+    end
+
+    it "keeps a committed Value destroy while leaving its version row absent" do
+      value = described_class.create!(entity: contact, field: field, value: 42)
+      value_id = value.id
+      TypedEAV::ValueVersion.delete_all
+      allow(TypedEAV::ValueVersion).to receive(:create!).and_raise(RuntimeError, "version write failed")
+
+      expect { value.destroy! }.to raise_error(RuntimeError, "version write failed")
+
+      expect(described_class.where(id: value_id)).not_to exist
+      expect(TypedEAV::ValueVersion.where(entity_id: contact.id)).to be_empty
+    end
+  end
 end

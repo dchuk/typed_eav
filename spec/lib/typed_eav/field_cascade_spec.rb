@@ -138,5 +138,34 @@ RSpec.describe TypedEAV::Field::Base, type: :model do
       expect { sibling.destroy }.to change(described_class, :count).by(-1)
     end
   end
+
+  describe "field-dependent destruction when ValueVersion after_commit fails", :event_callbacks, :real_commits do
+    before do
+      TypedEAV.registry.register("Contact", types: nil, versioned: true)
+      TypedEAV::Config.versioning = true
+      TypedEAV::EventDispatcher.register_internal_value_change(
+        TypedEAV::Versioning::Subscriber.method(:call),
+      )
+    end
+
+    after { TypedEAV.registry.register("Contact", types: nil, versioned: false) }
+
+    it "keeps the field and Value cascade committed while the version row is absent" do
+      contact = create(:contact)
+      field = create(:text_field, name: "failed_version_cascade", entity_type: "Contact",
+                                  field_dependent: "destroy")
+      value = TypedEAV::Value.create!(entity: contact, field: field, value: "v")
+      field_id = field.id
+      value_id = value.id
+      TypedEAV::ValueVersion.delete_all
+      allow(TypedEAV::ValueVersion).to receive(:create!).and_raise(RuntimeError, "version write failed")
+
+      expect { field.destroy! }.to raise_error(RuntimeError, "version write failed")
+
+      expect(described_class.where(id: field_id)).not_to exist
+      expect(TypedEAV::Value.where(id: value_id)).not_to exist
+      expect(TypedEAV::ValueVersion.where(entity_id: contact.id)).to be_empty
+    end
+  end
 end
 # rubocop:enable RSpec/SpecFilePathFormat

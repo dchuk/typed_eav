@@ -222,6 +222,24 @@ performance or throughput evidence. T100 must perform the fair
 default-versus-SQL-narrowed comparison over equivalent total populations before
 any performance claim is made.
 
+### T104 Phase 8 durability characterization
+
+Real-commit regressions establish the current boundary: a `Value` create,
+update, or destroy can remain committed when its `ValueVersion` after-commit
+writer raises, and a field-dependent Value cascade can likewise remain
+committed with no version row. This evidence does not claim rollback from an
+`after_commit` failure. ADR 0013 compares the current after-commit path, a
+synchronous source-transaction version write, and a generic outbox. It selects
+synchronous version writes for a later implementation only if `Value` and
+`ValueVersion` share one connection pool; public application callbacks remain
+best-effort rescued/logged after-commit hooks.
+
+ADR 0013 also defers scalable field deletion: exact-field bounded primary-key
+keyset batches must destroy Values through callbacks/versioning, commit each
+batch, resume from the last committed key, prove the exact field is drained,
+and delete the Field only after that final proof. No production durability,
+outbox, queue, migration, or deletion implementation is included here.
+
 ### T092 bounded local bulk-write closure
 
 T092 closes the available local Phase 6 evidence ceiling with an isolated
