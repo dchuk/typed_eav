@@ -120,11 +120,17 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
       TypedEAV::Versioning.register_if_enabled
 
       expect(TypedEAV::EventDispatcher.value_change_internals).to be_empty
-      expect(TypedEAV::Value._create_callbacks.count { |callback| callback.filter == :_write_version_create })
+      expect(TypedEAV::Value.send(:get_callbacks, :create).to_a.count do |callback|
+        callback.filter == :_write_version_create && callback.kind == :after
+      end)
         .to eq(1)
-      expect(TypedEAV::Value._update_callbacks.count { |callback| callback.filter == :_write_version_update })
+      expect(TypedEAV::Value.send(:get_callbacks, :update).to_a.count do |callback|
+        callback.filter == :_write_version_update && callback.kind == :after
+      end)
         .to eq(1)
-      expect(TypedEAV::Value._destroy_callbacks.count { |callback| callback.filter == :_write_version_destroy })
+      expect(TypedEAV::Value.send(:get_callbacks, :destroy).to_a.count do |callback|
+        callback.filter == :_write_version_destroy && callback.kind == :before
+      end)
         .to eq(1)
     end
   end

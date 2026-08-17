@@ -77,17 +77,35 @@ module TypedEAV
         raise ArgumentError, "TypedEAV versioning requires Value and ValueVersion to share a connection pool"
       end
 
-      CALLBACKS.each do |event, (filter, kind)|
-        chain = TypedEAV::Value.send(:get_callbacks, event).to_a
-        next if chain.any? { |callback| callback.filter == filter }
+      callback_chains = callback_chains_for_installation
+
+      callback_chains.each do |event, (filter, kind, chain)|
+        next if chain.any? { |callback| callback.filter == filter && callback.kind == kind }
 
         TypedEAV::Value.set_callback(event, kind, filter, prepend: true)
       end
     end
 
+    def self.callback_chains_for_installation
+      CALLBACKS.to_h do |event, (filter, kind)|
+        chain = TypedEAV::Value.send(:get_callbacks, event).to_a
+        wrong_kind = chain.find { |callback| callback.filter == filter && callback.kind != kind }
+        if wrong_kind
+          raise ArgumentError,
+                "TypedEAV versioning callback #{filter.inspect} on #{event} has kind " \
+                "#{wrong_kind.kind.inspect}; expected #{kind.inspect}"
+        end
+
+        [event, [filter, kind, chain]]
+      end
+    end
+    private_class_method :callback_chains_for_installation
+
     def self.atomic_callbacks_installed?
-      CALLBACKS.all? do |event, (filter, _kind)|
-        TypedEAV::Value.send(:get_callbacks, event).to_a.any? { |callback| callback.filter == filter }
+      CALLBACKS.all? do |event, (filter, kind)|
+        TypedEAV::Value.send(:get_callbacks, event).to_a.any? do |callback|
+          callback.filter == filter && callback.kind == kind
+        end
       end
     end
   end

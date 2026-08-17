@@ -96,4 +96,22 @@ RSpec.describe "atomic versioning registration", :event_callbacks do
     allow(TypedEAV::Value).to receive(:connection_pool).and_call_original
     restore_atomic_callbacks
   end
+
+  it "rejects a same-filter wrong-kind chain before any partial installation" do
+    remove_atomic_callbacks
+    TypedEAV.config.versioning = true
+    TypedEAV::Value.set_callback(:update, :before, :_write_version_update, prepend: true)
+
+    expect { TypedEAV::Versioning.register_if_enabled }
+      .to raise_error(ArgumentError, /_write_version_update.*before.*after/)
+
+    expect(callback_count(:create, ATOMIC_VERSIONING_CALLBACKS[:create])).to eq(0)
+    expect(callback_count(:update, ATOMIC_VERSIONING_CALLBACKS[:update])).to eq(0)
+    expect(callback_count(:destroy, ATOMIC_VERSIONING_CALLBACKS[:destroy])).to eq(0)
+    expect(TypedEAV::Value.send(:get_callbacks, :update).to_a)
+      .to include(have_attributes(filter: :_write_version_update, kind: :before))
+  ensure
+    TypedEAV::Value.skip_callback(:update, :before, :_write_version_update)
+    restore_atomic_callbacks
+  end
 end

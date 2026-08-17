@@ -25,12 +25,11 @@ module TypedEAV
       # Register an entity type with optional type restrictions and optional
       # versioning opt-in.
       #
-      # `versioned:` is the per-entity Phase 04 opt-in flag. When true, AND
-      # `Config.versioning = true` at engine load (gem-level master switch),
-      # the Phase 04 subscriber writes a TypedEAV::ValueVersion row per
-      # Value mutation on this entity_type. Default false — apps not using
-      # versioning pay zero cost (one Hash#dig per write at most when
-      # `Config.versioning = true`, nothing when off).
+      # `versioned:` is the per-entity opt-in flag. When true and the
+      # boot-latched transactional callbacks are installed, the version
+      # writer records a TypedEAV::ValueVersion row per Value mutation on
+      # this entity_type. Default false — apps not using versioning pay zero
+      # version-row work.
       #
       # Backward compat: existing callers `register(name, types: types)`
       # continue to work — the new kwarg defaults to false. The entry hash
@@ -69,8 +68,8 @@ module TypedEAV
       # Returns the stored boolean for opted-in entities; false for
       # unregistered entities (defensive — callers might query before
       # `has_typed_eav` runs in a particular load order). The Phase 04
-      # subscriber calls this on every Value write when `Config.versioning =
-      # true` — performance is one Hash#dig per write, negligible.
+      # transactional writer calls this only after its boot-latched callback
+      # has been installed; this lookup remains a small Hash#dig per write.
       #
       # `entities.dig(entity_type, :versioned)` returns nil when
       # `entities[entity_type]` is missing (no register call) OR when the
