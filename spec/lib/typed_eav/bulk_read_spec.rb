@@ -99,10 +99,10 @@ RSpec.describe TypedEAV::BulkRead do
 
     # BulkRead groups records by [typed_eav_scope, typed_eav_parent_scope]
     # and resolves field definitions ONCE per tuple via the host's
-    # `typed_eav_definitions(scope:, parent_scope:)` — an explicit per-tuple
-    # lookup, NOT an ambient resolution. The single per-tuple
-    # `Partition.definitions_by_name(...)` call therefore picks the right
-    # field for each tenant's record without leaking the other tenant's rows.
+    # `typed_eav_definitions(scope:, parent_scope:)` semantics are preserved,
+    # but definitions are fetched once for the exact tuple union. The
+    # per-tuple `Partition.definitions_by_name(...)` call therefore picks the
+    # right field for each tenant's record without leaking the other tenant's rows.
     it "resolves field definitions per tuple so each record sees its own tenant's field" do
       result = described_class.new(host_class: Contact, records: [c1, c2]).to_hash
 
@@ -174,8 +174,8 @@ RSpec.describe TypedEAV::BulkRead do
         described_class.new(host_class: Contact, records: records).to_hash.each_value(&:keys)
       end
 
-      # 1 value preload + 1 field preload + 1 definitions per unique tuple (= 2).
-      expect(queries.size).to be <= 4
+      # 1 value preload + 1 field preload + 1 batched definitions query.
+      expect(queries.size).to eq(3)
     end
   end
 end

@@ -7,8 +7,8 @@ require "spec_helper"
 # `Entity.typed_eav_hash_for(records)` is the class-method bulk variant of
 # `InstanceMethods#typed_eav_hash`. It returns
 #   { record_id => { field_name => value } }
-# for an Enumerable of host records, issuing exactly two SQL queries plus one
-# `typed_eav_definitions` query per unique partition tuple — N+1-free
+# for an Enumerable of host records, issuing exactly three SQL queries — one
+# batched definition query plus the two value preloads — N+1-free
 # regardless of record count or field count.
 #
 # Logic invariants (mirrored from the per-record instance method):
@@ -310,17 +310,15 @@ RSpec.describe "Entity.typed_eav_hash_for", type: :model do
   # ────────────────────────────────────────────────────────────
   # N+1 prevention: query-count bound
   #
-  # Bound: 2 + (unique partition tuples) =
-  #   1 value preload (with `includes(:field)` → that fires 2 queries:
-  #   value SELECT and field SELECT, but Rails counts both via the
-  #   includes batch) PLUS 1 typed_eav_definitions per unique tuple.
+  # Bound: exactly 3 = 1 value preload (with `includes(:field)` → that fires
+  #   2 queries: value SELECT and field SELECT) plus 1 batched definition
+  #   query for all requested partition tuples.
   #
   # In practice, with 2 partition tuples (tenant_1 and tenant_2):
   #   - 1 SELECT typed_eav_values WHERE entity_type=? AND entity_id IN (?)
   #   - 1 SELECT typed_eav_fields WHERE id IN (?)              (preload)
-  #   - 1 SELECT typed_eav_fields WHERE entity_type=? AND scope=? (tuple 1)
-  #   - 1 SELECT typed_eav_fields WHERE entity_type=? AND scope=? (tuple 2)
-  # = 4 queries total, INDEPENDENT of how many records each tuple contains.
+  #   - 1 SELECT typed_eav_fields WHERE entity_type=? AND exact tuple union
+  # = 3 queries total, INDEPENDENT of how many records or tuples are requested.
   # ────────────────────────────────────────────────────────────
   describe "N+1 prevention", :unscoped do
     let!(:name_field_t1) { create(:text_field, name: "name", entity_type: "Contact", scope: "tenant_1") }
@@ -358,9 +356,8 @@ RSpec.describe "Entity.typed_eav_hash_for", type: :model do
       end
     end
 
-    it "issues at most (2 + unique_partition_tuples) SQL queries regardless of record count" do
+    it "issues exactly three SQL queries regardless of record or tuple count" do
       records = t1_records + t2_records
-      partitions = 2 # (tenant_1, nil) and (tenant_2, nil)
 
       queries = count_sql_queries do
         result = Contact.typed_eav_hash_for(records)
@@ -368,11 +365,8 @@ RSpec.describe "Entity.typed_eav_hash_for", type: :model do
         result.each_value(&:keys)
       end
 
-      # Bound = 1 value preload + 1 field preload + 1 definitions per tuple.
-      # Use `<=` to allow Rails query-cache or test-harness variance one query
-      # of slack; the load-bearing assertion is "does not scale with record count".
-      expect(queries.size).to be <= (2 + partitions),
-                              "expected ≤ #{2 + partitions} queries, got #{queries.size}:\n" \
+      expect(queries.size).to eq(3),
+                              "expected 3 queries, got #{queries.size}:\n" \
                               "#{queries.join("\n")}"
     end
   end
