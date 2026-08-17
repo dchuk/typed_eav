@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 module TypedEAV
-  # Phase 04 versioning namespace. Houses the Subscriber that writes
-  # TypedEAV::ValueVersion rows in response to Value lifecycle events
-  # dispatched by EventDispatcher.
+  # Transactional versioning namespace. Houses the Subscriber that writes
+  # TypedEAV::ValueVersion rows from Value lifecycle callbacks.
   #
   # ## Architecture
   #
@@ -23,10 +22,9 @@ module TypedEAV
   #   the callable — when false, the subscriber is never registered in
   #   the first place.
   #
-  # - Errors raised by Subscriber.call PROPAGATE per the EventDispatcher
-  #   internal-vs-user error policy (03-CONTEXT.md §User-callback error
-  #   policy). Versioning corruption must be loud — silent failure
-  #   leaves the audit log inconsistent with the live row.
+  # - Errors raised by Subscriber.call propagate. Versioning corruption must
+  #   be loud — silent failure leaves the audit log inconsistent with the live
+  #   row.
   #
   # ## Public API surface
   #
@@ -50,7 +48,13 @@ module TypedEAV
     # at boot time, breaking every host that enables versioning.
     autoload :Subscriber, "typed_eav/versioning/subscriber"
 
-    # Conditionally install the Subscriber on Value's before-write callbacks.
+    CALLBACKS = {
+      create: %i[_write_version_create after].freeze,
+      update: %i[_write_version_update after].freeze,
+      destroy: %i[_write_version_destroy before].freeze,
+    }.freeze
+
+    # Conditionally install the Subscriber on Value's transactional callbacks.
     # Called by the engine's `config.after_initialize` block.
     #
     # Extracted into a class method (not inlined inside the after_initialize
@@ -73,16 +77,18 @@ module TypedEAV
         raise ArgumentError, "TypedEAV versioning requires Value and ValueVersion to share a connection pool"
       end
 
-      return if @callbacks_installed
+      CALLBACKS.each do |event, (filter, kind)|
+        chain = TypedEAV::Value.send(:get_callbacks, event).to_a
+        next if chain.any? { |callback| callback.filter == filter }
 
-      TypedEAV::Value.set_callback(:create, :after, :_write_version_create, prepend: true)
-      TypedEAV::Value.set_callback(:update, :after, :_write_version_update, prepend: true)
-      TypedEAV::Value.set_callback(:destroy, :before, :_write_version_destroy, prepend: true)
-      @callbacks_installed = true
+        TypedEAV::Value.set_callback(event, kind, filter, prepend: true)
+      end
     end
 
     def self.atomic_callbacks_installed?
-      @callbacks_installed == true
+      CALLBACKS.all? do |event, (filter, _kind)|
+        TypedEAV::Value.send(:get_callbacks, event).to_a.any? { |callback| callback.filter == filter }
+      end
     end
   end
 end

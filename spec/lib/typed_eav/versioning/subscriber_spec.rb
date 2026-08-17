@@ -411,17 +411,10 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
   end
 
   describe "engine boot registration" do
-    it "subscriber identity is comparable via .method(:call)" do
-      # Document the expected callable identity. The :event_callbacks hook
-      # cleared the engine-boot registration, but we can re-register here
-      # and assert the identity round-trip works (matters for plan 04-03's
-      # slot-0 regression spec which asserts identity equality).
-      TypedEAV::EventDispatcher.register_internal_value_change(
-        described_class.method(:call),
-      )
-      expect(TypedEAV::EventDispatcher.value_change_internals).to include(
-        described_class.method(:call),
-      )
+    it "is represented by the installed Value callback chain" do
+      expect(TypedEAV::Versioning.atomic_callbacks_installed?).to be(true)
+      expect(TypedEAV::Value.send(:get_callbacks, :create).to_a)
+        .to include(have_attributes(filter: :_write_version_create))
     end
   end
 end

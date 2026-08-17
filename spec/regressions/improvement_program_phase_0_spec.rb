@@ -91,9 +91,7 @@ RSpec.describe "Improvement program Phase 0 correctness probes", type: :model do
     before do
       TypedEAV.config.versioning = true
       TypedEAV.registry.register("Contact", types: nil, versioned: true)
-      TypedEAV::EventDispatcher.register_internal_value_change(
-        TypedEAV::Versioning::Subscriber.method(:call),
-      )
+      TypedEAV::Versioning.register_if_enabled
     end
 
     after { TypedEAV.registry.register("Contact", types: nil, versioned: false) }

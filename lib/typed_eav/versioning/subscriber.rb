@@ -2,14 +2,14 @@
 
 module TypedEAV
   module Versioning
-    # The Phase 04 version writer. Conditionally installed on Value's
+    # The transactional version writer. Conditionally installed on Value's
     # before-create/update/destroy callbacks at engine boot via
     # `TypedEAV::Versioning.register_if_enabled`.
     #
     # ## Contract
     #
-    # `call(value, change_type, context)` — called by EventDispatcher.
-    # Returns nil (return value is ignored by EventDispatcher; the
+    # `call(value, change_type, context)` — called by Value's lifecycle
+    # callback. Returns nil (the return value is ignored; the
     # method's job is the side effect of writing a ValueVersion row).
     #
     # Two-gate short-circuit (the master switch is enforced at
@@ -104,7 +104,7 @@ module TypedEAV
           #    on each affected Value object BEFORE `record.save`, INSIDE
           #    the per-record `with_context` block. Reading the snapshot
           #    here (not `current_context`) guarantees the UUID survives
-          #    the outer-transaction `after_commit` boundary — by the time
+          #    the source transaction boundary — by the time
           #    we run, the lexical `with_context` block has unwound and
           #    `current_context` would be empty, but the per-Value ivar
           #    persists. Mirrors the existing in-memory ivar pattern at
@@ -118,7 +118,7 @@ module TypedEAV
           #    request id). For those paths the Value ivar is unset; the
           #    `||` falls through to `context[:version_group_id]`. Also
           #    used as the belt-and-suspenders fallback for any future
-          #    after_commit-inside-savepoint dispatch path that bulk writes
+          #    savepoint path that bulk writes
           #    might leverage.
           #
           # When neither path supplies a UUID the column (added in

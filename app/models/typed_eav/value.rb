@@ -138,21 +138,21 @@ module TypedEAV
     # (NOT a DB column, NOT validated, NOT persisted). Stamped by
     # `Entity.bulk_set_typed_eav_values` on each affected Value object
     # BEFORE `record.save` inside the per-record `with_context` block. The
-    # Phase 04 versioning subscriber reads it preferentially over
+    # The transactional version writer reads it preferentially over
     # `context[:version_group_id]` so the UUID survives the outer-transaction
-    # `after_commit` boundary even after `with_context` has unwound (the
+    # source transaction boundary even after `with_context` has unwound (the
     # `with_context` block lexically pops on yield-return; by the time the
-    # outer transaction's after_commit chain fires, `TypedEAV.current_context`
+    # outer transaction completes, `TypedEAV.current_context`
     # would observe an empty Hash, but the per-Value snapshot persists in
     # the AR object's @pending_version_group_id ivar).
     #
     # Mirrors the existing in-memory ivar pattern at `value=` line 118
     # (`@cast_was_invalid`): a transient flag stamped during the write path
-    # and read by a downstream observer (validate_value / subscriber). No
+    # and read by the transactional version writer. No
     # accessor magic — plain attr_accessor; the ivar is allocated lazily on
     # first write.
     #
-    # Non-bulk callers do not stamp this ivar and the Phase 4 subscriber
+    # Non-bulk callers do not stamp this ivar and the transactional writer
     # falls back to `context[:version_group_id]` (which the existing
     # `with_context(version_group_id: uuid) { ... }` callers already set).
     # Backward compatible: every pre-Phase-6 caller path continues to work
@@ -332,7 +332,7 @@ module TypedEAV
 
     after_initialize :apply_pending_value
 
-    # Phase 03 event dispatch. THREE explicit `after_commit ..., on: :X`
+    # Public event dispatch. THREE explicit `after_commit ..., on: :X`
     # declarations rather than the after_create_commit/after_update_commit/
     # after_destroy_commit alias trio: Rails 8.1 has a documented alias
     # collision where reusing the same method name across the alias forms
@@ -341,7 +341,7 @@ module TypedEAV
     # first). The explicit `on:` form sidesteps the bug entirely.
     #
     # Each callback forwards to a private `_dispatch_value_change_*` method
-    # that delegates to TypedEAV::EventDispatcher. Models stay thin — all
+    # that delegates to TypedEAV::EventDispatcher. Models stay thin — public
     # dispatch policy (internal-vs-user proc ordering, error rescue, context
     # injection) lives in EventDispatcher and is unit-testable without AR.
     after_commit :_dispatch_value_change_create,  on: :create
@@ -556,13 +556,13 @@ module TypedEAV
     # field_id NULLed by the Phase 02 ON DELETE SET NULL FK when a Field
     # with field_dependent: :nullify was destroyed). The event contract
     # is `(value, change_type, context)` and consumers expect
-    # `value.field` to be readable; an orphan would confuse Phase 04
+    # `value.field` to be readable; an orphan would confuse the transactional
     # versioning and Phase 07 matview consumers, so we drop the event
     # at the model boundary rather than push the nil-guard downstream.
     #
-    # Update filter (Phase 04 fix): only fire :update when ANY of the typed
+    # Update filter: only fire :update when ANY of the typed
     # columns the field uses changed (value_columns plural — added in
-    # plan 04-02). For all 17 single-cell field types as of Phase 04,
+    # transactional writer). For all single-cell field types,
     # value_columns returns [value_column], so this is behaviorally
     # identical to the singular form Phase 03 shipped. For Phase 05
     # Currency (two-cell), a change to either column correctly fires the
@@ -572,7 +572,7 @@ module TypedEAV
     #
     # A Value row's only meaningful change for downstream consumers is
     # its typed columns — field_id repointing or other bookkeeping shifts
-    # are out-of-spec for the event contract. Without this filter, Phase 04
+    # are out-of-spec for the event contract. Without this filter, the
     # versioning would pile up no-op version rows (every audit-trail
     # commit) and Phase 07 matview would refresh on bookkeeping-only writes.
 
@@ -588,7 +588,7 @@ module TypedEAV
       return unless field
       # Forward-compat with Phase 05 Currency (and any future multi-cell
       # field type): check if ANY of the typed columns the field uses
-      # changed in the just-committed save. Phase 04 plan 02 introduces
+      # changed in the just-committed save. The transactional writer
       # `value_columns` plural in lib/typed_eav/column_mapping.rb; for
       # all 17 current single-cell types, value_columns returns
       # [value_column], so this filter is behaviorally identical to the
@@ -597,7 +597,7 @@ module TypedEAV
       # either cell now correctly fires the :update event — without this
       # plural fix, a Currency change to only the string_value (currency
       # code) cell would silently be missed by the dispatch gate, and
-      # Phase 04 versioning would never see it (Scout §3 / Discrepancy D3
+      # transactional version writer would never see it
       # from plan 04-01).
       return unless field.value_changed?(self)
 

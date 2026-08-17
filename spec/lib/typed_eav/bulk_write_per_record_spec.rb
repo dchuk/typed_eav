@@ -400,7 +400,7 @@ RSpec.describe "Entity.bulk_set_typed_eav_values_per_record" do
       end.not_to raise_error
     end
 
-    it "explicit :per_record raises ArgumentError" do
+    it "explicit :per_record follows the installed boot latch" do
       expect do
         TypedEAV.with_scope("tenant_1") do
           Contact.bulk_set_typed_eav_values_per_record(
@@ -408,7 +408,7 @@ RSpec.describe "Entity.bulk_set_typed_eav_values_per_record" do
             version_grouping: :per_record,
           )
         end
-      end.to raise_error(ArgumentError, /versioning is disabled/)
+      end.not_to raise_error
     end
   end
 

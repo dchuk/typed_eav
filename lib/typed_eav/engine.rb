@@ -8,12 +8,10 @@ module TypedEAV
       require_relative "field/typed_storage"
       require_relative "config"
       require_relative "registry"
-      # Eager-loaded (not autoloaded) — Phase 04 versioning will register on
-      # EventDispatcher at engine boot, before any model reference triggers
-      # autoload. Without this require_relative, Phase 04's engine-time
-      # `register_internal_value_change` call would const-resolve the module
-      # for the first time and run a fresh `@value_change_internals = []`
-      # AFTER versioning had already pushed onto a different instance.
+      # Eager-loaded (not autoloaded) — transactional versioning registers its
+      # Value callbacks at engine boot, before any model reference triggers
+      # autoload. Keeping the dispatcher loaded early gives public and
+      # generic observers one stable broker instance.
       require_relative "event_dispatcher"
     end
 
@@ -24,11 +22,11 @@ module TypedEAV
       end
     end
 
-    # Phase 04 versioning subscriber registration.
+    # Transactional versioning callback registration.
     #
     # CONDITIONAL on TypedEAV.config.versioning. When false (the default
-    # for apps that don't enable versioning), no subscriber is registered:
-    # zero callable in EventDispatcher.value_change_internals, zero per-write
+    # for apps that don't enable versioning), no Value callback is registered:
+    # zero transactional callback overhead.
     # dispatch overhead, zero config reads on the hot path. This is the
     # locked CONTEXT contract — line 17 says "zero overhead for apps that
     # don't use versioning", which means literally no callable, not "callable
@@ -46,21 +44,17 @@ module TypedEAV
     # has fired (e.g., a Rails console session that monkey-patches Config,
     # or a feature-flag flip mid-process) will NOT get versioning until
     # process restart. Runtime toggle is not a documented use case — adding
-    # a register/deregister API is out of scope for Phase 04. The Risk §1
+    # a register/deregister API is out of scope for boot-latched versioning. The Risk §1
     # late-toggle concern from RESEARCH is acceptably narrowed by this
     # trade-off.
     #
-    # Slot 0 ordering: Phase 07 (future matview) will register its
-    # subscriber via its own `config.after_initialize` block declared LATER
-    # in this same engine file. Rails runs `after_initialize` blocks in
-    # declaration order within a single Engine class, so versioning's block
-    # fires first → slot 0. The regression spec (plan 04-03 P03) is the
-    # ongoing guard.
+    # Version rows are written in the source transaction. Public and generic
+    # observer ordering remains owned by EventDispatcher after commit.
     #
     # Why a one-line callable to a class method (not inline registration):
     # `TypedEAV::Versioning.register_if_enabled` is the testable seam. The
-    # slot-0 regression spec (plan 04-03 P03) and the zero-overhead
-    # verification spec (this plan, subscriber_spec) cannot reboot the Rails
+    # callback-chain regression spec and the zero-overhead verification spec
+    # cannot reboot the Rails
     # process inside RSpec — but they CAN call the helper directly against
     # a fresh internals array to exercise both branches (versioning on/off)
     # in-process. Inlining the `if` here would force tests to either reboot
@@ -94,20 +88,15 @@ module TypedEAV
     # Value row (Text, Integer, etc.), even when no attachment is in
     # play. RESEARCH §Risk 3 documents this rationale.
     #
-    # Second after_initialize block (versioning's is the first): Rails
-    # runs after_initialize blocks in declaration order within a single
-    # Engine class. Versioning's slot-0 dispatcher position at the
-    # EventDispatcher level is preserved (dispatcher slots are an
-    # EventDispatcher-internal concern; the engine's after_initialize
-    # ordering is independent). Phase 07 matview will append its own
-    # block after this one.
+    # This second after_initialize block is independent of transactional
+    # versioning; it only handles Active Storage association setup.
     #
     # Why a one-line callable to a class method (testable seam): the
     # active_storage_soft_detect_spec cannot reboot Rails inside RSpec
     # to exercise both branches. By extracting the body into
     # `Engine.register_attachment_associations!`, specs call the helper
     # directly with whatever ::ActiveStorage state they need to test.
-    # Pattern matches Phase 04's `Versioning.register_if_enabled`.
+    # Pattern matches `Versioning.register_if_enabled`.
     config.after_initialize do
       TypedEAV::Engine.register_attachment_associations!
     end

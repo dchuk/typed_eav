@@ -72,11 +72,6 @@ module TypedEAV
       # rubocop:enable Metrics/ParameterLists
 
       def apply_record_save(record:, vbn:, effective_grouping:, uuids:, accumulator:)
-        push_uuid = case effective_grouping
-                    when :per_record then uuids[:record]
-                    when :per_field  then uuids[:field].values.first
-                    end
-
         do_save = lambda do
           record.typed_eav_attributes = vbn.map { |name, value| typed_eav_entry_for(name, value) }
           stamp_pending_version_group_ids(record, effective_grouping, uuids)
@@ -89,11 +84,7 @@ module TypedEAV
           end
         end
 
-        if push_uuid
-          TypedEAV.with_context(version_group_id: push_uuid, &do_save)
-        else
-          do_save.call
-        end
+        do_save.call
       end
 
       private
@@ -258,11 +249,12 @@ module TypedEAV
                 "Supported values: #{valid_grouping.map(&:inspect).join(", ")}."
         end
 
-        return unless %i[per_record per_field].include?(version_grouping) && !TypedEAV.config.versioning
+        return unless %i[per_record per_field].include?(version_grouping) &&
+                      !TypedEAV::Versioning.atomic_callbacks_installed?
 
         raise ArgumentError,
-              "version_grouping: #{version_grouping.inspect} was passed but versioning is disabled. " \
-              "Set TypedEAV.config.versioning = true in your initializer, or pass " \
+              "version_grouping: #{version_grouping.inspect} was passed but versioning is disabled or not installed. " \
+              "Enable versioning at boot, or pass " \
               "version_grouping: :none to opt out explicitly, or omit the kwarg to silently no-op."
       end
 
@@ -277,7 +269,7 @@ module TypedEAV
 
       def resolve_grouping(version_grouping)
         if version_grouping == :default
-          TypedEAV.config.versioning ? :per_record : :none
+          TypedEAV::Versioning.atomic_callbacks_installed? ? :per_record : :none
         else
           version_grouping
         end

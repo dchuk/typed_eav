@@ -224,13 +224,16 @@ any performance claim is made.
 
 ### T104 Phase 8 durability characterization
 
-Real-commit regressions establish the current boundary: a `Value` create,
+Real-commit regressions established the former boundary: a `Value` create,
 update, or destroy can remain committed when its `ValueVersion` after-commit
 writer raises, and a field-dependent Value cascade can likewise remain
 committed with no version row. This evidence does not claim rollback from an
-`after_commit` failure. ADR 0013 compares the current after-commit path, a
-synchronous source-transaction version write, and a generic outbox. It selects
-synchronous version writes for a later implementation with boot-latched
+`after_commit` failure. ADR 0013 compares the historical after-commit path, a
+synchronous source-transaction version write, and a generic outbox. T108/T111
+implement the selected boundary with boot-latched, actual-chain callbacks;
+BulkWrite preserves stored context while correlating groups through its pending
+marker, and EventDispatcher remains a public/generic observer broker. It uses
+boot-latched
 enablement and a fail-closed identical `Value.connection_pool`/
 `ValueVersion.connection_pool` guard. Disabled boot has no hot-path predicate.
 Registry opt-in, exact tenant/entity/field semantics, snapshots, context, actor,
@@ -238,7 +241,7 @@ changed_at, version groups, marker cleanup, and rollback behavior remain
 preserved. Public application callbacks remain best-effort rescued/logged
 after-commit hooks.
 
-The proposed boundary is one version row per successful mutation. Retry belongs
+The implemented boundary is one version row per successful mutation. Retry belongs
 to the caller at the whole-source-transaction level; no async replay,
 checkpoint, cross-transaction total order, or historical-gap repair is promised.
 Version rows are append-only with application-owned retention, and model/

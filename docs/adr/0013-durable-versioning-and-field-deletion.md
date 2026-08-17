@@ -2,12 +2,12 @@
 
 ## Status
 
-Proposed
+Accepted and implemented by the atomic versioning boundary work.
 
 ## Context
 
-TypedEAV currently writes `ValueVersion` rows from an internal `after_commit`
-subscriber. That boundary is intentionally after the source transaction: a
+The historical implementation wrote `ValueVersion` rows from an internal
+`after_commit` subscriber. That boundary was intentionally after the source transaction: a
 source `Value` create, update, or destroy can commit successfully and then the
 version writer can raise. The same applies when a field's `field_dependent:
 "destroy"` callback destroys its dependent Values. Real-commit regression
@@ -40,7 +40,11 @@ is true. A pool mismatch is a startup/configuration error, not a permitted
 best-effort mode. This is a proposal for the next implementation task, not a
 production change in this ADR task.
 
-The implementation must preserve the existing write contract: registry opt-in,
+The implementation uses actual Value callback-chain inspection as its
+boot-latch truth, reinstalls missing callbacks idempotently, and rejects a
+Value/ValueVersion pool mismatch before installation. BulkWrite preserves the
+caller context and carries version-group correlation through an internal
+pending marker. The implementation must preserve the existing write contract: registry opt-in,
 exact entity/field tuple and tenant/partition semantics, before/after typed
 snapshots, context, actor resolution, `changed_at`, version-group selection,
 and pending-marker cleanup on both commit and rollback. A source rollback must

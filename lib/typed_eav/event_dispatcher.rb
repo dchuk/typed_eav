@@ -2,8 +2,8 @@
 
 module TypedEAV
   # In-process event-dispatch hub for Value and Field after_commit lifecycle
-  # events. Implements the contract that Phase 04 versioning and Phase 07
-  # materialized index both depend on.
+  # events. It carries public callbacks and generic in-gem observers;
+  # durable version rows are written by transactional Value callbacks.
   #
   # ## Contract surface
   #
@@ -11,21 +11,16 @@ module TypedEAV
   #   proc slots (nil-default), backed by ActiveSupport::Configurable. Users
   #   set them via `TypedEAV.configure { |c| c.on_value_change = ->(...) }`.
   # - `register_internal_value_change(callable)` / `register_internal_field_change(callable)`
-  #   are FIRST-PARTY hooks for in-gem observers (Phase 07
-  #   matview DDL regen). They are not private_class_method because Phase 04
-  #   lives in `TypedEAV::Versioning::*` and cannot reach a truly-private class
-  #   method — the `register_internal_*` naming + this comment block signal
-  #   first-party-only intent.
+  #   are FIRST-PARTY hooks for in-gem observers (for example materialized
+  #   index maintenance). The explicit registration names signal their
+  #   intended scope.
   # - Internal subscribers fire FIRST, in registration order. User proc fires
   #   LAST. Durable ValueVersion writing is installed on Value transactions;
   #   this dispatcher does not own that write.
   #
   # ## Error policy (split, locked at 03-CONTEXT.md §User-callback error policy)
   #
-  # - Internal subscribers: exceptions PROPAGATE (fail-closed). Versioning
-  #   corruption must be loud — silent failure leaves typed_eav_value_versions
-  #   inconsistent with the live row. Without propagation, Phase 04 bugs
-  #   would be invisible until someone audited the version table.
+  # - Internal observers: exceptions PROPAGATE (fail-closed).
   # - User proc: rescued via `rescue StandardError`, logged via
   #   `Rails.logger.error`, and SWALLOWED. The Value/Field row is already
   #   committed by the time the after_commit fires, so re-raising here would
@@ -57,10 +52,9 @@ module TypedEAV
         @field_change_internals ||= []
       end
 
-      # Register an in-gem value-change observer. Subscribers are invoked in
+      # Register an in-gem value-change observer. Observers are invoked in
       # registration order with `(value, change_type, context)`. Exceptions
-      # raised here PROPAGATE — fail-closed because versioning corruption
-      # must be loud. See module-level comment §"Error policy".
+      # raised here PROPAGATE. See module-level comment §"Error policy".
       #
       # NOT private_class_method: first-party code uses this named seam, and
       # the `register_internal_*` naming signals its intended scope.
@@ -85,15 +79,8 @@ module TypedEAV
       # `change_type` is one of `:create | :update | :destroy`.
       def dispatch_value_change(value, change_type)
         context = TypedEAV.current_context
-        # Internals fire first, in registration order. Exceptions propagate —
-        # versioning failure (Phase 04) must surface, never be silent.
+        # Internals fire first, in registration order. Exceptions propagate.
         value_change_internals.each do |cb|
-          # Compatibility with callers that still register the historical
-          # Subscriber manually: once boot-installed transactional callbacks
-          # are active, do not write a duplicate version row after commit.
-          next if TypedEAV::Versioning.atomic_callbacks_installed? &&
-                  cb == TypedEAV::Versioning::Subscriber.method(:call)
-
           cb.call(value, change_type, context)
         end
 

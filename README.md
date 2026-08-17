@@ -1002,7 +1002,7 @@ when `after_commit` fires; re-raising would surface a misleading
 "save failed" error.
 
 This is the deliberate split with first-party features. Internal
-subscribers used by `typed_eav` itself (Phase 4 versioning, Phase 7
+observers used by `typed_eav` itself (for example Phase 7
 materialized index) follow a different rule: their exceptions
 **propagate**. Versioning corruption must be loud.
 
@@ -1010,7 +1010,7 @@ materialized index) follow a different rule: their exceptions
 
 When multiple subscribers are registered, they fire in this order:
 
-1. First-party internal subscribers (versioning, matview, etc.), in
+1. First-party generic observers (matview, etc.), in
    registration order. Errors propagate.
 2. The user proc on `Config.on_value_change` / `Config.on_field_change`,
    last. Errors are rescued and logged.
@@ -1070,8 +1070,8 @@ values. When enabled, each `:create` / `:update` / `:destroy` event on
 a Value writes a row to `typed_eav_value_versions` capturing the
 before-state, after-state, actor, context, and timestamp.
 
-Default off. Apps that don't enable it pay zero overhead — the Phase 04
-internal subscriber is not registered with `EventDispatcher.value_change_internals`
+Default off. Apps that don't enable it pay zero overhead — transactional
+Value callbacks are not installed at boot
 at all when `Config.versioning = false`. Zero callable in the dispatcher
 chain, zero per-write method dispatch, zero per-write config read.
 
@@ -1243,16 +1243,14 @@ manually using `version.before_value` as the seed state.
 
 ### Hook ordering guarantee
 
-Versioning is registered as an internal subscriber on
-`TypedEAV::EventDispatcher`. It runs **first** (slot 0) for every Value
-event. Your `Config.on_value_change` user proc fires **last**, after
-the version row is persisted:
-
+Versioning is installed as boot-latched transactional callbacks on `Value`,
+and the public callback remains an after-commit observer. The version row is
+written in the source transaction.
 ```
-Value#save! → after_commit → EventDispatcher.dispatch_value_change:
-  1. TypedEAV::Versioning::Subscriber.call  # writes version row
-  2. ... any other internal subscribers (Phase 7 matview, etc.) ...
-  3. Config.on_value_change user proc        # sees the persisted version
+Value#save! → transactional Value callback → ValueVersion.create!
+          → after_commit → EventDispatcher.dispatch_value_change:
+  1. ... any other generic internal observers ...
+  2. Config.on_value_change user proc        # sees the persisted version
 ```
 
 Internal subscriber errors propagate (versioning corruption is loud).
@@ -1312,14 +1310,8 @@ RSpec.describe "my versioning behavior", :event_callbacks, :real_commits do
   before do
     TypedEAV.registry.register("Contact", versioned: true)
     TypedEAV::Config.versioning = true
-    # CRITICAL: the :event_callbacks hook clears
-    # EventDispatcher.value_change_internals at example entry, so the
-    # engine-boot-registered subscriber is gone for the duration of
-    # the example. Re-register explicitly inside the before block.
-    # The hook's ensure block restores the snapshot — no leak.
-    TypedEAV::EventDispatcher.register_internal_value_change(
-      TypedEAV::Versioning::Subscriber.method(:call),
-    )
+    # Transactional Value callbacks are boot-latched and remain installed;
+    # the hook isolates only public and generic EventDispatcher observers.
   end
   after { TypedEAV.registry.register("Contact", versioned: false) }
 
@@ -1329,12 +1321,11 @@ RSpec.describe "my versioning behavior", :event_callbacks, :real_commits do
 end
 ```
 
-The `:event_callbacks` around hook in `spec/spec_helper.rb` snapshot/
-restores `Config.versioning`, `Config.actor_resolver`, and the
-EventDispatcher subscriber lists around each example, so your changes
-don't leak to subsequent tests. The snapshot/restore CLEARS the
-internals list at example entry — that's why the re-registration
-above is required for any spec that needs the subscriber to fire. The
+The `:event_callbacks` around hook in `spec/spec_helper.rb` snapshots and
+restores `Config.versioning`, `Config.actor_resolver`, and generic
+EventDispatcher observer lists around each example. Transactional Value
+callback installation is tested independently through callback-chain and
+boot-latch specs. The
 `:real_commits` hook disables transactional fixtures (so `after_commit`
 fires durably) and cleans up `TypedEAV::ValueVersion` rows in
 FK-respecting order between examples.

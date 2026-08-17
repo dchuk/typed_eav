@@ -307,6 +307,12 @@ internal helper relocation (see "Changed" below). Anchored by ADRs
 
 ### Internal
 
+- Atomic ValueVersion writes are installed from the Value callback chains at
+  boot, with an identical-pool guard and idempotent recovery if a callback is
+  removed. BulkWrite keeps caller context unchanged while correlating version
+  groups through its pending marker; EventDispatcher remains a public and
+  generic observer broker.
+
 - `TypedEAV::EventDispatcher` is retained as the synchronous broker
   between `TypedEAV::Hooks` and `ActiveSupport::Notifications`. The
   cleanup arc explicitly considered collapsing it and rejected that:
