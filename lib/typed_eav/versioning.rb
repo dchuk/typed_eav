@@ -8,16 +8,9 @@ module TypedEAV
   # ## Architecture
   #
   # - TypedEAV::Versioning::Subscriber.call(value, change_type, context)
-  #   is conditionally registered with
-  #   EventDispatcher.register_internal_value_change at engine boot via
-  #   `TypedEAV::Versioning.register_if_enabled`, which is invoked from
-  #   the `config.after_initialize` block in lib/typed_eav/engine.rb.
-  #   When TypedEAV.config.versioning is false (default), the helper
-  #   returns early — no callable is added to the dispatcher chain.
-  #   When true, the subscriber registers and runs FIRST in the value-
-  #   change subscriber chain (slot 0 by `after_initialize` block
-  #   declaration order — Phase 07 will declare its matview block LATER
-  #   in the same engine to keep matview at slot ≥ 1).
+  #   is conditionally installed on Value's before-write callbacks at engine
+  #   boot via `TypedEAV::Versioning.register_if_enabled`. The version row
+  #   therefore shares the source transaction.
   #
   # - The subscriber is gated by TWO checks at call time (both must
   #   pass for a version row to be written):
@@ -52,43 +45,44 @@ module TypedEAV
     # this namespace shell — it does NOT recursively autoload nested
     # constants. Without the explicit declaration below, the engine's
     # config.after_initialize block (which references
-    # `TypedEAV::Versioning::Subscriber.method(:call)`) raises
+    # `TypedEAV::Versioning::Subscriber`) raises
     # `NameError: uninitialized constant TypedEAV::Versioning::Subscriber`
     # at boot time, breaking every host that enables versioning.
     autoload :Subscriber, "typed_eav/versioning/subscriber"
 
-    # Conditionally register the Subscriber with EventDispatcher's internal
-    # value-change subscriber chain. Called by the engine's
-    # `config.after_initialize` block (lib/typed_eav/engine.rb).
+    # Conditionally install the Subscriber on Value's before-write callbacks.
+    # Called by the engine's `config.after_initialize` block.
     #
     # Extracted into a class method (not inlined inside the after_initialize
-    # block) for testability: specs can call this against a freshly-cleared
-    # `EventDispatcher.value_change_internals` to exercise both branches
-    # (versioning on/off) in-process, without booting the engine. The
-    # slot-0 regression spec (plan 04-03 P03) and the zero-overhead
-    # verification spec (this plan, subscriber_spec engine-boot block) both
-    # rely on this seam.
+    # block) for testability: specs can call this seam in-process without
+    # booting a second Rails application.
     #
-    # Idempotent — safe to call multiple times. Calling twice with
-    # versioning on results in exactly ONE entry in
-    # `EventDispatcher.value_change_internals`. The idempotency check uses
-    # `Array#include?` against `Subscriber.method(:call)`; `Method#==`
-    # compares receiver+name (semantic equality), so two fresh
-    # `Subscriber.method(:call)` instances compare equal even though they
-    # are different Method objects. The engine block runs this exactly
-    # once per boot in production; the idempotency guard protects future
-    # code paths that might re-invoke for any reason.
+    # Idempotent — safe to call multiple times. Pool validation happens before
+    # any callback is installed, so a multi-database misconfiguration fails
+    # closed without partial activation.
     #
     # When `TypedEAV.config.versioning` is false (default), this method is
-    # a no-op: zero callable in `value_change_internals`, zero per-write
-    # dispatch cost. That is the locked CONTEXT line 17 contract.
+    # a no-op: no callback is installed and the disabled path adds no
+    # per-write predicate or dispatcher work.
     def self.register_if_enabled
       return unless TypedEAV.config.versioning
 
-      method_ref = TypedEAV::Versioning::Subscriber.method(:call)
-      return if TypedEAV::EventDispatcher.value_change_internals.include?(method_ref)
+      value_pool = TypedEAV::Value.connection_pool
+      version_pool = TypedEAV::ValueVersion.connection_pool
+      unless value_pool.equal?(version_pool)
+        raise ArgumentError, "TypedEAV versioning requires Value and ValueVersion to share a connection pool"
+      end
 
-      TypedEAV::EventDispatcher.register_internal_value_change(method_ref)
+      return if @callbacks_installed
+
+      TypedEAV::Value.set_callback(:create, :after, :_write_version_create, prepend: true)
+      TypedEAV::Value.set_callback(:update, :after, :_write_version_update, prepend: true)
+      TypedEAV::Value.set_callback(:destroy, :before, :_write_version_destroy, prepend: true)
+      @callbacks_installed = true
+    end
+
+    def self.atomic_callbacks_installed?
+      @callbacks_installed == true
     end
   end
 end

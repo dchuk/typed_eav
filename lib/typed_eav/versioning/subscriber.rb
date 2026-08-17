@@ -2,10 +2,9 @@
 
 module TypedEAV
   module Versioning
-    # The Phase 04 internal subscriber. Conditionally registered with
-    # EventDispatcher.register_internal_value_change at engine boot via
-    # `TypedEAV::Versioning.register_if_enabled`. When registered, runs
-    # at slot 0 of the value-change subscriber chain.
+    # The Phase 04 version writer. Conditionally installed on Value's
+    # before-create/update/destroy callbacks at engine boot via
+    # `TypedEAV::Versioning.register_if_enabled`.
     #
     # ## Contract
     #
@@ -54,16 +53,13 @@ module TypedEAV
     # nil").
     module Subscriber
       class << self
-        # Public entry point. EventDispatcher calls this with the locked
-        # 3-arg signature `(value, change_type, context)`.
+        # Public entry point. Value's transactional callbacks call this with
+        # the locked 3-arg signature `(value, change_type, context)`.
         #
-        # NOTE: there is NO `Config.versioning` gate here. The subscriber
-        # is only registered with EventDispatcher when `Config.versioning`
-        # was true at engine `config.after_initialize` time (see
-        # `TypedEAV::Versioning.register_if_enabled`, invoked from
-        # lib/typed_eav/engine.rb's `config.after_initialize` block). If
-        # versioning is off, the subscriber is never registered and never
-        # reached. The remaining gates are:
+        # NOTE: there is NO `Config.versioning` gate here. The subscriber is
+        # installed only when `Config.versioning` was true at engine
+        # `config.after_initialize` time. If versioning is off, the callback
+        # is never installed and this method is never reached. The remaining gates are:
         #   1. field-presence (orphan guard — Value's field_id may have
         #      been NULLed by Phase 02's ON DELETE SET NULL cascade).
         #   2. per-entity opt-in (Registry.versioned?).
@@ -87,15 +83,9 @@ module TypedEAV
           before_value = field.before_snapshot(value, change_type)
           after_value  = field.after_snapshot(value, change_type)
 
-          # CRITICAL: for :destroy events, write `value_id: nil`.
-          # By the time `after_commit on: :destroy` fires, the parent row
-          # in `typed_eav_values` has already been deleted (Postgres
-          # commits the DELETE before invoking after_commit callbacks).
-          # The FK is `ON DELETE SET NULL`, but at the moment we INSERT
-          # the version row, Postgres validates the FK against the
-          # current state of typed_eav_values — which no longer contains
-          # the parent. Writing `value.id` (still readable in-memory on
-          # the destroyed AR record) would FK-fail at INSERT.
+          # CRITICAL: for :destroy events, write `value_id: nil`. The row is
+          # written before the source DELETE and must not retain an identity
+          # that the FK will null when the Value is removed.
           #
           # The audit trail for destroy events stays queryable via:
           #   - entity_type + entity_id (host record identity)
@@ -104,8 +94,7 @@ module TypedEAV
           # `field_id` remains populated because destroying a Value does
           # not destroy its Field — `value.field_id` is a live reference.
           #
-          # For :create and :update events, `value_id: value.id` is
-          # correct (parent row exists at after_commit time).
+          # For :create and :update, `value_id: value.id` is correct.
           version_value_id = change_type == :destroy ? nil : value.id
 
           # Phase 06 bulk-operations correlation tag. Two delivery paths:

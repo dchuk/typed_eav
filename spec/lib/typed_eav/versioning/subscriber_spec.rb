@@ -25,9 +25,8 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
     # the pre-example snapshot, so this re-registration does NOT leak.
     before do
       TypedEAV.registry.register("Contact", types: nil, versioned: true)
-      TypedEAV::EventDispatcher.register_internal_value_change(
-        described_class.method(:call),
-      )
+      TypedEAV.config.versioning = true
+      TypedEAV::Versioning.register_if_enabled
     end
 
     after { TypedEAV.registry.register("Contact", types: nil, versioned: false) }
@@ -82,14 +81,14 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
     #
     # The integration spec value_versioning_integration_spec.rb (P05)
     # covers the "subscriber writes rows when registered" path end-to-end.
-    it "subscriber is NOT auto-fired when re-registration is omitted" do
-      # No before block re-registers the subscriber. The :event_callbacks
-      # hook cleared it. So writes here must NOT trigger ValueVersion.
+    it "keeps the boot-latched callback when dispatcher registration is omitted" do
+      # The callback is installed at boot and is independent of the
+      # after_commit dispatcher list.
       TypedEAV.registry.register("Contact", types: nil, versioned: true)
 
       expect do
         TypedEAV::Value.create!(entity: contact, field: field, value: 42)
-      end.not_to change(TypedEAV::ValueVersion, :count)
+      end.to change(TypedEAV::ValueVersion, :count).by(1)
     ensure
       TypedEAV.registry.register("Contact", types: nil, versioned: false)
     end
@@ -111,29 +110,22 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
         .not_to include(described_class.method(:call))
     end
 
-    it "registering twice when versioning=true results in exactly one entry" do
-      # Idempotency contract: register_if_enabled uses Array#include? to
-      # check whether Subscriber.method(:call) is already in the chain.
-      # Method#== compares receiver+name (semantic equality), so two
-      # fresh Subscriber.method(:call) instances compare equal. The N=2
-      # call sequence here protects against future code paths that might
-      # re-invoke the helper for any reason — production currently calls
-      # it exactly once at engine boot, but the guard makes that count
-      # bound rather than convention.
+    it "registering twice when versioning=true installs exactly one callback" do
+      # Repeated boot registration must not duplicate transactional callbacks
+      # or install an after_commit version writer.
       TypedEAV::EventDispatcher.value_change_internals.clear
       TypedEAV.config.versioning = true
 
       TypedEAV::Versioning.register_if_enabled
       TypedEAV::Versioning.register_if_enabled
 
-      matching = TypedEAV::EventDispatcher.value_change_internals.count do |m|
-        m == described_class.method(:call)
-      end
-      expect(matching).to eq(1),
-                          "Calling register_if_enabled twice with versioning=true must produce " \
-                          "exactly ONE Subscriber.method(:call) entry, got #{matching}. The helper's " \
-                          "Array#include? guard depends on Method#== semantic equality (receiver+name); " \
-                          "if this fails, the guard was removed or Method#== semantics changed in the Ruby version."
+      expect(TypedEAV::EventDispatcher.value_change_internals).to be_empty
+      expect(TypedEAV::Value._create_callbacks.count { |callback| callback.filter == :_write_version_create })
+        .to eq(1)
+      expect(TypedEAV::Value._update_callbacks.count { |callback| callback.filter == :_write_version_update })
+        .to eq(1)
+      expect(TypedEAV::Value._destroy_callbacks.count { |callback| callback.filter == :_write_version_destroy })
+        .to eq(1)
     end
   end
 
@@ -141,9 +133,8 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
     # Re-register subscriber per Discrepancy D4. See gate-behavior block above.
     before do
       TypedEAV.registry.register("Contact", types: nil, versioned: true)
-      TypedEAV::EventDispatcher.register_internal_value_change(
-        described_class.method(:call),
-      )
+      TypedEAV.config.versioning = true
+      TypedEAV::Versioning.register_if_enabled
     end
 
     after { TypedEAV.registry.register("Contact", types: nil, versioned: false) }
@@ -280,9 +271,8 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
     # Re-register subscriber per Discrepancy D4. See gate-behavior block above.
     before do
       TypedEAV.registry.register("Contact", types: nil, versioned: true)
-      TypedEAV::EventDispatcher.register_internal_value_change(
-        described_class.method(:call),
-      )
+      TypedEAV.config.versioning = true
+      TypedEAV::Versioning.register_if_enabled
     end
 
     after { TypedEAV.registry.register("Contact", types: nil, versioned: false) }
@@ -366,9 +356,8 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
     it "stores TypedEAV.with_context payload in the version row's context column", :real_commits do
       TypedEAV.registry.register("Contact", types: nil, versioned: true)
       # Re-register subscriber per Discrepancy D4.
-      TypedEAV::EventDispatcher.register_internal_value_change(
-        described_class.method(:call),
-      )
+      TypedEAV.config.versioning = true
+      TypedEAV::Versioning.register_if_enabled
 
       TypedEAV.with_context(request_id: "abc", source: :api) do
         TypedEAV::Value.create!(entity: contact, field: field, value: 42)
@@ -392,9 +381,8 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
     it "writes context[:version_group_id] onto the version row", :real_commits do
       TypedEAV.registry.register("Contact", types: nil, versioned: true)
       # Re-register subscriber per Discrepancy D4.
-      TypedEAV::EventDispatcher.register_internal_value_change(
-        described_class.method(:call),
-      )
+      TypedEAV.config.versioning = true
+      TypedEAV::Versioning.register_if_enabled
       uuid = SecureRandom.uuid
 
       value = TypedEAV.with_context(version_group_id: uuid) do
@@ -411,9 +399,8 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
       # (non-bulk writes) continues to produce version rows with NULL
       # version_group_id. The column is nullable; no validation fires.
       TypedEAV.registry.register("Contact", types: nil, versioned: true)
-      TypedEAV::EventDispatcher.register_internal_value_change(
-        described_class.method(:call),
-      )
+      TypedEAV.config.versioning = true
+      TypedEAV::Versioning.register_if_enabled
 
       value = TypedEAV::Value.create!(entity: contact, field: field, value: 42)
 

@@ -198,11 +198,10 @@ module TypedEAV
     end
 
     # Revert this Value's typed columns to the state recorded in
-    # `version.before_value`, then save!. The save fires the existing
-    # `after_commit :_dispatch_value_change_update` chain; EventDispatcher
-    # routes through TypedEAV::Versioning::Subscriber (slot 0); a NEW
-    # version row is written where after_value reflects the targeted
-    # version's before_value.
+    # `version.before_value`, then save!. The save fires the transactional
+    # version callback and the existing public after_commit dispatcher; a NEW
+    # version row is written where after_value reflects the targeted version's
+    # before_value.
     #
     # This is the locked CONTEXT contract (04-CONTEXT.md §`Value#revert_to`
     # semantics): revert is itself versioned. Append-only audit trail
@@ -349,10 +348,13 @@ module TypedEAV
     after_commit :_dispatch_value_change_update,  on: :update
     after_commit :_dispatch_value_change_destroy, on: :destroy
 
+    # Version rows are written by boot-installed transactional callbacks so
+    # they are part of the same source transaction. These after_commit dispatchers
+    # remain for public callbacks and other non-durable observers.
+
     # Phase 05 image-attached dispatch. Declared AFTER the value-change
-    # callbacks so it runs LAST in the after_commit chain — Phase 04
-    # versioning (slot 0 inside _dispatch_value_change_*) and Phase 03
-    # on_value_change both fire before this. The hook is informational
+    # callbacks so it runs LAST in the after_commit chain — the transactional
+    # version callback and Phase 03 on_value_change both fire before this. The hook is informational
     # ("an image was attached"), not mutational; running last avoids
     # polluting earlier hooks' snapshots / context with attachment-
     # derived state.
@@ -406,6 +408,22 @@ module TypedEAV
 
     def clear_pending_version_group_id
       self.pending_version_group_id = nil
+    end
+
+    def _write_version_create
+      TypedEAV::Versioning::Subscriber.call(self, :create, TypedEAV.current_context)
+    end
+
+    def _write_version_update
+      return unless field&.value_changed?(self)
+
+      TypedEAV::Versioning::Subscriber.call(self, :update, TypedEAV.current_context)
+    end
+
+    def _write_version_destroy
+      return unless field
+
+      TypedEAV::Versioning::Subscriber.call(self, :destroy, TypedEAV.current_context)
     end
 
     # Writes the field's configured default to the typed column(s) via the

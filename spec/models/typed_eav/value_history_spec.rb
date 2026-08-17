@@ -13,9 +13,7 @@ RSpec.describe TypedEAV::Value, "#history", :event_callbacks, :real_commits do
     # this example. Re-register explicitly. The hook's ensure block
     # restores the snapshot, so this re-registration does NOT leak
     # across examples.
-    TypedEAV::EventDispatcher.register_internal_value_change(
-      TypedEAV::Versioning::Subscriber.method(:call),
-    )
+    TypedEAV::Versioning.register_if_enabled
   end
 
   after { TypedEAV.registry.register("Contact", types: nil, versioned: false) }
@@ -38,8 +36,8 @@ RSpec.describe TypedEAV::Value, "#history", :event_callbacks, :real_commits do
     # would NOT suppress the subscriber under the amended design (the
     # master switch is enforced at registration time, not per call).
     it "returns an empty relation when no versions exist" do
-      TypedEAV::EventDispatcher.value_change_internals.clear
       value = described_class.create!(entity: contact, field: field, value: 42)
+      TypedEAV::ValueVersion.delete_all
 
       expect(value.history).to be_empty
       expect(value.history).to be_a(ActiveRecord::Relation)

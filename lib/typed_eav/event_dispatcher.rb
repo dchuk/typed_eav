@@ -11,13 +11,14 @@ module TypedEAV
   #   proc slots (nil-default), backed by ActiveSupport::Configurable. Users
   #   set them via `TypedEAV.configure { |c| c.on_value_change = ->(...) }`.
   # - `register_internal_value_change(callable)` / `register_internal_field_change(callable)`
-  #   are FIRST-PARTY hooks for in-gem features (Phase 04 versioning, Phase 07
+  #   are FIRST-PARTY hooks for in-gem observers (Phase 07
   #   matview DDL regen). They are not private_class_method because Phase 04
   #   lives in `TypedEAV::Versioning::*` and cannot reach a truly-private class
   #   method — the `register_internal_*` naming + this comment block signal
   #   first-party-only intent.
   # - Internal subscribers fire FIRST, in registration order. User proc fires
-  #   LAST. Phase 04 reserves slot 0 of `value_change_internals` by convention.
+  #   LAST. Durable ValueVersion writing is installed on Value transactions;
+  #   this dispatcher does not own that write.
   #
   # ## Error policy (split, locked at 03-CONTEXT.md §User-callback error policy)
   #
@@ -43,9 +44,8 @@ module TypedEAV
   # design decisions this module implements.
   module EventDispatcher
     class << self
-      # Internal subscribers for Value lifecycle events. Populated at engine
-      # boot by Phase 04 versioning (slot 0) and Phase 07 matview (subsequent
-      # slots). Exposed as a reader for test introspection — first-party
+      # Internal subscribers for Value lifecycle observers. Exposed as a
+      # reader for test introspection — first-party
       # registration goes through `register_internal_value_change`.
       def value_change_internals
         @value_change_internals ||= []
@@ -57,15 +57,13 @@ module TypedEAV
         @field_change_internals ||= []
       end
 
-      # Register an in-gem value-change subscriber. Called at engine boot by
-      # Phase 04 versioning and Phase 07 matview. Subscribers are invoked in
+      # Register an in-gem value-change observer. Subscribers are invoked in
       # registration order with `(value, change_type, context)`. Exceptions
       # raised here PROPAGATE — fail-closed because versioning corruption
       # must be loud. See module-level comment §"Error policy".
       #
-      # NOT private_class_method: Phase 04 lives in TypedEAV::Versioning::*
-      # and cannot call a truly-private class method. The `register_internal_*`
-      # naming + this comment signal first-party-only intent.
+      # NOT private_class_method: first-party code uses this named seam, and
+      # the `register_internal_*` naming signals its intended scope.
       def register_internal_value_change(callable)
         value_change_internals << callable
       end
@@ -89,7 +87,15 @@ module TypedEAV
         context = TypedEAV.current_context
         # Internals fire first, in registration order. Exceptions propagate —
         # versioning failure (Phase 04) must surface, never be silent.
-        value_change_internals.each { |cb| cb.call(value, change_type, context) }
+        value_change_internals.each do |cb|
+          # Compatibility with callers that still register the historical
+          # Subscriber manually: once boot-installed transactional callbacks
+          # are active, do not write a duplicate version row after commit.
+          next if TypedEAV::Versioning.atomic_callbacks_installed? &&
+                  cb == TypedEAV::Versioning::Subscriber.method(:call)
+
+          cb.call(value, change_type, context)
+        end
 
         user = TypedEAV::Config.on_value_change
         return unless user
@@ -137,11 +143,10 @@ module TypedEAV
       # `Config.on_value_change` / `Config.on_field_change` — `Config.reset!`
       # owns the user-proc state.
       #
-      # Splitting reset is load-bearing: Phase 04 versioning registers on the
-      # internal list at engine load. Calling `EventDispatcher.reset!` must
-      # NOT require re-running engine load to restore versioning. Test
-      # teardown that needs to clear EVERYTHING calls Config.reset! AND
-      # EventDispatcher.reset! — see 03-CONTEXT.md §"Reset split".
+      # Transactional versioning callbacks are independently boot-latched on
+      # Value; resetting this dispatcher only resets observer registrations.
+      # Test teardown that needs to clear EVERYTHING calls Config.reset! AND
+      # EventDispatcher.reset!.
       def reset!
         @value_change_internals = []
         @field_change_internals = []

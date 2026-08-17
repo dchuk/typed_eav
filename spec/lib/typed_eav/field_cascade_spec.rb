@@ -139,18 +139,17 @@ RSpec.describe TypedEAV::Field::Base, type: :model do
     end
   end
 
-  describe "field-dependent destruction when ValueVersion after_commit fails", :event_callbacks, :real_commits do
+  describe "field-dependent destruction when transactional ValueVersion writing fails",
+           :event_callbacks, :real_commits do
     before do
       TypedEAV.registry.register("Contact", types: nil, versioned: true)
       TypedEAV::Config.versioning = true
-      TypedEAV::EventDispatcher.register_internal_value_change(
-        TypedEAV::Versioning::Subscriber.method(:call),
-      )
+      TypedEAV::Versioning.register_if_enabled
     end
 
     after { TypedEAV.registry.register("Contact", types: nil, versioned: false) }
 
-    it "keeps the field and Value cascade committed while the version row is absent" do
+    it "rolls back the field and Value cascade while the version row is absent" do
       contact = create(:contact)
       field = create(:text_field, name: "failed_version_cascade", entity_type: "Contact",
                                   field_dependent: "destroy")
@@ -162,8 +161,8 @@ RSpec.describe TypedEAV::Field::Base, type: :model do
 
       expect { field.destroy! }.to raise_error(RuntimeError, "version write failed")
 
-      expect(described_class.where(id: field_id)).not_to exist
-      expect(TypedEAV::Value.where(id: value_id)).not_to exist
+      expect(described_class.where(id: field_id)).to exist
+      expect(TypedEAV::Value.where(id: value_id)).to exist
       expect(TypedEAV::ValueVersion.where(entity_id: contact.id)).to be_empty
     end
   end

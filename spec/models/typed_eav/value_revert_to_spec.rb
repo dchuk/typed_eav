@@ -13,9 +13,7 @@ RSpec.describe TypedEAV::Value, "#revert_to", :event_callbacks, :real_commits do
     # this example. Re-register explicitly. The hook's ensure block
     # restores the snapshot, so this re-registration does NOT leak
     # across examples.
-    TypedEAV::EventDispatcher.register_internal_value_change(
-      TypedEAV::Versioning::Subscriber.method(:call),
-    )
+    TypedEAV::Versioning.register_if_enabled
   end
 
   after { TypedEAV.registry.register("Contact", types: nil, versioned: false) }

@@ -21,9 +21,7 @@ RSpec.describe TypedEAV::Value, "versioning integration", :event_callbacks, :rea
     TypedEAV.registry.register("Contact", types: nil, versioned: true)
     TypedEAV::Config.versioning = true
     TypedEAV::Config.actor_resolver = -> { "test-actor" }
-    TypedEAV::EventDispatcher.register_internal_value_change(
-      TypedEAV::Versioning::Subscriber.method(:call),
-    )
+    TypedEAV::Versioning.register_if_enabled
   end
 
   after { TypedEAV.registry.register("Contact", types: nil, versioned: false) }
@@ -119,18 +117,16 @@ RSpec.describe TypedEAV::Value, "versioning integration", :event_callbacks, :rea
       end.not_to change(TypedEAV::ValueVersion, :count)
     end
 
-    it "writes no version rows when subscriber is not registered (engine-boot gate)" do
-      # Simulate the production "Config.versioning = false" path by
-      # deliberately NOT having the subscriber in the chain — clear it after
-      # the before block ran. This mimics the engine-boot decision to
-      # skip registration when versioning is off.
+    it "keeps the boot-latched writer active when the dispatcher list is cleared" do
+      # Runtime dispatcher-list changes do not disable a callback installed at
+      # boot. The public after_commit dispatcher is independent of versioning.
       TypedEAV::EventDispatcher.value_change_internals.clear
 
       expect do
         v = described_class.create!(entity: contact, field: field, value: 42)
         v.update!(value: 43)
         v.destroy!
-      end.not_to change(TypedEAV::ValueVersion, :count)
+      end.to change(TypedEAV::ValueVersion, :count).by(3)
     end
   end
 
@@ -207,11 +203,11 @@ RSpec.describe TypedEAV::Value, "versioning integration", :event_callbacks, :rea
       expect(value.pending_version_group_id).to be_nil
     end
 
-    it "consumes the marker when the subscriber is unregistered" do
+    it "consumes the marker when the dispatcher list is cleared" do
       TypedEAV::EventDispatcher.value_change_internals.clear
       value = described_class.new(entity: contact, field: field, value: 42)
       value.pending_version_group_id = "unregistered"
-      expect { value.save! }.not_to change(TypedEAV::ValueVersion, :count)
+      expect { value.save! }.to change(TypedEAV::ValueVersion, :count).by(1)
       expect(value.pending_version_group_id).to be_nil
     end
 
@@ -238,29 +234,29 @@ RSpec.describe TypedEAV::Value, "versioning integration", :event_callbacks, :rea
     end
   end
 
-  describe "source durability when ValueVersion after_commit fails" do
-    it "keeps a committed Value create while leaving its version row absent" do
+  describe "source rollback when transactional ValueVersion writing fails" do
+    it "rolls back a Value create while leaving its version row absent" do
       value = described_class.new(entity: contact, field: field, value: 42)
       allow(TypedEAV::ValueVersion).to receive(:create!).and_raise(RuntimeError, "version write failed")
 
       expect { value.save! }.to raise_error(RuntimeError, "version write failed")
 
-      expect(described_class.where(id: value.id)).to exist
+      expect(described_class.where(id: value.id)).not_to exist
       expect(TypedEAV::ValueVersion.where(entity_id: contact.id)).to be_empty
     end
 
-    it "keeps a committed Value update while leaving its version row absent" do
+    it "rolls back a Value update while leaving its version row absent" do
       value = described_class.create!(entity: contact, field: field, value: 41)
       TypedEAV::ValueVersion.delete_all
       allow(TypedEAV::ValueVersion).to receive(:create!).and_raise(RuntimeError, "version write failed")
 
       expect { value.update!(value: 42) }.to raise_error(RuntimeError, "version write failed")
 
-      expect(value.reload.integer_value).to eq(42)
+      expect(value.reload.integer_value).to eq(41)
       expect(TypedEAV::ValueVersion.where(entity_id: contact.id)).to be_empty
     end
 
-    it "keeps a committed Value destroy while leaving its version row absent" do
+    it "rolls back a Value destroy while leaving its version row absent" do
       value = described_class.create!(entity: contact, field: field, value: 42)
       value_id = value.id
       TypedEAV::ValueVersion.delete_all
@@ -268,7 +264,7 @@ RSpec.describe TypedEAV::Value, "versioning integration", :event_callbacks, :rea
 
       expect { value.destroy! }.to raise_error(RuntimeError, "version write failed")
 
-      expect(described_class.where(id: value_id)).not_to exist
+      expect(described_class.where(id: value_id)).to exist
       expect(TypedEAV::ValueVersion.where(entity_id: contact.id)).to be_empty
     end
   end
