@@ -1326,6 +1326,61 @@ RSpec.describe "TypedEAV::Field::Base#backfill_default!", type: :model do
       expect(value_loads.size).to eq(1)
       expect(TypedEAV::Value.where(field_id: field.id).count).to eq(contacts.size)
     end
+
+    it "accepts an exact host relation to narrow the SQL backfill" do
+      field = create(:integer_field, name: "bf_relation", entity_type: "Contact",
+                                     default_value_meta: { "v" => 42 })
+      included = create(:contact, tenant_id: "selected")
+      excluded = create(:contact, tenant_id: "other")
+
+      field.backfill_default!(relation: Contact.where(id: included.id))
+
+      expect(TypedEAV::Value.find_by(entity: included, field_id: field.id).integer_value).to eq(42)
+      expect(TypedEAV::Value.find_by(entity: excluded, field_id: field.id)).to be_nil
+    end
+
+    it "rejects a non-relation or relation for the wrong host model" do
+      field = create(:integer_field, name: "bf_relation_guard", entity_type: "Contact",
+                                     default_value_meta: { "v" => 42 })
+
+      expect { field.backfill_default!(relation: [create(:contact)]) }
+        .to raise_error(ArgumentError, /ActiveRecord::Relation/)
+      expect { field.backfill_default!(relation: Product.where(id: -1)) }
+        .to raise_error(ArgumentError, /ActiveRecord::Relation/)
+    end
+
+    it "does not overwrite a partially populated Currency value" do
+      field = create(
+        :currency_field,
+        name: "bf_currency_partial",
+        default_value_meta: { "v" => { amount: "12.50", currency: "USD" } },
+      )
+      contact = create(:contact)
+      now = Time.current
+      TypedEAV::Value.insert_all([{ entity_type: "Contact", entity_id: contact.id, field_id: field.id,
+                                    string_value: "EUR", created_at: now, updated_at: now }])
+      value = TypedEAV::Value.find_by!(entity: contact, field_id: field.id)
+
+      field.backfill_default!
+
+      expect(value.reload.decimal_value).to be_nil
+      expect(value.string_value).to eq("EUR")
+    end
+
+    it "fills a fully empty Currency value" do
+      field = create(
+        :currency_field,
+        name: "bf_currency_empty",
+        default_value_meta: { "v" => { amount: "12.50", currency: "USD" } },
+      )
+      contact = create(:contact)
+      value = TypedEAV::Value.create!(entity: contact, field: field, value: nil)
+
+      field.backfill_default!
+
+      expect(value.reload.decimal_value).to eq(BigDecimal("12.50"))
+      expect(value.string_value).to eq("USD")
+    end
   end
 
   describe "skip rule for non-nil typed values" do

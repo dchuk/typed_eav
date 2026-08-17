@@ -316,6 +316,22 @@ host, Value, and Field pools to match and targets the entity/field conflict
 index. Semantic `:all` keeps one outer transaction with per-record savepoints;
 `:chunks` repeats that envelope per chunk, so prior chunks survive later errors.
 
+### T093 SQL-narrowed default backfill
+
+`Field::Base#backfill_default!` retains its all-host default path and accepts
+an optional exact-host `ActiveRecord::Relation` for SQL narrowing. It rejects
+non-relations and relations whose model is not the field's exact entity class;
+it does not infer a scope column from `scope_method`. Backfill still performs
+the same partition checks, batch transactions, callbacks, validations,
+idempotent skip behavior, and error propagation.
+
+Logical missingness is owned by `Field::TypedStorage`: a value is missing only
+when every declared physical cell is nil. Thus a fully empty Currency value is
+backfilled, while a partially populated amount/currency pair is preserved.
+The local benchmark covers default and relation paths at 100, 1,000, and
+10,000 hosts with exact normalized value digests. It is disposable local
+evidence only; latency and throughput are not production claims.
+
 ### T092 bounded local bulk-write evidence
 
 `bench/docker/bulk-write/run_local.sh` creates one exact-prefix disposable

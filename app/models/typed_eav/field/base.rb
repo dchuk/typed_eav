@@ -317,6 +317,8 @@ module TypedEAV
       # ── Backfill ──
 
       # Backfills existing entities with this field's configured default value.
+      # `relation:` optionally narrows the exact host model in SQL; the
+      # default remains the complete entity class relation.
       # Iterates entities of `entity_type` in batches of 1000 via
       # `find_in_batches`, filtering each batch member by the field's
       # (scope, parent_scope) partition. Each WHOLE batch runs inside one
@@ -359,16 +361,22 @@ module TypedEAV
       #   BackfillJob.perform_later(field.id)
       #
       # (Documented inline as RDoc; not built-in to keep the gem dep-free.)
-      def backfill_default!
+      # rubocop:disable Metrics/AbcSize -- backfill orchestration keeps the
+      # relation guard, batching, transaction, and partition work together.
+      def backfill_default!(relation: nil)
+        entity_class = entity_type.constantize
+        column = self.class.value_column
+        entity_relation = relation || entity_class.all
+        unless entity_relation.is_a?(ActiveRecord::Relation) && entity_relation.klass == entity_class
+          raise ArgumentError, "relation must be an ActiveRecord::Relation for #{entity_class.name}"
+        end
+
         # Short-circuit: nothing to backfill if no default configured. We
         # explicitly do NOT write nil rows — backfill is for propagating a
         # configured default, not for materializing empty Value rows.
         return if default_value.nil?
 
-        entity_class = entity_type.constantize
-        column = self.class.value_column
-
-        entity_class.find_in_batches(batch_size: 1000) do |batch|
+        entity_relation.find_in_batches(batch_size: 1000) do |batch|
           # One transaction per batch (NOT per record). If the transaction
           # raises mid-batch, the WHOLE batch rolls back and the exception
           # surfaces; prior batches stay committed. Caller re-runs idempotently
@@ -389,6 +397,7 @@ module TypedEAV
           end
         end
       end
+      # rubocop:enable Metrics/AbcSize
 
       # ── Schema export / import ──
 
@@ -643,10 +652,10 @@ module TypedEAV
       #    row created via explicit `value: nil` is still a backfill
       #    candidate per CONTEXT.md).
       #  - row exists with non-nil typed column → skip (idempotence).
-      def backfill_one(entity, column, existing)
+      def backfill_one(entity, _column, existing)
         if existing.nil?
           TypedEAV::Value.create!(entity: entity, field: self, value: default_value)
-        elsif existing[column].nil?
+        elsif logical_value_missing?(existing)
           existing.update!(value: default_value)
         end
         # else: row exists with non-nil typed column → skip (skip rule).

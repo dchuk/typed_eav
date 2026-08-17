@@ -1506,3 +1506,12 @@ delete shorthand, and versioning. It requires one shared connection pool and
 returns validation errors before SQL. `:all` is one unit; `:chunks` commits
 completed chunks before a later failure. Semantic writes retain host saves,
 per-record savepoint/error isolation, and one outer `:all` transaction.
+### Default backfill narrowing
+
+`Field::Base#backfill_default!` optionally accepts an exact-host
+`ActiveRecord::Relation` to narrow eligible entities in SQL. The default
+all-host behavior remains unchanged; partition checks, batch transactions,
+callbacks, validations, idempotence, versions, and errors remain in force.
+Typed storage defines logical missingness across all declared cells, so a
+partially populated multi-cell value is present while a fully empty Currency
+value is missing.

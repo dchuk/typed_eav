@@ -205,6 +205,23 @@ but skips host/Value persistence callbacks, host saves, versioning, and delete
 shorthand. Semantic `:all` is one outer transaction with savepoint isolation;
 `:chunks` repeats that envelope per chunk with earlier chunk commits durable.
 
+### T093 SQL-narrowed backfill and logical-missing slice
+
+T093 adds a backward-compatible optional `ActiveRecord::Relation` argument to
+default backfill. The relation must be for the exact host model, so callers
+can narrow eligible rows in SQL without changing tuple scope/parent-scope
+checks or assuming that a scope method is a database column. The no-argument
+path remains all-host, with the existing batch transaction, callback,
+validation, idempotence, version, and error behavior.
+
+Missingness now comes from Field typed-storage semantics: all physical cells
+must be nil. This treats fully empty Currency as missing while preserving a
+partially populated Currency row. A six-observation local actual-path artifact
+(100, 1,000, and 10,000 hosts × default/relation) validates exact normalized
+identities and reports SQL, rows, writes, transactions, allocations, RSS/WAL
+support, and throughput. It is disposable local scaling evidence, not a
+representative latency or production-throughput claim.
+
 ### T092 bounded local bulk-write closure
 
 T092 closes the available local Phase 6 evidence ceiling with an isolated

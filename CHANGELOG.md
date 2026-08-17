@@ -438,3 +438,4 @@ Initial release.
 [0.1.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.1.0
 * Add explicit reduced-semantics bulk upsert and opt-in semantic transaction
   chunking, with isolated characterization evidence for insert/update workloads.
+* Add optional exact-host relation narrowing for default backfills and field-owned logical-missing detection for multi-cell storage.

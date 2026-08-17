@@ -191,6 +191,15 @@ RSpec.describe TypedEAV::Field::TypedStorage, :unscoped do
       expect(value.decimal_value).to be_nil
       expect(value.string_value).to be_nil
     end
+
+    it "treats only a fully empty Currency row as logically missing" do
+      value.decimal_value = nil
+      value.string_value = nil
+      expect(field.logical_value_missing?(value)).to be(true)
+
+      value.string_value = "USD"
+      expect(field.logical_value_missing?(value)).to be(false)
+    end
   end
 
   describe "concrete snapshot helpers (single-cell)" do

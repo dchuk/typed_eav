@@ -155,6 +155,13 @@ module TypedEAV
         value_record[self.class.value_columns.first] = default_value
       end
 
+      # A logical value is missing only when every physical storage cell is
+      # nil. Multi-cell fields may legitimately be partially populated; such
+      # a row is present and must not be overwritten by a default backfill.
+      def logical_value_missing?(value_record)
+        self.class.value_columns.all? { |column| value_record[column].nil? }
+      end
+
       # Normalize values before QueryBuilder emits SQL. Keeping this beside
       # the write caster makes query and write semantics use the same rules.
       def cast_query_operand(operator, raw)
