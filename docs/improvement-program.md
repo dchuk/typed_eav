@@ -277,3 +277,28 @@ claim representative latency, production throughput, 10,000 hosts, or
 100,000 values. The remote runner is statically corrected to use the unique
 database through `DATABASE_URL` and a host-side tar-to-stdout export, but is
 not executed by T092.
+
+### T121 factorized storage tournament (pre-observation)
+
+T121 freezes a four-profile, one-profile-database-at-a-time tournament rather
+than attempting the rejected 1M-by-100 Cartesian footprint. L100 is
+100k/10/5/1, A100 is 100k/50/20/100, H100 is 100k/200/100/10k, and A1M is
+1M/50/20/100 replaying the A100 seed/prefix. Every profile shares one host
+population and independent host-ordinal/field/value oracle across optimized
+TypedEAV, indexed JSONB, per-type EAV, and direct typed SQL columns. Uniform
+and Zipf families, versioning cohorts, NULL/missing, scope shadowing,
+hydration, write, plan, storage, WAL, executor, and runtime metrics remain
+explicit. Operational backfill, callback-preserving deletion, and versioned
+mutation comparisons remain deferred or not applicable to this slice.
+
+The local exact-prefix factor-smoke is a noncanonical harness diagnostic, not
+independently accepted content or performance evidence: the current validator
+rejects raw or patched factor-smoke before independent content acceptance, and
+mutation output rooted in that base rejection is not acceptance evidence. It
+supplies no accepted representative result, winner, representative
+performance claim, or architecture choice.
+T141 rejected sustained iowait after four consecutive breaches on the
+continuously transcoding host; the rejected host grants no authority to rerun
+the tournament. SSH and representative observations require explicit future
+authority, fresh capacity, fail-stop monitoring, export-before-cleanup, and
+no-impact evidence.

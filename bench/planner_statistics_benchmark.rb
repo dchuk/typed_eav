@@ -480,9 +480,7 @@ class PlannerStatisticsAggregate
   def metric_delta(query, candidate, paired)
     candidate_metrics = candidate.fetch("metrics")
     paired_metrics = paired.fetch("metrics")
-    secondary = if candidate_metrics["absolute_relative_error"] && paired_metrics["absolute_relative_error"]
-                  candidate_metrics.fetch("absolute_relative_error") - paired_metrics.fetch("absolute_relative_error")
-                end
+    secondary = candidate_metrics.fetch("absolute_relative_error") - paired_metrics.fetch("absolute_relative_error") if candidate_metrics["absolute_relative_error"] && paired_metrics["absolute_relative_error"]
     {
       "query" => query,
       "primary_delta" => candidate_metrics.fetch("absolute_corrected_log2_error") - paired_metrics.fetch("absolute_corrected_log2_error"),

@@ -25,6 +25,10 @@ AllCops:
     - "spec/dummy/tmp/**/*"
     - "lib/generators/**/templates/**/*"
 
+# Rails plugin versions disagree about intentional stale suppression comments.
+Lint/RedundantCopDisableDirective:
+  Enabled: false
+
 # --- Layout -----------------------------------------------------------
 Layout/LineLength:
   Max: 120

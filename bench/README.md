@@ -351,3 +351,35 @@ semantic/chunks; versioned semantic/chunks use 63,001 statements and produce
 10,000 audit rows, while fast produces zero. RSS is unsupported on macOS; WAL
 is available. These are local single-session diagnostics, not representative
 or production-throughput claims.
+
+### T121 factorized storage tournament (pre-observation)
+
+`storage_tournament_benchmark.rb` is the single generator, independent oracle,
+executor, and instrumentation path for four frozen profiles: L100 (100k/10/5/1),
+A100 (100k/50/20/100), H100 (100k/200/100/10k), and A1M (1M/50/20/100).
+A1M reuses the A100 seed/prefix and is a scale sentinel, not a 1M-by-100
+interaction claim. Each profile carries uniform and Zipf families, matched
+versioning-off/on cohorts, and the same host population across optimized
+TypedEAV, indexed JSONB (document GIN plus a typed `f000` hot-key index),
+per-type EAV, and direct typed SQL columns.
+
+The oracle is generated independently from sorted host-ordinal/field/value
+triples. The matrix includes equality, Zipf equality, range, explicit
+NULL-versus-missing, scope shadowing, hydration, and writes. Profiles are
+processed one disposable database at a time; absolute latency is diagnostic
+under co-tenant load, while identity, plans, storage, WAL, executor work, and
+dispersion carry architectural weight. Operational backfill,
+callback-preserving deletion, and versioned mutation comparisons remain
+deferred or not applicable to this pre-observation slice.
+
+The exact-prefix local factor-smoke is the only pre-gate execution. It is a
+noncanonical harness diagnostic, not independently accepted content or
+performance evidence: the current validator rejects raw or patched
+factor-smoke before independent content acceptance, and mutation output rooted
+in that base rejection is not acceptance evidence. It establishes no
+representative result, winner, representative performance claim, or
+architecture choice. T141 rejected
+sustained iowait after four consecutive breaches on the continuously
+transcoding host; that host grants no rerun authority. SSH and representative
+observations require explicit future authority, fresh capacity, fail-stop
+monitoring, export-before-cleanup, and no-impact evidence.
