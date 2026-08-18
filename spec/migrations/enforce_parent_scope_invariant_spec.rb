@@ -6,6 +6,10 @@ require TypedEAV::Engine.root.join("db/migrate/20260712000000_enforce_parent_sco
 RSpec.describe EnforceParentScopeInvariant, type: :model do
   subject(:migration) { described_class.new }
 
+  it "disables the implicit DDL transaction for constraint validation" do
+    expect(described_class.disable_ddl_transaction).to be(true)
+  end
+
   it "rejects validation-bypassing orphan-parent fields and accepts valid tuple shapes" do
     expect do
       in_savepoint do

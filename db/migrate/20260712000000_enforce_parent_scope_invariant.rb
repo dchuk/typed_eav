@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class EnforceParentScopeInvariant < ActiveRecord::Migration[7.1]
+  disable_ddl_transaction!
+
   CONSTRAINTS = {
     typed_eav_fields: :chk_te_fields_parent_scope_requires_scope,
     typed_eav_sections: :chk_te_sections_parent_scope_requires_scope,
