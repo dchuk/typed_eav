@@ -383,3 +383,25 @@ sustained iowait after four consecutive breaches on the continuously
 transcoding host; that host grants no rerun authority. SSH and representative
 observations require explicit future authority, fresh capacity, fail-stop
 monitoring, export-before-cleanup, and no-impact evidence.
+
+### T167 practical hardening suite
+
+`practical_hardening_benchmark.rb` measures five shipped public write paths in
+fixed order: equivalent-population default and relation backfill, semantic bulk
+update with versioning off and on, and callback-preserving default-batch field
+deletion. Smoke uses backfill 20/2, bulk 20 hosts × 10 fields, and deletion 100
+Values; bounded uses backfill 1,000/100, bulk 100 hosts × 10 fields, and deletion
+1,001 Values. Each cell has one untimed fixture and one timed public call in a
+fresh Ruby process, atomically fsynced into a SHA-256 checkpoint chain. Cleanup
+completes before finalization and caller-supplied SHA validation. These are
+single-call local diagnostics, with no statistical or architecture claim.
+
+The accepted bounded artifact is
+`bench/results/phase-10-practical-hardening-bounded.json` (SHA-256
+`aa6bcb6e7c34050eb693b539b609a509bb203b862a01310236de4446e7404635`).
+It completed all five cells in 33 seconds and removed its disposable database.
+The individual public calls took 206.77 ms and 230.09 ms for the two backfills,
+853.77 ms and 2,791.35 ms for bulk updates with versioning off and on, and
+3,513.97 ms for the batched deletion. These are one local observation per cell,
+useful as bounded regression diagnostics only; they do not support percentiles,
+comparative production-performance claims, or a storage-architecture decision.

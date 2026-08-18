@@ -302,3 +302,23 @@ continuously transcoding host; the rejected host grants no authority to rerun
 the tournament. SSH and representative observations require explicit future
 authority, fresh capacity, fail-stop monitoring, export-before-cleanup, and
 no-impact evidence.
+
+### T167 practical hardening observation
+
+The practical hardening suite is a bounded local diagnostic over shipped public
+APIs. It records equivalent-population default-versus-relation backfill,
+semantic bulk update in fresh versioning-off/on processes, and default-batch
+callback-preserving deletion. Cells are persisted in fixed order as fsynced
+SHA-256 checkpoints; incomplete prefixes never imply a global result. The
+one-shot schema-v3 artifact independently recomputes ordinal digests,
+cardinalities, version deltas, callbacks, cleanup, source bytes, and the fixed
+1,000-row deletion batch. It is not a storage architecture comparison or winner
+claim. The accepted bounded artifact is
+`bench/results/phase-10-practical-hardening-bounded.json` (SHA-256
+`aa6bcb6e7c34050eb693b539b609a509bb203b862a01310236de4446e7404635`).
+It completed the five one-shot cells in 33 seconds: equivalent 1,000-row
+backfills, versioning-off/on updates of 100 hosts × 10 fields, and deletion of
+1,001 Values across the real 1,000-row batch boundary. Cleanup removed the
+disposable database. The recorded call times are local regression diagnostics,
+not statistical evidence, a production-performance comparison, or an
+architecture decision.
