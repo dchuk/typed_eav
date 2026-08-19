@@ -334,7 +334,8 @@ The rejected T099 benchmark package has been withdrawn. The clean f1d4cb9
 commit therefore has behavioral support for this API and missingness semantics,
 but no accepted comparative-performance or throughput evidence. A fair
 default-versus-SQL-narrowed measurement over equivalent total populations is
-deferred to T100; no local scaling result should be used as a performance claim.
+is a future-goal requirement only; no local scaling result should be used as a
+performance claim.
 
 ### T092 bounded local bulk-write evidence
 
@@ -354,9 +355,11 @@ semantic/chunks; versioned semantic/chunks use 63,001 statements and produce
 is available. These are local single-session diagnostics, not representative
 or production-throughput claims.
 
-### T121 factorized storage tournament (pre-observation)
+### T121 factorized storage tournament (retired; pre-observation only)
 
-`storage_tournament_benchmark.rb` is the single generator, independent oracle,
+`storage_tournament_benchmark.rb` is retained as historical methodology only;
+T168 retired the tournament and any rerun requires a new goal. The single
+generator, independent oracle,
 executor, and instrumentation path for four frozen profiles: L100 (100k/10/5/1),
 A100 (100k/50/20/100), H100 (100k/200/100/10k), and A1M (1M/50/20/100).
 A1M reuses the A100 seed/prefix and is a scale sentinel, not a 1M-by-100
@@ -372,7 +375,7 @@ processed one disposable database at a time; absolute latency is diagnostic
 under co-tenant load, while identity, plans, storage, WAL, executor work, and
 dispersion carry architectural weight. Operational backfill,
 callback-preserving deletion, and versioned mutation comparisons remain
-deferred or not applicable to this pre-observation slice.
+deferred or not applicable to this retired, no-winner slice.
 
 The exact-prefix local factor-smoke is the only pre-gate execution. It is a
 noncanonical harness diagnostic, not independently accepted content or

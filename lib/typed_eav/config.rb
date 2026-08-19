@@ -206,7 +206,8 @@ module TypedEAV
       #
       # :rename fires when `name` is among Field#saved_changes, even
       # combined with other attr changes (sort_order, options, etc.) —
-      # Phase 07 matview needs the rename signal to regenerate column names
+      # Registered consumers may use the rename signal to refresh their own
+      # name-to-field mappings.
       # even when the rename was bundled with other edits.
       attr_accessor :on_field_change
 

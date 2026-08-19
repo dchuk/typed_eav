@@ -3,8 +3,9 @@
 module TypedEAV
   module Versioning
     # The transactional version writer. Conditionally installed on Value's
-    # before-create/update/destroy callbacks at engine boot via
-    # `TypedEAV::Versioning.register_if_enabled`.
+    # create/update `after` and destroy `before` callbacks at engine boot via
+    # `TypedEAV::Versioning.register_if_enabled`; every write is therefore
+    # part of the source transaction.
     #
     # ## Contract
     #

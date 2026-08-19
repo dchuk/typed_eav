@@ -337,10 +337,9 @@ module TypedEAV
       #    per batch, this is ~1000 transactions, not 1M.
       #
       # Skip rule (per-record, applied INSIDE the batch loop): skip when the
-      # entity already has a non-nil typed value for this field. A Value row
-      # whose typed column is nil is still a candidate for backfill — the
-      # skip rule is "non-nil typed column," not "Value row exists" (matches
-      # CONTEXT.md).
+      # entity already has a logically present typed value for this field. A
+      # Value row whose declared cells are all nil is still a candidate for
+      # backfill; the rule is all-cell logical missingness, not row existence.
       #
       # Partition match: when field.scope is non-nil, the entity must respond
       # to typed_eav_scope and the value must match field.scope (as String).
@@ -654,18 +653,15 @@ module TypedEAV
       #    `value:` explicitly bypasses the UNSET_VALUE sentinel path on
       #    Value#initialize (backfill knows the default; no need to re-
       #    resolve via the sentinel).
-      #  - row exists with nil typed column → update to default. This is the
-      #    case the skip rule deliberately allows backfill to fix (a Value
-      #    row created via explicit `value: nil` is still a backfill
-      #    candidate per CONTEXT.md).
-      #  - row exists with non-nil typed column → skip (idempotence).
+      #  - row exists with all declared typed cells nil → update to default.
+      #  - any declared typed cell non-nil → skip (idempotence).
       def backfill_one(entity, _column, existing)
         if existing.nil?
           TypedEAV::Value.create!(entity: entity, field: self, value: default_value)
         elsif logical_value_missing?(existing)
           existing.update!(value: default_value)
         end
-        # else: row exists with non-nil typed column → skip (skip rule).
+        # else: at least one declared typed cell is non-nil → skip.
       end
 
       # ── Phase 03 event dispatch ──

@@ -7,7 +7,7 @@ module TypedEAV
   # ## Architecture
   #
   # - TypedEAV::Versioning::Subscriber.call(value, change_type, context)
-  #   is conditionally installed on Value's before-write callbacks at engine
+  #   is conditionally installed on Value's transactional callbacks at engine
   #   boot via `TypedEAV::Versioning.register_if_enabled`. The version row
   #   therefore shares the source transaction.
   #

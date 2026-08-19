@@ -81,9 +81,8 @@ RSpec.describe TypedEAV::Field::Base, "event dispatch", :event_callbacks, :real_
     # Locked false-positive bias from 03-CONTEXT.md §`on_field_change`
     # change_type set: `:rename` fires whenever name is among
     # saved_changes, even if combined with other attr changes. Phase 07
-    # matview must regenerate column DDL on rename; missing a rename
-    # bundled with other edits would corrupt the matview's column-name
-    # → field-name map.
+    # Registered consumers must receive a rename even when it is bundled with
+    # other edits; the public event is defined by the changed name column.
     it "fires :rename (NOT :update) when name changes alongside other attrs" do
       field = create(:text_field, name: "before_combo", sort_order: 1)
       events = []

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class UsePartialCoveringScalarIndexes < ActiveRecord::Migration[7.1]
+  # Concurrent create-before-drop keeps the replacement indexes available
+  # throughout the upgrade and leaves rollback able to recreate legacy DDL.
   disable_ddl_transaction!
 
   TABLE = :typed_eav_values

@@ -887,7 +887,7 @@ exactly three method overrides.
 
 - **`File`:** Same shape as `Field::Image` but without image-specific semantics. Stores `signed_id` in `string_value`; same operator set; same options (`allowed_content_types`, `max_size_bytes`). The Image vs File distinction is by `value.field.class` at runtime — apps that want strict image-only validation set `allowed_content_types: ["image/*"]` on `Field::Image`; `Field::File` is a general-purpose attachment slot.
 
-- **Active Storage dependency:** Lazy soft-detect via `defined?(::ActiveStorage::Blob)`. The gem does NOT add Active Storage as a hard dependency — apps that never use Image/File never need to install it. To use Image or File fields, add `gem "activestorage"` to your Gemfile (already included in Rails 7.1+ via the `rails` meta-gem) and run `bin/rails active_storage:install` to create the `active_storage_blobs` / `active_storage_attachments` / `active_storage_variant_records` tables. The mirror precedent is `acts_as_tenant`, which is also soft-detected (see `Config::DEFAULT_SCOPE_RESOLVER`).
+- **Active Storage dependency:** Lazy soft-detect via `defined?(::ActiveStorage::Blob)`. The gem does NOT add Active Storage as a hard dependency — apps that never use Image/File never need to install it. To use Image or File fields, add `gem "activestorage"` to your Gemfile (included in supported Rails versions via the `rails` meta-gem) and run `bin/rails active_storage:install` to create the `active_storage_blobs` / `active_storage_attachments` / `active_storage_variant_records` tables. The mirror precedent is `acts_as_tenant`, which is also soft-detected (see `Config::DEFAULT_SCOPE_RESOLVER`).
 
 - **`on_image_attached` hook:** Fires from `after_commit` on `TypedEAV::Value` when a `Field::Image`-typed Value's attachment is added or replaced. Receives `(value, blob)`. Configure via `TypedEAV.configure { |c| c.on_image_attached = ->(v, b) { ... } }`. Hook ordering: runs AFTER versioning (Phase 4) and AFTER `on_value_change` (Phase 3) so it sees the persisted version row and the user-callback context. File attachments do NOT fire this hook — the name is image-specific by design. Use `on_value_change` for a generic value-mutation signal that covers File-typed Values too.
 
@@ -1362,7 +1362,7 @@ The gem creates five tables:
 
 ## Architecture
 
-Internal module layout as of 0.5.0. Most consumers never reach for these directly — the public surface is the `has_typed_eav` macro and the instance/class methods it installs — but the split matters if you're extending the gem, debugging an integration, or evaluating it for production. Decisions are anchored by [ADR-0001](docs/adr/0001-collapse-column-mapping-stack.md) through [ADR-0006](docs/adr/0006-include-missing-via-set-complement.md).
+Internal module layout as of 0.6.0. Most consumers never reach for these directly — the public surface is the `has_typed_eav` macro and the instance/class methods it installs — but the split matters if you're extending the gem, debugging an integration, or evaluating it for production. Decisions are anchored by ADR-0001 through ADR-0013.
 
 ### Macro entry: `HasTypedEav`
 
@@ -1408,8 +1408,9 @@ TypedEAV::QueryBuilder                ← low altitude: per-field SQL primitive
 `typed_eav_hash_for(records)` (the plural read) routes through `TypedEAV::BulkRead`. Given a record collection and an effective `(scope, parent_scope)`, it:
 
 1. Resolves visible definitions and groups the requested field IDs.
-2. Loads definitions, values, and host/partition metadata through one batched
-   query per stage (three SQL queries total for the public path).
+2. Loads definitions, values, and field associations through one batched
+   definition query, one values query, and one field-association preload
+   (three SQL queries total; no host-table query).
 3. Returns a `{record_id => {field_name => value}}` map while skipping orphaned
    values and preserving logical missingness.
 

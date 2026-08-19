@@ -29,7 +29,9 @@ This ledger is the durable Phase 0 baseline for the correctness-first TypedEAV i
 - CI also runs RuboCop, full RSpec, migration setup, and consumer-install migration coverage. The full suite baseline is 1,201 examples, 0 failures, and 8 intentional Phase 0 pending probes (T004/T006).
 - Public surfaces sampled for this program: `has_typed_eav`, `typed_eav_value`, `typed_eav_hash`, `set_typed_eav_value`, `typed_eav_attributes=`, `where_typed_eav`, `typed_eav_definitions`, `bulk_set_typed_eav_values`, and `bulk_set_typed_eav_values_per_record`.
 - Representative generated SQL is Active Record/Arel against `typed_eav_values`, typically `WHERE field_id = ? AND integer_value > ?`, with entity IDs consumed as a subquery by `where_typed_eav`; JSON multi-select uses `json_value @> ?`.
-- Existing benchmark infrastructure was absent before Phase 0. Representative multi-strategy tournament work is currently resource-blocked by approximately 3.1 GiB free disk; smoke runs cannot decide architecture.
+- Existing benchmark infrastructure was absent before Phase 0. The representative
+  tournament was retired by T168; smoke and tournament work are not a pending
+  architecture dependency, and any new comparison requires a new goal.
 
 ## Schema authority and index inventory
 
@@ -181,16 +183,19 @@ transfer, and exact cleanup. Artifact SHA-256:
 | 4 | T062–T064 multi-filter query policy | Worker/Judge | done | T059 protocol | ADR 0011: retain chained `IN`; alternatives research-only; no adaptive strategy | 2,940 attempts; 622 censors; 294 oracles (282 completed, 12 timeout); false-zero derived buffers; repeated-field limits | task commits | Repair buffer/distinct-field evidence and complete cross-scope scaling before Gate 4 |
 | 4 | T073–T076 corrective multi-filter evidence | Judge/Worker | done | ADR 0011/T062 audit | Preserve current chained `IN`; corrected evidence remains research-only and replacement-ineligible | 960 attempts; 620 censors; 96 oracles (81 completed, 15 timeout); 340 validated plans; exact distinct fields | task commit | Post-run Gate 4 review; no production or ADR change |
 | 4 | T065–T072 cross-scope administrative policy | Scout/Workers/Judges | done | Phase 4C code-path analysis | ADR 0012: keep `unscoped` administrative; application-owned bounding/batching; no quantitative or prototype claim | T066/T069 representative artifacts rejected; local smoke is semantic-only; rejected harness removed | task commit | Keep production behavior unchanged; use consuming-workload evidence for operational bounds |
-| 4 | Planner/query paths | PM/Workers | queued | Phase 3 policy | Compare statistics and multi-filter plans | Operator-specific benchmark evidence | — | Preserve scope and missing semantics |
+| 4 | Planner/query paths | PM/Workers | done | Phase 3 policy | Retain current SQL and document application-owned statistics policy | ADR 0010/0011 and bounded corrective evidence | — | Preserve scope and missing semantics |
 | 5 | T086 BulkRead characterization | Worker | done | Gate 4/T083 | Preserve production path; characterize scope-driven query/row/object growth before optimization | 4-cell matrix; 12 warmups; 120 observations; exact SQL/rows/AR objects; real drill and cleanup | task commit | Review evidence before any cache/read-path design |
-| 6–8 | Write/durability/cleanup | PM/Workers | queued | Gates 4/6 | Characterize semantics before optimizing | Profiles, failure proofs, ADRs | — | Preserve callbacks, versioning, tenant isolation |
-| 9–12 | Tournament and documentation | PM/Workers | queued | Prior gates + host | Choose architecture only from fair benchmark | Comparable strategies and final ADRs | — | Final audit and full-outcome proof |
+| 6–8 | Write/durability/cleanup | PM/Workers | done | Gates 4/6 | Characterize semantics before optimizing | Profiles, failure proofs, ADRs, T167 bounded one-shot | — | Preserve callbacks, versioning, tenant isolation |
+| 9–12 | Tournament and documentation | retired | T168 | No tournament dependency remains | Preserve historical evidence and no-winner decision; future comparisons require a new goal | T171/T172/T173 alignment | — | No storage winner |
 
 ## Baseline commands and evidence policy
 
 Run `bench/database_baseline.rb` against an isolated configured PostgreSQL database. It is read-only and reports empty-database caveats instead of fabricating measurements. The checked-in `bench/results/phase-0-baseline.json` is a real local PostgreSQL 17.7 capture from the empty `typed_eav_test` database; `/tmp/typed-eav-phase-0-baseline.json` is the reproducible verification artifact for this task.
 
-No Phase 2 or tournament result may be treated as representative until a larger dedicated volume/host is available. Local PostgreSQL settings and cumulative `pg_stat_user_indexes` values are context, not cross-version CI evidence.
+Historical Phase 2 and tournament results retain their stated evidence ceilings;
+the tournament is retired and cannot become an implicit pending dependency.
+Local PostgreSQL settings and cumulative `pg_stat_user_indexes` values are
+context, not cross-version CI evidence.
 
 ## Phase 2A smoke harness evidence
 
@@ -224,7 +229,8 @@ Missingness now comes from Field typed-storage semantics: all physical cells
 must be nil. This treats fully empty Currency as missing while preserving a
 partially populated Currency row. The rejected T099 benchmark package is
 withdrawn: f1d4cb9 has behavioral support only, with no accepted comparative-
-performance or throughput evidence. T100 must perform the fair
+performance or throughput evidence. A future, separately authorized goal would
+need to perform the fair
 default-versus-SQL-narrowed comparison over equivalent total populations before
 any performance claim is made.
 
@@ -284,9 +290,10 @@ claim representative latency, production throughput, 10,000 hosts, or
 database through `DATABASE_URL` and a host-side tar-to-stdout export, but is
 not executed by T092.
 
-### T121 factorized storage tournament (pre-observation)
+### T121 factorized storage tournament (retired by T168)
 
-T121 freezes a four-profile, one-profile-database-at-a-time tournament rather
+T121 historically froze a four-profile, one-profile-database-at-a-time
+tournament. T168 retired it; any future comparison requires a new goal rather
 than attempting the rejected 1M-by-100 Cartesian footprint. L100 is
 100k/10/5/1, A100 is 100k/50/20/100, H100 is 100k/200/100/10k, and A1M is
 1M/50/20/100 replaying the A100 seed/prefix. Every profile shares one host

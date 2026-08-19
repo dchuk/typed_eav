@@ -44,7 +44,7 @@ class AddParentScopeToTypedEAVPartitions < ActiveRecord::Migration[7.1]
     #    standard semantics, so we don't need `NULLS NOT DISTINCT` (PG ≥ 15).
     #
     #    Option A (`nulls_not_distinct: true`) was rejected because the
-    #    gemspec floor is `rails >= 7.1` and there is no PG-server-version
+    #    gemspec floor is `rails >= 7.2` and there is no PG-server-version
     #    pin — consumer apps may run PG 12/13/14 where the option does
     #    not exist.
     #

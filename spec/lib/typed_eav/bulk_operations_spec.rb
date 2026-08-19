@@ -29,7 +29,7 @@ require "spec_helper"
 # is on, `:none` when off. Explicit `:per_record`/`:per_field` with
 # versioning OFF raises ArgumentError. The UUID propagates from the
 # per-record `with_context` block through to the outer-transaction
-# `after_commit` subscriber via the in-memory snapshot
+# transactional version callback via the in-memory snapshot
 # `Value#pending_version_group_id` ivar (subscriber prefers it over
 # `context[:version_group_id]` so the UUID survives even after the
 # per-record `with_context` has unwound).

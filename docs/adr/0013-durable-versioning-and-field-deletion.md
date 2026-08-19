@@ -24,7 +24,7 @@ fail closed.
 
 | Option | Boundary | Strength | Cost and limitation |
 | --- | --- | --- | --- |
-| Current after-commit delivery | `Value` commits, then subscriber writes `ValueVersion` | Backward-compatible and simple | A subscriber failure leaves committed source state without a version row; retries and visibility are external concerns |
+| Historical after-commit delivery | `Value` committed, then subscriber wrote `ValueVersion` | Backward-compatible and simple | A subscriber failure left committed source state without a version row; retries and visibility were external concerns |
 | Synchronous source-transaction write | Write `ValueVersion` before the `Value` transaction commits | Source and version row succeed or roll back together; smallest durable boundary | Requires `Value` and `ValueVersion` to share the same connection pool; changes callback ordering and needs explicit recursion/rollback tests |
 | Generic outbox | Source transaction appends an event; a worker writes versions | Cross-process retry, replay, and operational observability | Adds schema, worker/queue, idempotency, retention, ordering, and deployment machinery before a cross-database or external-consumer requirement exists |
 
@@ -64,7 +64,7 @@ Idempotency is one version row per successful source mutation. A caller owns a
 whole-source retry: retry the complete source transaction after a rollback or
 connection failure, rather than replaying an individual version write. There is
 no asynchronous replay cursor, checkpoint protocol, or durable event identity
-in this proposal. Ordering is the order of mutations within one source
+in this boundary. Ordering is the order of mutations within one source
 transaction; no total order is promised across concurrent transactions or
 databases.
 

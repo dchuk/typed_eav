@@ -46,6 +46,10 @@ the implemented program work without changing the gem version or release metadat
 - ValueVersion rows are written in the source transaction, preserving atomic
   rollback with the Value mutation and avoiding a false after-commit rollback
   assumption.
+- The parent-scope check-constraint migration validates existing rows before
+  adding constraints with Strong Migrations-compatible nontransactional DDL;
+  the unchanged consumer migration canary passed. This records hardening only,
+  not a release or publication claim.
 
 ## [0.6.0] - 2026-07-13
 

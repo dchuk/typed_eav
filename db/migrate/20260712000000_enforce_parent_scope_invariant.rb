@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class EnforceParentScopeInvariant < ActiveRecord::Migration[7.1]
+  # Strong Migrations requires check-constraint validation outside the default
+  # transaction so the catalog-only add and validation can proceed safely.
   disable_ddl_transaction!
 
   CONSTRAINTS = {

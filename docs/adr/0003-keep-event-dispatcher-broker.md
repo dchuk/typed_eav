@@ -2,7 +2,7 @@
 
 **Status:** accepted
 
-An architecture review surfaced `EventDispatcher` as a possible "one adapter = hypothetical seam" — the internal-subscriber list (`value_change_internals`) has exactly one entry today (`Versioning::Subscriber`), and the broker pattern looked over-built for a 1:1 relationship. On closer inspection the broker is correctly designed for what's already in motion, and inlining would cost more than it saved.
+An architecture review surfaced `EventDispatcher` as a possible "one adapter = hypothetical seam" — the internal-subscriber list (`value_change_internals`) is intentionally generic, and the broker pattern looked over-built for a 1:1 relationship. On closer inspection the broker is correctly designed for its public/internal callback split, and inlining would cost more than it saved.
 
 We're keeping `EventDispatcher` as-is. The internal-vs-user-proc split is load-bearing on three counts that don't survive an inline.
 

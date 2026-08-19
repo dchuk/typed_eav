@@ -72,7 +72,7 @@ module TypedEAV
     # that don't use Image/File field types pay zero overhead, AND the
     # gemspec stays free of an activestorage hard-dependency.
     #
-    # When AS IS loaded (Rails 7.1+ with the rails meta-gem, or an
+    # When AS is loaded (on supported Rails versions with the rails meta-gem, or an
     # explicit `gem 'activestorage'` line), TypedEAV::Value gains a
     # single :attachment has_one_attached association that covers BOTH
     # Field::Image and Field::File typed Values. The Image vs File

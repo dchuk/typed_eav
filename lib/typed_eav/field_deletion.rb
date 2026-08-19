@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 module TypedEAV
-  # Explicit, resumable deletion for large Field value populations.
+  # Explicit, resumable deletion for large Field value populations. The public
+  # Field#destroy_with_values_in_batches! contract requires a persisted
+  # `field_dependent: :destroy` Field, positive batch size, no open transaction,
+  # and one shared Field/Value/ValueVersion connection pool.
   module FieldDeletion
     module_function
 

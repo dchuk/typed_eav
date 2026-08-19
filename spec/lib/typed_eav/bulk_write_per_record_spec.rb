@@ -7,8 +7,8 @@ require "spec_helper"
 # G1 (issue #18) — `Entity.bulk_set_typed_eav_values_per_record` is the
 # per-record-varying sibling to `bulk_set_typed_eav_values`. Takes a
 # `Hash<host_record, Hash<field_name_string, value>>` and routes each
-# record's value-set through the same outer-transaction-plus-savepoint
-# envelope, with the same `{ successes: [...], errors_by_record: {...} }`
+# record's value-set through the default :all outer-transaction-plus-savepoint
+# envelope (or opt-in :chunks), with the same `{ successes: [...], errors_by_record: {...} }`
 # return shape.
 RSpec.describe "Entity.bulk_set_typed_eav_values_per_record" do
   # ────────────────────────────────────────────────────────────

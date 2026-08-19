@@ -6,8 +6,8 @@ require "spec_helper"
 #
 # WHY this is pinned (CONTEXT decision 5): `label` is purely cosmetic. A
 # label change does NOT alter the (entity_type, scope, parent_scope) partition
-# tuple, the machine slug `name`, or the matview column map. Phase-07's
-# materialized-index DDL regeneration keys on the `:rename` change_type
+# tuple or the machine slug `name`. Registered consumers may use the
+# `:rename` change_type for their own name-to-field mappings
 # (`saved_change_to_attribute?(:name)`); regenerating DDL on a label-only edit
 # would be wasted work at best and, if a future refactor ever WIDENED the
 # rename discriminator to also key on `:label`, would corrupt the
