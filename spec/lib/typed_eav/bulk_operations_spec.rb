@@ -497,9 +497,9 @@ RSpec.describe "Entity.bulk_set_typed_eav_values" do
 
     describe "snapshot mechanism end-to-end" do
       # The Value#pending_version_group_id ivar is read by the subscriber
-      # at after_commit time. Stamping it BEFORE save inside the
+      # in the transactional version callback. Stamping it BEFORE save inside the
       # per-record `with_context` block guarantees the UUID survives the
-      # outer-transaction `after_commit` boundary even after `with_context`
+      # outer-transaction boundary even after `with_context`
       # has lexically unwound.
       it "Value carries pending_version_group_id matching the version row's version_group_id" do
         TypedEAV.with_scope("tenant_1") do

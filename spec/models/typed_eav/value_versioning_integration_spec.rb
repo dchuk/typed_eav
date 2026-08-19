@@ -126,10 +126,9 @@ RSpec.describe TypedEAV::Value, "versioning integration", :event_callbacks, :rea
       destroy_v = TypedEAV::ValueVersion.where(change_type: "destroy").last
       expect(destroy_v.before_value).to eq("integer_value" => 42)
       expect(destroy_v.after_value).to eq({})
-      # value_id is nil — by after_commit time the parent typed_eav_values
-      # row is already gone (Postgres commits DELETE before invoking
-      # after_commit callbacks). Subscriber writes nil explicitly to
-      # avoid FK-violating INSERT. Audit identity preserved via entity_*
+      # value_id is nil — the before-destroy writer explicitly nulls it while
+      # the parent still exists, avoiding an FK-violating INSERT. Audit
+      # identity is preserved via entity_*
       # and field_id.
       expect(destroy_v.value_id).to be_nil
       expect(destroy_v.field_id).to eq(field.id)

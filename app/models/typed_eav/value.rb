@@ -199,7 +199,7 @@ module TypedEAV
 
     # Revert this Value's typed columns to the state recorded in
     # `version.before_value`, then save!. The save fires the transactional
-    # version callback and the existing public after_commit dispatcher; a NEW
+    # version callback and the independent public after_commit dispatcher; a NEW
     # version row is written where after_value reflects the targeted version's
     # before_value.
     #
@@ -248,8 +248,8 @@ module TypedEAV
     def revert_to(version)
       # Check 1: source Value must still exist. plan 04-02's subscriber writes
       # value_id: nil for :destroy events (because the parent typed_eav_values
-      # row is gone by after_commit on :destroy time and FK ON DELETE SET NULL
-      # would FK-fail at INSERT otherwise). A destroy version cannot be
+      # row still exists during the before-destroy callback, so the writer
+      # explicitly uses value_id: nil. A destroy version cannot be
       # reverted because we can't save! a destroyed AR record back into
       # existence. This check covers all destroy versions.
       if version.value_id.nil?

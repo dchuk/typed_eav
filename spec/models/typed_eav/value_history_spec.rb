@@ -100,8 +100,8 @@ RSpec.describe TypedEAV::Value, "#history", :event_callbacks, :real_commits do
   describe "post-destruction (orphaned destroy versions)" do
     # Documents the locked semantic from plan 04-02 amendment: :destroy
     # versions are written with `value_id: nil` (FK ON DELETE SET NULL +
-    # post-after_commit-DELETE timing — the parent row is gone by INSERT
-    # time and writing the in-memory value.id would FK-fail). Because
+    # before-destroy timing — the writer uses value_id: nil while the parent
+    # still exists, avoiding an FK failure). Because
     # `Value#history` is `versions.order(...)` — an association keyed on
     # value_id — destroy versions never appear there. The canonical path
     # for "full lifecycle audit including destroy" is the entity-scoped
@@ -118,9 +118,7 @@ RSpec.describe TypedEAV::Value, "#history", :event_callbacks, :real_commits do
       # `:destroy` semantic is what we want to lock in: even when (in a
       # future code path) destroy versions exist, the value_id-keyed
       # association cannot surface them because plan 04-02's subscriber
-      # writes `value_id: nil` for destroys (the parent typed_eav_values
-      # row is gone by INSERT time, so writing a non-nil value_id would
-      # FK-fail).
+      # writes `value_id: nil` for destroys while the parent still exists.
       pre_destroy_types = value.history.pluck(:change_type)
       expect(pre_destroy_types).to contain_exactly("create", "update")
       expect(pre_destroy_types).not_to include("destroy")

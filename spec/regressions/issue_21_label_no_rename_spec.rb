@@ -8,7 +8,8 @@ require "spec_helper"
 # label change does NOT alter the (entity_type, scope, parent_scope) partition
 # tuple or the machine slug `name`. Registered consumers may use the
 # `:rename` change_type for their own name-to-field mappings
-# (`saved_change_to_attribute?(:name)`); regenerating DDL on a label-only edit
+# (`saved_change_to_attribute?(:name)`); registered consumers must not treat a
+# label-only edit as a rename or regenerate their own mappings
 # would be wasted work at best and, if a future refactor ever WIDENED the
 # rename discriminator to also key on `:label`, would corrupt the
 # column-name → field-name map. This spec fails if a label-only edit ever

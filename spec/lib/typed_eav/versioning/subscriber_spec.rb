@@ -83,7 +83,7 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
     # covers the "subscriber writes rows when registered" path end-to-end.
     it "keeps the boot-latched callback when dispatcher registration is omitted" do
       # The callback is installed at boot and is independent of the
-      # after_commit dispatcher list.
+      # public after_commit dispatcher list.
       TypedEAV.registry.register("Contact", types: nil, versioned: true)
 
       expect do
@@ -112,7 +112,7 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
 
     it "registering twice when versioning=true installs exactly one callback" do
       # Repeated boot registration must not duplicate transactional callbacks
-      # or install an after_commit version writer.
+      # or install a dispatcher-owned version writer.
       TypedEAV::EventDispatcher.value_change_internals.clear
       TypedEAV.config.versioning = true
 
@@ -170,10 +170,9 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
       destroy_version = TypedEAV::ValueVersion.where(entity_id: contact.id, change_type: "destroy").last
       expect(destroy_version.before_value).to eq("integer_value" => 42)
       expect(destroy_version.after_value).to eq({})
-      # CRITICAL: value_id is nil (not value_id_before_destroy). With
-      # FK ON DELETE SET NULL, the parent Value row is gone by the time
-      # after_commit fires; writing the stale id would FK-fail. The
-      # subscriber explicitly writes nil for :destroy events.
+      # CRITICAL: value_id is nil (not value_id_before_destroy). The
+      # before-destroy writer explicitly writes nil while the parent still
+      # exists, avoiding an FK failure.
       expect(destroy_version.value_id).to be_nil
       # Field is NOT destroyed — field_id remains populated for audit.
       expect(destroy_version.field_id).to eq(field.id)
@@ -187,7 +186,7 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
       # fix. If the subscriber wrote `value_id: value.id` for destroy,
       # this would raise ActiveRecord::InvalidForeignKey at the
       # ValueVersion.create! call (because typed_eav_values no longer
-      # has the parent row at after_commit time).
+      # has the parent row during the before-destroy callback).
       value = TypedEAV::Value.create!(entity: contact, field: field, value: 42)
       expect { value.destroy! }.not_to raise_error
     end

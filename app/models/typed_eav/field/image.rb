@@ -87,7 +87,7 @@ module TypedEAV
           raise NotImplementedError,
                 "TypedEAV::Field::Image requires Active Storage. " \
                 "Add `gem 'activestorage'` to your Gemfile (already " \
-                "included via the `rails` meta-gem in Rails 7.1+) and " \
+                "included via the `rails` meta-gem in Rails 7.2+) and " \
                 "run `bin/rails active_storage:install`."
         end
 

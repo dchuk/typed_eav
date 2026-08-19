@@ -185,8 +185,8 @@ module TypedEAV
       #
       # Errors raised inside this proc are rescued by EventDispatcher and
       # logged via Rails.logger.error — they do NOT propagate to the
-      # user's save call (the row is already committed). Internal subscribers
-      # Generic internal observers fire BEFORE this proc and
+      # user's save call (the row is already committed). Generic internal
+      # observers fire BEFORE this proc and
       # their errors DO propagate. See 03-CONTEXT.md §User-callback error policy.
       #
       # Reassignment after gem initialization does NOT disable internal

@@ -1429,12 +1429,16 @@ record-varying hashes. Both are semantic writers that:
 
 1. Memoizes field definitions for the call via `Thread.current[:typed_eav_bulk_defs_memo]`.
 2. Validates each attribute against its field type's cast contract.
-3. Save each host through the normal callback/validation path inside an outer
+3. Saves each host through the normal callback/validation path inside an outer
    transaction with per-record savepoints.
 
-The default `transaction: :all` commits the whole batch or rolls it back;
+Under `transaction: :all`, per-record validation failures are captured at their
+savepoints while other successes can commit, but an uncaught exception rolls
+the entire outer transaction back. The default `transaction: :all` commits the
+whole successful batch or rolls it back;
 `transaction: :chunks, chunk_size: N` commits completed chunks while isolating
-later failures. Both forms require the host, Field, and Value pools to match.
+later failures, preserving earlier committed chunks. Both forms require the
+host, Field, and Value pools to match.
 `bulk_upsert_typed_eav_values` is a separate reduced-semantics fast path: it
 casts and validates typed values, then performs one PostgreSQL upsert while
 omitting host saves, persistence callbacks, delete shorthand, and versioning.
