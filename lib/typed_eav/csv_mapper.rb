@@ -70,7 +70,7 @@ module TypedEAV
     # `errors.empty?`. Callers that need to combine multiple row Results
     # into a batch view do so by composing the immutable Hashes in their
     # own code (e.g., `results.flat_map(&:errors).reduce({}, :merge)`); the
-    # mapper does not provide a "merge" helper in v0.6.0.
+    # mapper does not provide a "merge" helper.
     class Result
       attr_reader :attributes, :errors
 

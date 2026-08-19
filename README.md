@@ -1364,7 +1364,7 @@ The gem creates five tables:
 
 ## Architecture
 
-Internal module layout as of 0.6.0. Most consumers never reach for these directly — the public surface is the `has_typed_eav` macro and the instance/class methods it installs — but the split matters if you're extending the gem, debugging an integration, or evaluating it for production. Decisions are anchored by ADR-0001 through ADR-0013.
+Internal module layout as of 0.7.0. Most consumers never reach for these directly — the public surface is the `has_typed_eav` macro and the instance/class methods it installs — but the split matters if you're extending the gem, debugging an integration, or evaluating it for production. Decisions are anchored by ADR-0001 through ADR-0013.
 
 ### Macro entry: `HasTypedEav`
 

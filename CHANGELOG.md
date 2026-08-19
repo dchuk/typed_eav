@@ -7,8 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Architecture-independent release hardening after 0.6.0. This section records
-the implemented program work without changing the gem version or release metadata.
+No unreleased changes.
+
+## [0.7.0] - 2026-08-18
+
+This release hardens TypedEAV's correctness and operational behavior, replaces
+the highest-impact read N+1 path, and adds explicitly bounded bulk-maintenance
+APIs. It keeps the typed-column architecture and existing semantic write path;
+it does not claim that one storage design or batch size wins every workload.
+
+### Highlights
+
+- Batch partition resolution in `typed_eav_hash_for(records)` so the accepted
+  1,000-scope BulkRead shape executes three SQL statements instead of 1,002.
+- Replace the six scalar value indexes with smaller partial-covering indexes
+  that omit irrelevant NULL cells while preserving index-only entity reads.
+- Add an explicit reduced-semantics PostgreSQL bulk-upsert API and opt-in
+  chunked transactions for applications that knowingly prefer throughput or
+  bounded commits over the full semantic write envelope.
+- Write `ValueVersion` audit rows in the same source transaction as each
+  `Value`, so either both persist or both roll back.
+- Add SQL-narrowed default backfills and resumable, callback-preserving,
+  keyset-batched field deletion.
 
 ### Changed
 
@@ -16,6 +36,21 @@ the implemented program work without changing the gem version or release metadat
   built. This keeps scalar, range, array, Currency, Reference, and text-search
   operands aligned with write semantics; Active Record remains responsible for
   SQL bind plumbing.
+- `typed_eav_hash_for(records)` resolves all effective partition definitions in
+  one batched query, loads values once, and preloads field associations once.
+  Its public return shape, logical-missing behavior, partition precedence, and
+  orphan filtering are unchanged.
+- Versioning now installs synchronous `Value` lifecycle callbacks instead of
+  writing audit rows from an internal after-commit subscriber. A failed audit
+  insert now rolls back the source mutation instead of leaving an unversioned
+  committed `Value`.
+- The six scalar indexes now use `(field_id, value) INCLUDE (entity_id) WHERE
+  value IS NOT NULL`. The migration creates every replacement concurrently
+  before dropping its legacy index; rollback recreates legacy indexes before
+  removing replacements.
+- Field and Section partition mutations validate their own pending tuple rather
+  than leaking scope changes through shared lookup state. Value pending state is
+  also preserved across validation and lifecycle boundaries.
 - JSONB and TypedEAV are documented as workload-dependent storage choices.
   Applications can own expression B-tree indexes for stable JSONB paths and GIN
   indexes for containment; TypedEAV supplies stable typed columns and ordinary
@@ -28,10 +63,31 @@ the implemented program work without changing the gem version or release metadat
   partition checks, batching, callbacks, validations, idempotence, versions,
   error reporting, and Field-owned logical-missing detection across multi-cell
   storage.
-- Callback-preserving, keyset-batched exact-field deletion with locked bounded
-  finalization.
-- Explicit reduced-semantics bulk upsert plus opt-in semantic transaction
-  chunking, while transaction `:all` remains the default.
+- `Field::Base#destroy_with_values_in_batches!`, a callback-preserving,
+  keyset-batched exact-field deletion path with locked bounded finalization. A
+  failed batch leaves the Field available for inspection and retry.
+- `bulk_upsert_typed_eav_values`, an explicitly reduced-semantics PostgreSQL
+  upsert. Callers must pass `acknowledge_reduced_semantics: true`; values are
+  cast and validated before SQL, while host saves, persistence callbacks,
+  versioning, delete shorthand, and per-record savepoints are intentionally
+  skipped.
+- `transaction: :chunks, chunk_size: N` for both semantic BulkWrite and the
+  reduced upsert. Completed chunks remain committed if a later chunk fails;
+  `transaction: :all` remains the default.
+
+### Fixed
+
+- Validate Field defaults through the same typed domain rules used by ordinary
+  writes, including range, option, reference, array, Currency, and multi-cell
+  logical-missing semantics.
+- Fail closed when versioning callbacks are missing, duplicated, installed on
+  the wrong lifecycle kind, or configured across different connection pools.
+- Lock and drain only the exact Field's remaining Values during deletion,
+  preserving callback/version ordering across retry and race boundaries.
+- Keep Strong Migrations-compatible constraint validation outside a migration
+  transaction while preserving the generated-consumer migration path.
+- Reject normalized duplicate bulk-upsert keys such as `:age` and `"age"`
+  before issuing SQL.
 
 ### Performance
 
@@ -40,6 +96,10 @@ the implemented program work without changing the gem version or release metadat
   representative throughput claim.
 - BulkWrite evidence remains bounded to the exercised 100- and 1,000-host
   lanes; no 10k/100k throughput or universal batch-size claim is made.
+- Representative PostgreSQL 15, 16, and 18 migration/catalog checks passed for
+  the partial-covering indexes. PostgreSQL 17 planner and benchmark timings are
+  retained as co-tenant diagnostic evidence rather than portable latency
+  promises.
 
 ### Reliability
 
@@ -48,8 +108,46 @@ the implemented program work without changing the gem version or release metadat
   assumption.
 - The parent-scope check-constraint migration validates existing rows before
   adding constraints with Strong Migrations-compatible nontransactional DDL;
-  the unchanged consumer migration canary passed. This records hardening only,
-  not a release or publication claim.
+  the unchanged consumer migration canary passed.
+
+### Upgrade notes
+
+- Copy/install the latest engine migrations and run the application's normal
+  migration command. The parent-scope validation and scalar-index migrations
+  use `disable_ddl_transaction!`; do not wrap them in an application-level
+  transaction. Concurrent create-before-drop ordering avoids an index-coverage
+  gap during normal PostgreSQL deployment.
+- Versioned applications should expect an audit-write failure to abort the
+  `Value` mutation. `Value` and `ValueVersion` must share one connection pool;
+  versioning fails closed when they do not.
+- Semantic BulkWrite still runs host validations/callbacks, Value persistence
+  callbacks, and versioning. Under the default `transaction: :all`, individual
+  validation/save failures are isolated by savepoints and successful records
+  may commit, while an uncaught exception rolls back the outer transaction.
+  `transaction: :chunks` deliberately permits earlier chunks to remain
+  committed after a later failure.
+- `bulk_set_typed_eav_values_per_record` uses records as Hash keys; duplicate
+  Active Record instances for the same persisted row collapse to one entry.
+  Use ordered separate calls when two updates to the same row must both occur.
+- The reduced bulk upsert accepts persisted, unique records and one uniform
+  values Hash, returns the number of upserted value rows, and intentionally does
+  not provide semantic successes/errors or callback/version guarantees.
+- The supported runtime contract remains Ruby 3.3–4.0, Rails 7.2–8.1, and
+  PostgreSQL 15–18.
+
+### Evidence boundaries
+
+- The BulkRead result is an exact SQL-statement-count improvement for the
+  characterized public path, not a universal throughput or latency guarantee.
+- BulkWrite measurements cover 100- and 1,000-host lanes only. Applications
+  should choose chunk sizes from their own callback cost, transaction duration,
+  lock contention, and failure-recovery needs.
+- Public chained-IN multi-filter SQL remains the supported strategy. Optional
+  `pg_trgm` and dependency statistics stay application-owned and measured;
+  TypedEAV does not automatically install extensions, specialized indexes, or
+  extended statistics.
+- No representative storage tournament selected TypedEAV, JSONB, per-type EAV,
+  or conventional columns as a universal winner.
 
 ## [0.6.0] - 2026-07-13
 
@@ -482,6 +580,8 @@ worked examples.
 
 Initial release.
 
+[Unreleased]: https://github.com/dchuk/typed_eav/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.7.0
 [0.6.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.6.0
 [0.5.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.5.0
 [0.4.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.4.0

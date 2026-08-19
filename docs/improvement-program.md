@@ -19,7 +19,7 @@ ships no automatic NULL index. Its rollback recreates every legacy covering
 index before removing the new one. ADR 0008 records the exact names and NULL
 guidance.
 
-This ledger is the durable Phase 0 baseline for the correctness-first TypedEAV improvement program. It is evidence-led: no schema or architecture change is approved from this snapshot alone. The nested repository is currently version 0.6.0; the checked-in CI contract is the support authority.
+This ledger is the durable Phase 0 baseline for the correctness-first TypedEAV improvement program. It is evidence-led: no schema or architecture change is approved from this snapshot alone. The nested repository is currently version 0.7.0; the checked-in CI contract is the support authority.
 
 ## Support and execution baseline
 
