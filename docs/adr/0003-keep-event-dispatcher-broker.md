@@ -8,22 +8,26 @@ We're keeping `EventDispatcher` as-is. The internal-vs-user-proc split is load-b
 
 ## Why the broker stays
 
-**The second internal adapter is imminent, not hypothetical.** Phase 7 matview is the next active milestone and will register on both `value_change_internals` and `field_change_internals`. Engine.rb's `config.after_initialize` ordering reserves slot 0 for versioning and slot 1+ for matview as a documented contract. Removing the broker now would mean re-introducing it within the next planning cycle.
+The broker remains useful for the shipped split between generic internal
+observers and public callbacks. The earlier Phase 7 materialized-view plan is
+retired and is not a current subscriber, ordering promise, or implementation
+milestone; future consumers must register and document their own contract.
 
 **The error policy split is two different contracts, not stylistic.**
 
-- Internal subscribers fail-closed: exceptions PROPAGATE. Versioning corruption (and, soon, matview drift) must be loud — silent failure leaves the audit log inconsistent with the live row.
+- Internal subscribers fail-closed: exceptions PROPAGATE. Versioning corruption
+  must be loud — silent failure leaves the audit log inconsistent with the live row.
 - User procs fail-soft: `rescue StandardError`, log via `Rails.logger.error`, swallow. The Value/Field row is already committed when `after_commit` fires; re-raising would surface a misleading "save failed" error to the caller, when the save actually succeeded.
 
-The broker is what enforces this split. Inlining would either duplicate the rescue logic across every subscriber site (bug surface) or collapse the contracts (silently demotes versioning errors to logged-and-swallowed, breaking the fail-closed invariant).
+The broker is what enforces this split. Inlining would either duplicate the rescue logic across every subscriber site (bug surface) or collapse the contracts (silently demotes internal errors to logged-and-swallowed, breaking the fail-closed invariant).
 
-**The user-proc seam is public API and stays.** `Config.on_value_change` / `Config.on_field_change` are documented in README. External callers register here. Any refactor would have had to preserve them — at which point the question becomes "do you keep the broker for the user procs and inline only the internals?" That partial inline is what (c) in the grilling proposed and loses more than it gains: matview would still need its own registration site, the slot-ordering scaffold would have to be reinvented per-feature, and Value/Field's after_commit grows direct knowledge of each subscriber.
+**The user-proc seam is public API and stays.** `Config.on_value_change` / `Config.on_field_change` are documented in README. External callers register here. Any refactor would have to preserve them — at which point the question becomes "do you keep the broker for the user procs and inline only the internals?" That partial inline loses the shared registration and error-policy seam while making Value/Field know each subscriber.
 
 ## Considered alternatives
 
-- **(c) Collapse only the value-change internals path.** Direct calls from `Value#after_commit` to subscribers. Rejected because matview adds field-change subscribers too; the partial inline would force a second pass to inline field events, undoing more code each round.
-- **(d) Original "inline the broker" recommendation.** Rejected once Phase 7's matview was identified as the imminent second adapter. The "one adapter = hypothetical seam" heuristic doesn't apply when the second adapter is in the next milestone.
-- **(b) Defer the question until after Phase 7.** Rejected because matview design will assume the broker exists; revisiting the question afterward would mean undoing fresh work.
+- **(c) Collapse only the value-change internals path.** Direct calls from `Value#after_commit` to subscribers. Rejected because the broker preserves a generic future-consumer seam and the public/internal error-policy split.
+- **(d) Original "inline the broker" recommendation.** Rejected because the broker is the documented callback boundary, not because of an imminent materialized projection.
+- **(b) Defer the question until a future consumer exists.** Rejected because the current seam already has a stable public contract and does not need a speculative redesign.
 
 ## Where the friction came from
 

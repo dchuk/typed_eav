@@ -37,8 +37,8 @@ and the disabled path adds no per-mutation hot-path predicate. When enabled,
 activation must fail closed unless
 `TypedEAV::Value.connection_pool.equal?(TypedEAV::ValueVersion.connection_pool)`
 is true. A pool mismatch is a startup/configuration error, not a permitted
-best-effort mode. This is a proposal for the next implementation task, not a
-production change in this ADR task.
+best-effort mode. This is the implemented production boundary documented by
+this ADR.
 
 The implementation uses actual Value callback-chain inspection as its
 boot-latch truth, reinstalls missing callbacks idempotently, and rejects a

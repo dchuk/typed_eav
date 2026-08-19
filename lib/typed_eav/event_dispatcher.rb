@@ -11,9 +11,8 @@ module TypedEAV
   #   proc slots (nil-default), backed by ActiveSupport::Configurable. Users
   #   set them via `TypedEAV.configure { |c| c.on_value_change = ->(...) }`.
   # - `register_internal_value_change(callable)` / `register_internal_field_change(callable)`
-  #   are FIRST-PARTY hooks for in-gem observers (for example materialized
-  #   index maintenance). The explicit registration names signal their
-  #   intended scope.
+  #   are FIRST-PARTY hooks for in-gem observers. The explicit registration
+  #   names signal their intended scope.
   # - Internal subscribers fire FIRST, in registration order. User proc fires
   #   LAST. Durable ValueVersion writing is installed on Value transactions;
   #   this dispatcher does not own that write.

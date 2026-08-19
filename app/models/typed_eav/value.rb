@@ -557,7 +557,7 @@ module TypedEAV
     # with field_dependent: :nullify was destroyed). The event contract
     # is `(value, change_type, context)` and consumers expect
     # `value.field` to be readable; an orphan would confuse the transactional
-    # versioning and Phase 07 matview consumers, so we drop the event
+    # versioning and other internal consumers, so we drop the event
     # at the model boundary rather than push the nil-guard downstream.
     #
     # Update filter: only fire :update when ANY of the typed
@@ -574,7 +574,7 @@ module TypedEAV
     # its typed columns — field_id repointing or other bookkeeping shifts
     # are out-of-spec for the event contract. Without this filter, the
     # versioning would pile up no-op version rows (every audit-trail
-    # commit) and Phase 07 matview would refresh on bookkeeping-only writes.
+    # commit) and internal consumers would refresh on bookkeeping-only writes.
 
     def _dispatch_value_change_create
       return unless field

@@ -124,7 +124,9 @@ mismatch. Median statement/returned-row/AR-instantiation counts were 3/2,140/
 p50/p95/p99 values were 52.074/62.988/64.647 ms, 466.893/515.471/534.044 ms,
 949.885/1,165.825/1,304.299 ms, and 5,284.589/5,727.954/5,910.779 ms.
 
-These are characterization results, not optimization targets or clean-room
+This artifact predates the current fixed three-query BulkRead implementation;
+its 102/1,002 counts are retained as historical characterization evidence, not
+the current query-count contract. These are characterization results, not optimization targets or clean-room
 latency claims. The host was continuously transcoding video; 18 anonymous
 pressure samples accompany the run. Whole-process RSS/ObjectSpace and
 instrumentation overhead limit absolute interpretation. The evidence shows

@@ -3,16 +3,10 @@
 module TypedEAV
   # Replaces the per-type Finder class hierarchy from active_fields.
   #
-  # Because values live in native typed columns, ActiveRecord already knows
-  # the column types from the schema. Arel predicates (eq, gt, lt, matches, etc.)
-  # automatically go through the column's ActiveRecord::Type for casting.
-  #
-  # This means:
-  #   where(integer_value: "42")  ->  Rails casts "42" to 42 automatically
-  #   arel[:date_value].gt(value) ->  Rails casts string dates to Date objects
-  #
-  # No manual CAST() calls. No per-type caster classes for queries.
-  # One module handles all field types.
+  # Field owns operand casting and operator validation before this layer builds
+  # Arel. Active Record supplies bind plumbing for the already-normalized
+  # typed value; no manual SQL CAST() calls or per-type query caster classes
+  # are needed here.
   #
   # Usage:
   #   QueryBuilder.filter(field, :gt, 42)

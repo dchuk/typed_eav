@@ -296,7 +296,8 @@ adaptive or replacement proposal. See
 
 ### How Type Inference Works
 
-You don't need to think about types when querying. Rails handles it:
+The owning Field casts and validates query operands before SQL generation;
+Active Record supplies the SQL bind plumbing:
 
 ```ruby
 # The Integer Field casts and validates the operand before SQL generation
@@ -573,6 +574,14 @@ invalid — model-level validation rejects it on save. Reason: a "global field
 within one workspace" has no semantic resolution path; the row would never
 match any record's resolver. The paired partial unique indexes rely on this
 invariant.
+
+The shipped migration chain also includes
+`EnforceParentScopeInvariant`, which declares the database check constraints
+nontransactionally and validates them after its preflight, and
+`UsePartialCoveringScalarIndexes`, which creates the six `*_present` indexes
+before removing their legacy counterparts. Both migrations use
+`disable_ddl_transaction!`; run them through the normal migration command and
+do not wrap them in an application transaction.
 
 ### Name collisions across scopes
 
@@ -947,8 +956,8 @@ end
 The `:rename` change_type fires whenever the field's `name` column changed
 in the just-committed save, even when bundled with other attribute changes
 (options, sort_order, default_value, etc.). The detection is intentionally
-escalating — Phase 7's materialized index needs to regenerate column DDL on
-every rename.
+escalating so any registered consumer receives a rename event whenever the
+persisted name changes.
 
 `:update` on Value fires only when the typed value column changed. Saving
 a Value record without modifying its typed column (e.g., touching only
@@ -1008,16 +1017,14 @@ when `after_commit` fires; re-raising would surface a misleading
 "save failed" error.
 
 This is the deliberate split with first-party features. Internal
-observers used by `typed_eav` itself (for example Phase 7
-materialized index) follow a different rule: their exceptions
+observers used by `typed_eav` itself follow a different rule: their exceptions
 **propagate**. Versioning corruption must be loud.
 
 ### Ordering guarantee
 
 When multiple subscribers are registered, they fire in this order:
 
-1. First-party generic observers (matview, etc.), in
-   registration order. Errors propagate.
+1. First-party generic observers, in registration order. Errors propagate.
 2. The user proc on `Config.on_value_change` / `Config.on_field_change`,
    last. Errors are rescued and logged.
 
@@ -1138,9 +1145,8 @@ value.history.limit(5).each { |v| ... }
 `Value#history` returns versions where `value_id` matches the live Value
 record. After the live Value is destroyed, the FK `ON DELETE SET NULL`
 nullifies `value_id` on the existing version rows, and the new `:destroy`
-version is also written with `value_id: nil` (the parent
-`typed_eav_values` row is gone by `after_commit on: :destroy` time —
-writing a non-nil `value_id` would FK-fail at INSERT). So `Value#history`
+version is written by the transactional destroy callback with `value_id: nil`
+before the parent row is removed. So `Value#history`
 cannot surface destroy versions, and after Value destruction it can no
 longer be called at all.
 
@@ -1220,8 +1226,8 @@ value.revert_to(target)
 ```
 
 `revert_to` writes the targeted version's `before_value` columns back
-via `self[col] = …` and `save!`. The existing `after_commit` chain
-fires; the versioning subscriber writes a NEW version row whose
+via `self[col] = …` and `save!`. The transactional version callback writes a
+NEW version row whose
 `after_value` reflects the targeted version's `before_value`. The
 audit log is append-only — every revert is itself versioned.
 
@@ -1401,9 +1407,11 @@ TypedEAV::QueryBuilder                ← low altitude: per-field SQL primitive
 
 `typed_eav_hash_for(records)` (the plural read) routes through `TypedEAV::BulkRead`. Given a record collection and an effective `(scope, parent_scope)`, it:
 
-1. Groups records by partition tuple via `TypedEAV::Partition.definitions_by_name`.
-2. Issues one batched `WHERE entity_id IN (...) AND field_id IN (...)` query per partition.
-3. Returns a `{record_id => {field_name => value}}` map.
+1. Resolves visible definitions and groups the requested field IDs.
+2. Loads definitions, values, and host/partition metadata through one batched
+   query per stage (three SQL queries total for the public path).
+3. Returns a `{record_id => {field_name => value}}` map while skipping orphaned
+   values and preserving logical missingness.
 
 The final production characterization reduced the 1,002 SQL statements observed
 across 1,000 scopes to three for the same BulkRead shape. This is a statement-
@@ -1414,11 +1422,21 @@ Single-record reads (`typed_eav_value`, `typed_eav_hash`) live on `InstanceMetho
 
 ### Bulk writes: `BulkWrite`
 
-`bulk_set_typed_eav_values(records, attrs)` routes through `TypedEAV::BulkWrite`, an executor that:
+`bulk_set_typed_eav_values(records, attrs)` routes through `TypedEAV::BulkWrite`,
+and `bulk_set_typed_eav_values_per_record(values_by_record)` is its sibling for
+record-varying hashes. Both are semantic writers that:
 
 1. Memoizes field definitions for the call via `Thread.current[:typed_eav_bulk_defs_memo]`.
 2. Validates each attribute against its field type's cast contract.
-3. Upserts in a single SQL round trip per typed column.
+3. Save each host through the normal callback/validation path inside an outer
+   transaction with per-record savepoints.
+
+The default `transaction: :all` commits the whole batch or rolls it back;
+`transaction: :chunks, chunk_size: N` commits completed chunks while isolating
+later failures. Both forms require the host, Field, and Value pools to match.
+`bulk_upsert_typed_eav_values` is a separate reduced-semantics fast path: it
+casts and validates typed values, then performs one PostgreSQL upsert while
+omitting host saves, persistence callbacks, delete shorthand, and versioning.
 
 `BulkWrite` and `BulkRead` are siblings — one read path, one write path — but they don't share a base class. Per [ADR-0005](docs/adr/0005-keep-phase-six-modules-independent.md), keeping them independent preserves the option to evolve each on its own schedule.
 
@@ -1491,10 +1509,7 @@ The definitions helpers used to live as class methods on `HasTypedEav` before 0.
 
 `TypedEAV::SchemaPortability` and `TypedEAV::CSVMapper` (Phase-6 modules) are deliberately decoupled from the core read/write path per [ADR-0005](docs/adr/0005-keep-phase-six-modules-independent.md). They depend on the public `has_typed_eav` macro surface, never on internal modules.
 
-## License
-
-MIT
-## Bulk writes
+### Bulk operation guarantees
 
 `bulk_upsert_typed_eav_values` is an explicit reduced-semantics API: it
 prevalidates/casts values and performs a PostgreSQL upsert, while intentionally
@@ -1535,3 +1550,7 @@ callbacks, validations, idempotence, versions, and errors remain in force.
 Typed storage defines logical missingness across all declared cells, so a
 partially populated multi-cell value is present while a fully empty Currency
 value is missing.
+
+## License
+
+MIT

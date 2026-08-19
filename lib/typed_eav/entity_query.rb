@@ -120,10 +120,10 @@ module TypedEAV
     end
 
     # Bulk write API. Sets the same `values_by_field_name` Hash on every
-    # record in `records` inside ONE outer ActiveRecord transaction with a
-    # SAVEPOINT-PER-RECORD failure-isolation envelope. See `TypedEAV::BulkWrite`
-    # for the transaction shape, error-aggregation contract, and the
-    # `version_grouping:` semantics.
+    # record in `records` using an outer transaction with per-record savepoints
+    # (`transaction: :all`) or one such envelope per committed chunk
+    # (`transaction: :chunks`). See `TypedEAV::BulkWrite` for the error and
+    # `version_grouping:` contracts.
     def bulk_set_typed_eav_values(
       records, values_by_field_name, version_grouping: :default, transaction: :all, chunk_size: nil
     )
@@ -139,7 +139,7 @@ module TypedEAV
 
     # Per-record-varying bulk write API. Sibling to `bulk_set_typed_eav_values`
     # for callers (sync importers, per-row updaters) where each record carries
-    # its own values hash. Routes through the same outer-transaction-plus-
+    # its own values hash. Routes through the same transaction/chunk and
     # savepoint envelope and returns the same
     # `{ successes: [...], errors_by_record: { record => errors_hash } }`
     # shape. See `TypedEAV::BulkWrite` for the transaction shape and the

@@ -12,7 +12,12 @@ T034 measured the selected partial-covering integer index against the same layou
 
 The decision is **Option B**: do not ship an automatic NULL index; retain partial-covering scalar indexes and offer targeted guidance only when an application's own EXPLAIN evidence shows frequent low-NULL explicit-NULL probes. A current-query-compatible integer NULL index necessarily captured 500,947 rows in the low-NULL dataset and 547,737 in the high-NULL dataset because the other five typed columns leave `integer_value` NULL. At low NULL it reduced explicit-NULL/`eq nil` median root-plan buffers from 5,115 to 849, while adding 37.5% index bytes and 28.7% insert WAL. At high NULL it increased those buffers from 5,069 to 9,349, while adding 43.4% index bytes and 32.4% insert WAL. NULL-inclusive `not_eq` buffers increased 8.6%/7.0%; `is_not_null` and `include_missing` were unchanged. Post-update EXPLAINs intentionally retain heap-fetch evidence rather than assuming an ideal visibility map.
 
-The next migration must therefore create the six selected partial-covering scalar indexes concurrently before dropping the legacy indexes, preserve `text_pattern_ops` for string, and ship no automatic NULL index. Its rollback must recreate every legacy covering index before removing the new one. ADR 0008 records the exact names and NULL guidance.
+The shipped migration `20260816000000_use_partial_covering_scalar_indexes.rb`
+creates the six selected partial-covering scalar indexes concurrently before
+dropping the legacy indexes, preserves `text_pattern_ops` for string, and
+ships no automatic NULL index. Its rollback recreates every legacy covering
+index before removing the new one. ADR 0008 records the exact names and NULL
+guidance.
 
 This ledger is the durable Phase 0 baseline for the correctness-first TypedEAV improvement program. It is evidence-led: no schema or architecture change is approved from this snapshot alone. The nested repository is currently version 0.6.0; the checked-in CI contract is the support authority.
 
@@ -28,7 +33,7 @@ This ledger is the durable Phase 0 baseline for the correctness-first TypedEAV i
 
 ## Schema authority and index inventory
 
-The source of truth is the result of the complete shipped migration chain, not the initial migration alone: `20260330000000_create_typed_eav_tables.rb`, `20260430000000_add_parent_scope_to_typed_eav_partitions.rb`, `20260501000000_add_cascade_policy_to_typed_eav_fields.rb`, `20260505000000_create_typed_eav_value_versions.rb`, `20260506000001_add_version_group_id_to_typed_eav_value_versions.rb`, `20260507000000_add_label_to_typed_eav_fields.rb`, and `20260712000000_enforce_parent_scope_invariant.rb`. `typed_eav_values` stores one row per entity/field and eight nullable typed columns; only the field's applicable column is normally populated. The cascade-policy migration makes `typed_eav_values.field_id` nullable and changes its foreign key to `typed_eav_fields` to `ON DELETE SET NULL` (the down migration restores NOT NULL/CASCADE). Therefore a retained value row may have `field_id IS NULL` after its field is deleted. The baseline helper records exact catalog definitions, predicates, sizes, key/INCLUDE columns, row participation, `pg_stat_user_indexes`, and row/null counts.
+The source of truth is the result of the complete shipped migration chain, not the initial migration alone: `20260330000000_create_typed_eav_tables.rb`, `20260430000000_add_parent_scope_to_typed_eav_partitions.rb`, `20260501000000_add_cascade_policy_to_typed_eav_fields.rb`, `20260505000000_create_typed_eav_value_versions.rb`, `20260506000001_add_version_group_id_to_typed_eav_value_versions.rb`, `20260507000000_add_label_to_typed_eav_fields.rb`, `20260712000000_enforce_parent_scope_invariant.rb`, and `20260816000000_use_partial_covering_scalar_indexes.rb`. `typed_eav_values` stores one row per entity/field and eight nullable typed columns; only the field's applicable column is normally populated. The cascade-policy migration makes `typed_eav_values.field_id` nullable and changes its foreign key to `typed_eav_fields` to `ON DELETE SET NULL` (the down migration restores NOT NULL/CASCADE). Therefore a retained value row may have `field_id IS NULL` after its field is deleted. The baseline helper records exact catalog definitions, predicates, sizes, key/INCLUDE columns, row participation, `pg_stat_user_indexes`, and row/null counts.
 
 | Relation/index | Definition and purpose | NULL / INCLUDE participation | Likely write cost | Dependent query paths |
 | --- | --- | --- | --- | --- |
@@ -42,10 +47,10 @@ The source of truth is the result of the complete shipped migration chain, not t
 | `idx_te_options_field_value` | Unique `(field_id, value)` | NULL-free | Medium | Option uniqueness/lookup |
 | `idx_te_values_entity_field` | Unique `(entity_type, entity_id, field_id)` | Ordinary unique B-tree semantics permit multiple rows where nullable `field_id` is NULL; non-NULL triples remain unique | Medium | Value uniqueness and entity/field reads |
 | `typed_eav_values_pkey`, `index_typed_eav_values_on_entity`, `index_typed_eav_values_on_field_id` | Rails primary-key, entity lookup, and field foreign-key B-tree indexes | Ordinary B-trees include NULL key values; no INCLUDE columns; the field index therefore retains orphaned rows with `field_id IS NULL` | Medium | AR identity/entity association and field joins |
-| `idx_te_values_field_int/dec/date/dt/bool/str` | B-tree `(field_id, typed_column)`; string uses `text_pattern_ops` | Ordinary B-trees include rows with NULL typed keys; INCLUDE `(entity_id, entity_type)` supports covering reads | Medium | `QueryBuilder` equality/range/string predicates and `FilterQuery` entity-ID subqueries |
+| `idx_te_values_field_int_present/dec_present/date_present/dt_present/bool_present/str_present` | Partial-covering B-tree `(field_id, typed_column) WHERE typed_column IS NOT NULL`; string uses `text_pattern_ops` | NULL typed keys are excluded; INCLUDE `(entity_id)` supports covering reads | Medium | `QueryBuilder` equality/range/string predicates and `FilterQuery` entity-ID subqueries |
 | `idx_te_values_json_gin` | Partial GIN on `json_value`, `json_value IS NOT NULL` | Partial predicate excludes NULL JSON rows; no INCLUDE | High | `QueryBuilder` `:any_eq`/`:all_eq` JSON containment |
 
-The table above covers every `typed_eav_values` index: primary key, Rails entity and field lookups, entity/field uniqueness, six scalar indexes, and JSON GIN. The six scalar value indexes are intentionally non-partial today. Whether partial predicates, alternate keys, or INCLUDE changes are worthwhile requires measured footprint, WAL/write, and equality/range evidence on a larger isolated volume. Ordinary B-tree indexes include NULL key values; only a partial predicate controls partial-index participation.
+The table above covers every `typed_eav_values` index: primary key, Rails entity and field lookups, entity/field uniqueness, six partial-covering scalar indexes, and JSON GIN. Ordinary B-tree indexes include NULL key values; the scalar partial predicates exclude rows whose typed value is NULL.
 
 For an exact cross-relation catalog check, the 35 index names present in `bench/results/phase-0-baseline.json` are: `idx_te_fields_lookup`, `idx_te_fields_uniq_global`, `idx_te_fields_uniq_scoped_full`, `idx_te_fields_uniq_scoped_only`, `index_typed_eav_fields_on_entity_type`, `index_typed_eav_fields_on_section_id`, `typed_eav_fields_pkey`; `idx_te_options_field_value`, `index_typed_eav_options_on_field_id`, `typed_eav_options_pkey`; `idx_te_sections_entity_active`, `idx_te_sections_lookup`, `idx_te_sections_uniq_global`, `idx_te_sections_uniq_scoped_full`, `idx_te_sections_uniq_scoped_only`, `typed_eav_sections_pkey`; `idx_te_vvs_entity`, `idx_te_vvs_field`, `idx_te_vvs_group`, `idx_te_vvs_value`, `index_typed_eav_value_versions_on_entity`, `index_typed_eav_value_versions_on_field_id`, `index_typed_eav_value_versions_on_value_id`, `typed_eav_value_versions_pkey`; `idx_te_values_entity_field`, `idx_te_values_field_bool`, `idx_te_values_field_date`, `idx_te_values_field_dec`, `idx_te_values_field_dt`, `idx_te_values_field_int`, `idx_te_values_field_str`, `idx_te_values_json_gin`, `index_typed_eav_values_on_entity`, `index_typed_eav_values_on_field_id`, `typed_eav_values_pkey`.
 
@@ -132,7 +137,8 @@ and independent result identities pass. SQL notification row counts are
 complete, and no observation is censored, retried, imputed, mismatched, or
 errored.
 
-Median SQL statements rose from 3 at one scope to 102 at 100 scopes and 1,002
+The historical pre-optimization artifact recorded median SQL statements rising
+from 3 at one scope to 102 at 100 scopes and 1,002
 at 1,000 scopes. Median loaded rows and Active Record instantiations were 2,140,
 20,140, 34,000, and 160,000 across the four cells. Wall-time p50 values were
 52.074, 466.893, 949.885, and 5,284.589 ms respectively. These absolute times

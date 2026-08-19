@@ -700,9 +700,8 @@ module TypedEAV
       # Rename detection is structural: any save where the :name column changed
       # counts as a rename, even if combined with other attribute changes
       # (sort_order, options, default_value, field_dependent). This false-
-      # positive bias is intentional — Phase 07's matview must regenerate
-      # column DDL on rename; missing a rename combined with other edits would
-      # corrupt the matview's column-name → field-name map.
+      # positive bias is intentional — a registered consumer must not miss a
+      # rename combined with other edits.
       #
       # `:name` is the only attribute name we hardcode in this callback, and
       # it's structural (the locked rename-detection mechanism per 03-CONTEXT.md),

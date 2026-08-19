@@ -8,8 +8,9 @@ require "spec_helper"
 #
 # `Entity.bulk_set_typed_eav_values(records, values_by_field_name, version_grouping:)`
 # is a class method on `TypedEAV::EntityQuery` that sets the same field-value
-# pairs on every record in `records` inside ONE outer ActiveRecord
-# transaction with a savepoint-per-record failure-isolation envelope.
+# pairs on every record in `records` inside an outer ActiveRecord transaction
+# with a savepoint-per-record failure-isolation envelope; chunk mode repeats
+# that envelope per committed chunk.
 #
 # Result shape: `{ successes: [record, ...], errors_by_record: { record => { "field" => ["msg"] } } }`.
 #
@@ -530,8 +531,8 @@ RSpec.describe "Entity.bulk_set_typed_eav_values" do
         # raises after the FIRST record's savepoint commits. The outer
         # transaction is in scope, so the raise causes the OUTER transaction
         # to roll back — BOTH the first record's changes (already committed
-        # to its savepoint) and any version rows that the after_commit chain
-        # would have written.
+        # to its savepoint) and any transactional version rows that would have
+        # been written.
         call_count = 0
         original = TypedEAV::BulkWrite.method(:apply_record_save)
         allow(TypedEAV::BulkWrite).to receive(:apply_record_save) do |**kwargs|
@@ -604,7 +605,7 @@ RSpec.describe "Entity.bulk_set_typed_eav_values" do
         expect(charlie_rows.first.version_group_id).to be_present
         expect(alice_rows.first.version_group_id).not_to eq(charlie_rows.first.version_group_id)
 
-        # Bob has NO version row (savepoint rollback voided after_commit).
+        # Bob has NO version row (savepoint rollback voided the transaction).
         expect(TypedEAV::ValueVersion.where(entity_id: bob.id).count).to eq(0)
       end
     end
@@ -615,10 +616,9 @@ RSpec.describe "Entity.bulk_set_typed_eav_values" do
   # ────────────────────────────────────────────────────────────
   describe "N+1 prevention", :unscoped do
     # `ActiveRecord::Base.cache do ... end` wraps the records loop. AR's
-    # per-block query cache satisfies identical `typed_eav_definitions`
-    # queries (one per partition tuple) after the first call. Without
-    # this, 100 records sharing one partition would issue 100 identical
-    # SELECTs against typed_eav_fields.
+    # per-block query cache satisfies repeated definition lookups after the
+    # first call. Without this, a batch could issue one identical SELECT per
+    # record against typed_eav_fields.
     let!(:age_field_t1) { create(:integer_field, name: "age", entity_type: "Contact", scope: "tenant_1") }
     let!(:age_field_t2) { create(:integer_field, name: "age", entity_type: "Contact", scope: "tenant_2") }
 

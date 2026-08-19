@@ -16,7 +16,8 @@ module TypedEAV
   # allocate field UUIDs, and then hand off to `execute_pairs(pairs,
   # effective_grouping, field_uuids)` — a single shared loop that takes
   # ordered `[record, vbn]` pairs and runs the outer-transaction-plus-
-  # savepoint-per-record envelope.
+  # savepoint-per-record envelope; `transaction: :chunks` repeats that
+  # envelope per chunk so completed chunks can commit independently.
   #
   # Pair-shaped (not Hash-shaped) so `execute`'s `[record, vbn]` list can
   # carry duplicate in-memory instances of the same persisted row without
