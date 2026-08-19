@@ -68,8 +68,8 @@ in this boundary. Ordering is the order of mutations within one source
 transaction; no total order is promised across concurrent transactions or
 databases.
 
-The synchronous boundary does not repair historical gaps created by the current
-after-commit path, and it does not infer or rewrite history after model,
+The synchronous boundary does not repair historical gaps created by the
+historical after-commit path, and it does not infer or rewrite history after model,
 registry, tenant, field, or snapshot semantics drift. Existing gaps remain
 observable historical gaps and require a separately approved, application-owned
 repair process if a consumer needs one. Version rows remain append-only;

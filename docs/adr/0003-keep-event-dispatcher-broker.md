@@ -15,8 +15,9 @@ milestone; future consumers must register and document their own contract.
 
 **The error policy split is two different contracts, not stylistic.**
 
-- Internal subscribers fail-closed: exceptions PROPAGATE. Versioning corruption
-  must be loud — silent failure leaves the audit log inconsistent with the live row.
+- Internal subscribers fail-closed: exceptions PROPAGATE. Transactional
+  versioning is outside this broker; its failures propagate inside and roll
+  back the source transaction.
 - User procs fail-soft: `rescue StandardError`, log via `Rails.logger.error`, swallow. The Value/Field row is already committed when `after_commit` fires; re-raising would surface a misleading "save failed" error to the caller, when the save actually succeeded.
 
 The broker is what enforces this split. Inlining would either duplicate the rescue logic across every subscriber site (bug surface) or collapse the contracts (silently demotes internal errors to logged-and-swallowed, breaking the fail-closed invariant).

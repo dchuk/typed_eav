@@ -1018,7 +1018,8 @@ when `after_commit` fires; re-raising would surface a misleading
 
 This is the deliberate split with first-party features. Internal
 observers used by `typed_eav` itself follow a different rule: their exceptions
-**propagate**. Versioning corruption must be loud.
+**propagate**. Transactional version-writing errors are separate: they
+propagate inside and roll back the source transaction.
 
 ### Ordering guarantee
 
@@ -1265,7 +1266,8 @@ Value#save! → transactional Value callback → ValueVersion.create!
   2. Config.on_value_change user proc        # sees the persisted version
 ```
 
-Internal subscriber errors propagate (versioning corruption is loud).
+Internal observer errors propagate. Transactional version-writing errors also
+propagate inside and roll back the source transaction.
 User proc errors are rescued and logged via `Rails.logger.error` —
 the save itself already committed.
 

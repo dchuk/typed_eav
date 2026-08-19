@@ -71,7 +71,7 @@ RSpec.describe TypedEAV::Value, "#revert_to", :event_callbacks, :real_commits do
 
       # The transactional version callback runs before the public
       # after_commit update event; the user proc fires LAST.
-      # (slot 0 versioning subscriber runs first). Captured event has
+      # Captured event has
       # the reverted-to value (1) and the test context.
       expect(captured.last).to eq([1, :update, :revert_test])
     end
