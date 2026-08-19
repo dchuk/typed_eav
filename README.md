@@ -1434,6 +1434,11 @@ record-varying hashes. Both are semantic writers that:
 3. Saves each host through the normal callback/validation path inside an outer
    transaction with per-record savepoints.
 
+`bulk_set_typed_eav_values_per_record` uses records as Hash keys, so two AR
+instances of the same persisted row collapse to one entry; sequence separate
+calls for two ordered updates, while the uniform Array API preserves duplicate
+instances and caller order.
+
 Under `transaction: :all`, per-record validation failures are captured at their
 savepoints while other successes can commit, but an uncaught exception rolls
 the entire outer transaction back. The default `transaction: :all` commits the
@@ -1444,6 +1449,15 @@ host, Field, and Value pools to match.
 `bulk_upsert_typed_eav_values` is a separate reduced-semantics fast path: it
 casts and validates typed values, then performs one PostgreSQL upsert while
 omitting host saves, persistence callbacks, delete shorthand, and versioning.
+
+Callers must pass `acknowledge_reduced_semantics: true`. The same values hash
+applies to every record; records must be persisted and unique, and string or
+symbol field keys that normalize to the same name are rejected. The return
+value is the integer number of value rows upserted, not a semantic
+`successes`/`errors_by_record` result. Value casting, domain/entity/partition
+checks, and Value validation callbacks remain; host callbacks and validations,
+Value persistence callbacks, versioning, delete shorthand, and per-record
+savepoint isolation are skipped.
 
 `BulkWrite` and `BulkRead` are siblings — one read path, one write path — but they don't share a base class. Per [ADR-0005](docs/adr/0005-keep-phase-six-modules-independent.md), keeping them independent preserves the option to evolve each on its own schedule.
 

@@ -211,8 +211,10 @@ module TypedEAV
       )
     end
 
-    # Reduced-semantics SQL bulk upsert. This is deliberately separate from
-    # the callback- and validation-preserving APIs above.
+    # Reduced-semantics SQL bulk upsert. This deliberately separate API
+    # requires `acknowledge_reduced_semantics: true`; it retains Value
+    # prevalidation/casting and domain/partition checks while skipping host and
+    # Value persistence lifecycle callbacks, versioning, and delete shorthand.
     def bulk_upsert_typed_eav_values(
       records, values_by_field_name, acknowledge_reduced_semantics: false, transaction: :all, chunk_size: nil
     )
