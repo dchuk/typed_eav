@@ -127,9 +127,9 @@ RSpec.describe TypedEAV::Value, "versioning integration", :event_callbacks, :rea
       expect(destroy_v.before_value).to eq("integer_value" => 42)
       expect(destroy_v.after_value).to eq({})
       # value_id is nil — the before-destroy writer explicitly nulls it while
-      # the parent still exists, avoiding an FK-violating INSERT. Audit
-      # identity is preserved via entity_*
-      # and field_id.
+      # the parent still exists. The association-free audit identity is
+      # preserved via entity_* and field_id, without relying on later FK
+      # nullification.
       expect(destroy_v.value_id).to be_nil
       expect(destroy_v.field_id).to eq(field.id)
       expect(destroy_v.entity_type).to eq("Contact")

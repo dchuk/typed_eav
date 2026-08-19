@@ -247,9 +247,9 @@ module TypedEAV
     # rubocop:disable Metrics/AbcSize -- three guard clauses (each with a multi-line error message including ids) plus the column-iteration body genuinely belong together; splitting them would obscure the locked check ordering documented above. The ABC complexity is just over the 25 threshold and reflects the explicit error-message construction (not control-flow density).
     def revert_to(version)
       # Check 1: source Value must still exist. plan 04-02's subscriber writes
-      # value_id: nil for :destroy events (because the parent typed_eav_values
-      # row still exists during the before-destroy callback, so the writer
-      # explicitly uses value_id: nil. A destroy version cannot be
+      # value_id: nil for :destroy events. The destroy writer deliberately
+      # records nil while the parent exists, so the audit row is
+      # association-free before deletion and remains so afterward. A destroy version cannot be
       # reverted because we can't save! a destroyed AR record back into
       # existence. This check covers all destroy versions.
       if version.value_id.nil?

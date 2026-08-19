@@ -172,7 +172,8 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
       expect(destroy_version.after_value).to eq({})
       # CRITICAL: value_id is nil (not value_id_before_destroy). The
       # before-destroy writer explicitly writes nil while the parent still
-      # exists, avoiding an FK failure.
+      # exists. This association-free audit identity does not rely on a later
+      # ON DELETE SET NULL action.
       expect(destroy_version.value_id).to be_nil
       # Field is NOT destroyed — field_id remains populated for audit.
       expect(destroy_version.field_id).to eq(field.id)
@@ -183,10 +184,8 @@ RSpec.describe TypedEAV::Versioning::Subscriber, :event_callbacks do
 
     it ":destroy event does NOT raise FK violation at INSERT" do
       # Regression guard for the bug that motivated the value_id: nil
-      # fix. If the subscriber wrote `value_id: value.id` for destroy,
-      # this would raise ActiveRecord::InvalidForeignKey at the
-      # ValueVersion.create! call (because typed_eav_values no longer
-      # has the parent row during the before-destroy callback).
+      # fix. The explicit nil is the association-free destroy-audit contract;
+      # it does not rely on a later ON DELETE SET NULL action.
       value = TypedEAV::Value.create!(entity: contact, field: field, value: 42)
       expect { value.destroy! }.not_to raise_error
     end

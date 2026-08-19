@@ -101,7 +101,7 @@ RSpec.describe TypedEAV::Value, "#history", :event_callbacks, :real_commits do
     # Documents the locked semantic from plan 04-02 amendment: :destroy
     # versions are written with `value_id: nil` (FK ON DELETE SET NULL +
     # before-destroy timing — the writer uses value_id: nil while the parent
-    # still exists, avoiding an FK failure). Because
+    # still exists, preserving an association-free audit identity). Because
     # `Value#history` is `versions.order(...)` — an association keyed on
     # value_id — destroy versions never appear there. The canonical path
     # for "full lifecycle audit including destroy" is the entity-scoped

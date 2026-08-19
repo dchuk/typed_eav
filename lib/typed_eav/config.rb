@@ -189,9 +189,9 @@ module TypedEAV
       # observers fire BEFORE this proc and
       # their errors DO propagate. See 03-CONTEXT.md §User-callback error policy.
       #
-      # Reassignment after gem initialization does NOT disable internal
-      # versioning callbacks are installed on Value at boot and are not
-      # controlled by this public callback slot.
+      # Reassigning this public callback does NOT disable transactional
+      # versioning callbacks; they are installed on Value at boot and are
+      # independent of this public slot.
       attr_accessor :on_value_change
 
       # Public single-proc slot for field-change events.
