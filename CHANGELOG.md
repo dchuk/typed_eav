@@ -7,16 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-04
+
+A focused patch release for inherited Active Record hosts and multi-partition
+bulk upserts. No new database migrations or public API changes are required.
+
 ### Fixed
 
 - Resolve inherited and namespaced Active Record host definitions, filters,
   bulk reads, writes, and registry/versioning opt-ins through Rails'
-  canonical polymorphic name.
+  canonical polymorphic name. STI subclasses now consistently share their
+  base class's EAV schema and stored values while queries retain their host
+  class restriction. Partition isolation and most-specific field precedence
+  are preserved. (#42)
 
 ### Performance
 
 - Batch BulkUpsert field-definition resolution into one SELECT per transaction
-  unit while preserving exact tuple isolation and definition precedence.
+  unit while preserving exact tuple isolation and definition precedence. A
+  20-partition regression case now issues one definition SELECT instead of 20;
+  chunked transactions intentionally issue one per chunk. BulkRead and
+  BulkUpsert share the internal batched resolver. This is a query-count
+  improvement, not a universal throughput claim. (#43)
+
+### Compatibility and verification
+
+- BulkUpsert's reduced-semantics acknowledgement, validation, transaction
+  boundaries, and callback/versioning behavior are unchanged.
+- Regression coverage includes true STI and namespaced hosts, public
+  read/filter/write paths, partition isolation, definition precedence, and
+  all/chunk transaction behavior.
 
 ## [0.7.0] - 2026-08-18
 
@@ -589,7 +609,8 @@ worked examples.
 
 Initial release.
 
-[Unreleased]: https://github.com/dchuk/typed_eav/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/dchuk/typed_eav/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/dchuk/typed_eav/releases/tag/v0.7.1
 [0.7.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.7.0
 [0.6.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.6.0
 [0.5.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.5.0
