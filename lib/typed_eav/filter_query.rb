@@ -106,10 +106,10 @@ module TypedEAV
 
     def lookup_definitions
       if all_scopes?
-        TypedEAV::Partition.visible_fields(entity_type: model.name, mode: :all_partitions)
+        TypedEAV::Partition.visible_fields(entity_type: model.polymorphic_name, mode: :all_partitions)
       else
         TypedEAV::Partition.visible_fields(
-          entity_type: model.name,
+          entity_type: model.polymorphic_name,
           scope: @scope,
           parent_scope: @parent_scope,
         )

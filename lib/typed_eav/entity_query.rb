@@ -103,10 +103,10 @@ module TypedEAV
     def typed_eav_definitions(scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
       resolved = resolve_scope(scope, parent_scope)
       if resolved.equal?(ALL_SCOPES)
-        TypedEAV::Partition.visible_fields(entity_type: name, mode: :all_partitions)
+        TypedEAV::Partition.visible_fields(entity_type: polymorphic_name, mode: :all_partitions)
       else
         s, ps = resolved
-        TypedEAV::Partition.visible_fields(entity_type: name, scope: s, parent_scope: ps)
+        TypedEAV::Partition.visible_fields(entity_type: polymorphic_name, scope: s, parent_scope: ps)
       end
     end
 

@@ -119,6 +119,11 @@ tags.field_options.create!([
 ])
 ```
 
+When deriving `entity_type` from a model class, use
+`Contact.polymorphic_name`. Rails stores polymorphic associations under that
+canonical name, which is the base-class type for STI hosts and respects the
+application's namespaced-polymorphism setting.
+
 ### 3. Set values on records
 
 ```ruby
@@ -1157,7 +1162,7 @@ directly:
 
 ```ruby
 TypedEAV::ValueVersion
-  .where(entity_type: contact.class.name, entity_id: contact.id, field_id: age_field.id)
+  .where(entity_type: contact.class.polymorphic_name, entity_id: contact.id, field_id: age_field.id)
   .order(changed_at: :desc, id: :desc)
 # => [<ValueVersion change_type: "destroy" before: {"integer_value" => 42} after: {} value_id: nil>,
 #     <ValueVersion change_type: "update"  before: {"integer_value" => 41} after: {"integer_value" => 42} value_id: nil>,
@@ -1176,7 +1181,7 @@ exports) — drop the `field_id` filter:
 
 ```ruby
 TypedEAV::ValueVersion
-  .where(entity_type: contact.class.name, entity_id: contact.id)
+  .where(entity_type: contact.class.polymorphic_name, entity_id: contact.id)
   .order(changed_at: :desc, id: :desc)
 # => all version rows for every typed field on this contact, most-recent-first.
 # Includes :create, :update, and :destroy events across every field the
@@ -1415,6 +1420,10 @@ TypedEAV::QueryBuilder                ← low altitude: per-field SQL primitive
    (three SQL queries total; no host-table query).
 3. Returns a `{record_id => {field_name => value}}` map while skipping orphaned
    values and preserving logical missingness.
+
+Definitions, filters, reads, registry entries, and writes all use the host's
+Rails `polymorphic_name`, so an STI leaf class reads and queries the same rows
+written under its base-class polymorphic type.
 
 The final production characterization reduced the 1,002 SQL statements observed
 across 1,000 scopes to three for the same BulkRead shape. This is a statement-

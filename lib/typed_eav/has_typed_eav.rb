@@ -93,7 +93,7 @@ module TypedEAV
 
         accepts_nested_attributes_for :typed_values, allow_destroy: true
 
-        TypedEAV.registry.register(name, types: types, versioned: versioned)
+        TypedEAV.registry.register(polymorphic_name, types: types, versioned: versioned)
       end
 
       private

@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-No unreleased changes.
+### Fixed
+
+- Resolve inherited and namespaced Active Record host definitions, filters,
+  bulk reads, writes, and registry/versioning opt-ins through Rails'
+  canonical polymorphic name.
 
 ## [0.7.0] - 2026-08-18
 

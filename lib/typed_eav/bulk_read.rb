@@ -26,9 +26,10 @@ module TypedEAV
   #
   # ## Single-class invariant
   #
-  # The polymorphic value query (`entity_type: host_class.name`) targets ONE
-  # class; mixed-class input would silently miss rows of the other class. STI
-  # subclasses pass via `records.all?(host_class)`.
+  # The polymorphic value query targets the host's canonical Rails
+  # `polymorphic_name`, so an STI subclass reads rows stored for its base
+  # class. Mixed, unrelated input would still be invalid; STI subclasses pass
+  # via `records.all?(host_class)`.
   class BulkRead
     def initialize(host_class:, records:)
       @host_class = host_class
@@ -87,7 +88,7 @@ module TypedEAV
 
     def batched_definitions(tuples)
       tuples.each { |scope, parent_scope| validate_tuple!(scope, parent_scope) }
-      relation = TypedEAV::Field::Base.where(entity_type: host_class.name)
+      relation = TypedEAV::Field::Base.where(entity_type: host_class.polymorphic_name)
       requested = tuples.map { |scope, parent_scope| { "scope" => scope, "parent_scope" => parent_scope } }
       relation.where(<<~SQL.squish, requested.to_json).to_a
         typed_eav_fields.scope IS NULL AND typed_eav_fields.parent_scope IS NULL
@@ -115,7 +116,7 @@ module TypedEAV
     def preload_values(records)
       rows = TypedEAV::Value
              .includes(:field)
-             .where(entity_type: host_class.name, entity_id: records.map(&:id))
+             .where(entity_type: host_class.polymorphic_name, entity_id: records.map(&:id))
              .to_a
       rows.group_by(&:entity_id)
     end

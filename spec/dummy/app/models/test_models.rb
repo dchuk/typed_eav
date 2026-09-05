@@ -4,6 +4,24 @@ class Contact < ActiveRecord::Base
   has_typed_eav scope_method: :tenant_id
 end
 
+# STI hosts used by inherited-model regression coverage. Rails stores each
+# leaf's polymorphic association type as its hierarchy's base class, so every
+# EAV read/query/write path must resolve definitions and values through that
+# same canonical type rather than the leaf class name.
+class PremiumContact < Contact
+end
+
+module Support
+  class Contact < ActiveRecord::Base
+    self.table_name = "contacts"
+
+    has_typed_eav scope_method: :tenant_id
+  end
+
+  class PriorityContact < Contact
+  end
+end
+
 class Product < ActiveRecord::Base
   has_typed_eav types: %i[text integer decimal boolean]
 end

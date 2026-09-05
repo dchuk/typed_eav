@@ -62,12 +62,14 @@ module TypedEAV
 
       # Re-register with versioned: true. Preserve the existing types:
       # restriction by reading the current Registry entry.
-      # has_typed_eav already called register(name, types: types,
-      # versioned: false) — we overwrite with versioned: true while
-      # keeping the same types. If the entry doesn't exist (defensive
-      # — shouldn't happen post-has_typed_eav), default types to nil.
-      existing = TypedEAV.registry.entities[name] || {}
-      TypedEAV.registry.register(name, types: existing[:types], versioned: true)
+      # has_typed_eav already registered the canonical Rails polymorphic
+      # name. Reuse it here so including this concern on an STI subclass
+      # enables versioning for the base entity_type actually stored on Value.
+      # If the entry doesn't exist (defensive — shouldn't happen post-
+      # has_typed_eav), default types to nil.
+      entity_type = polymorphic_name
+      existing = TypedEAV.registry.entities[entity_type] || {}
+      TypedEAV.registry.register(entity_type, types: existing[:types], versioned: true)
     end
   end
 end

@@ -262,7 +262,7 @@ module TypedEAV
       # because each record's INSERT clears the cache — so cache-do alone
       # cannot keep field-definition reads N+1-free across the bulk loop.
       # The thread-local memo is the explicit fallback documented in plan
-      # 06-05 §T3 notes; it pre-warms once per `[host_class, scope,
+      # 06-05 §T3 notes; it pre-warms once per `[polymorphic_name, scope,
       # parent_scope]` tuple and reuses across every record in that tuple.
       #
       # Outside a bulk operation the memo is nil and we fall through to
@@ -270,7 +270,7 @@ module TypedEAV
       def typed_eav_defs_by_name
         memo = Thread.current[:typed_eav_bulk_defs_memo]
         if memo
-          key = [self.class.name, typed_eav_scope, typed_eav_parent_scope]
+          key = [self.class.polymorphic_name, typed_eav_scope, typed_eav_parent_scope]
           memo[key] ||= TypedEAV::Partition.definitions_by_name(typed_eav_definitions)
         else
           TypedEAV::Partition.definitions_by_name(typed_eav_definitions)
