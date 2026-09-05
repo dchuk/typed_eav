@@ -1468,6 +1468,12 @@ checks, and Value validation callbacks remain; host callbacks and validations,
 Value persistence callbacks, versioning, delete shorthand, and per-record
 savepoint isolation are skipped.
 
+Within each `transaction: :all` unit—or each requested chunk—the upsert path
+resolves every record partition through one batched field-definition SELECT.
+It shares BulkRead's internal tuple resolver, retaining global, scope-only, and
+full-tuple precedence independently for each record without broadening tenant
+visibility.
+
 `BulkWrite` and `BulkRead` are siblings — one read path, one write path — but they don't share a base class. Per [ADR-0005](docs/adr/0005-keep-phase-six-modules-independent.md), keeping them independent preserves the option to evolve each on its own schedule.
 
 ### Per-record reads/writes: `InstanceMethods`

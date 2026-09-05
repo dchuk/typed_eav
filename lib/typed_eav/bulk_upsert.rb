@@ -8,7 +8,8 @@ module TypedEAV
   # persistence callbacks, versioning, or per-record error isolation. Callers must
   # acknowledge those semantics explicitly. It pre-casts and validates every
   # row in a transaction unit before issuing one upsert batch on the host
-  # model's connection. Scope resolution and field casting remain authoritative.
+  # model's connection. Field definitions for every tuple in that unit resolve
+  # in one batch; scope precedence and field casting remain authoritative.
   module BulkUpsert
     TYPE_COLUMNS = %i[
       string_value text_value boolean_value integer_value decimal_value date_value datetime_value json_value
@@ -36,19 +37,14 @@ module TypedEAV
       # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- tuple grouping, validation, and row construction are one durability unit.
       def write_unit(host_class, records, values_by_field_name)
         tuples = records.map { |record| [record.typed_eav_scope, record.typed_eav_parent_scope] }.uniq
-        fields_by_tuple = tuples.to_h do |tuple|
-          # Use the exact tuple at the partition layer. EntityQuery treats
-          # explicit scope kwargs as ALL_SCOPES inside TypedEAV.unscoped;
-          # that administrative bypass must not cross-contaminate tenants.
-          fields = TypedEAV::Partition.definitions_by_name(
-            TypedEAV::Partition.visible_fields(
-              entity_type: host_class.polymorphic_name,
-              scope: tuple[0],
-              parent_scope: tuple[1],
-            ),
-          )
-          [tuple, fields]
-        end
+        # Resolve every exact tuple in this transaction unit with one query.
+        # The shared resolver preserves global/scope/full-tuple precedence per
+        # tuple and never observes EntityQuery's administrative ALL_SCOPES
+        # bypass, so tenants remain isolated inside an unscoped block.
+        fields_by_tuple = TypedEAV::Partition::DefinitionBatch.resolve(
+          entity_type: host_class.polymorphic_name,
+          tuples: tuples,
+        )
         rows = records.flat_map do |record|
           fields = fields_by_tuple.fetch([record.typed_eav_scope, record.typed_eav_parent_scope])
           values_by_field_name.filter_map do |name, raw|

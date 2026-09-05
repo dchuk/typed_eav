@@ -10,8 +10,8 @@ module TypedEAV
   #
   #   1. validate_records!    — nil -> ArgumentError; single-class invariant
   #   2. group_by_tuple       — `[typed_eav_scope, typed_eav_parent_scope]`
-  #   3. winning_ids_by_tuple — one exact-partition definition query, then
-  #                             `Partition.definitions_by_name` per tuple
+  #   3. winning_ids_by_tuple — one `Partition::DefinitionBatch` query, then
+  #                             extract the winning field ids per tuple
   #   4. preload_values       — single SELECT across ALL records
   #   5. build_result_hash    — per-record inner hash; orphan-skip + winning-id
   #                             precedence mirrored from the instance path.
@@ -74,43 +74,9 @@ module TypedEAV
     end
 
     def winning_ids_by_tuple(tuples)
-      definitions_by_tuple = batched_definitions(tuples).group_by do |definition|
-        [definition.scope, definition.parent_scope]
-      end
-
-      tuples.to_h do |tuple|
-        s, ps = tuple
-        candidate_tuples = [[nil, nil], [s, nil], [s, ps]].uniq
-        visible = candidate_tuples.flat_map { |candidate| definitions_by_tuple.fetch(candidate, []) }
-        [tuple, TypedEAV::Partition.definitions_by_name(visible).transform_values(&:id)]
-      end
-    end
-
-    def batched_definitions(tuples)
-      tuples.each { |scope, parent_scope| validate_tuple!(scope, parent_scope) }
-      relation = TypedEAV::Field::Base.where(entity_type: host_class.polymorphic_name)
-      requested = tuples.map { |scope, parent_scope| { "scope" => scope, "parent_scope" => parent_scope } }
-      relation.where(<<~SQL.squish, requested.to_json).to_a
-        typed_eav_fields.scope IS NULL AND typed_eav_fields.parent_scope IS NULL
-        OR EXISTS (
-          SELECT 1
-          FROM jsonb_to_recordset(?::jsonb) AS requested(scope text, parent_scope text)
-          WHERE (
-            typed_eav_fields.scope IS NOT DISTINCT FROM requested.scope
-            AND typed_eav_fields.parent_scope IS NOT DISTINCT FROM requested.parent_scope
-          )
-          OR (
-            typed_eav_fields.scope IS NOT DISTINCT FROM requested.scope
-            AND typed_eav_fields.parent_scope IS NULL
-          )
-        )
-      SQL
-    end
-
-    def validate_tuple!(scope, parent_scope)
-      return if TypedEAV::ScopeTuple.invariant_satisfied?(scope, parent_scope)
-
-      raise ArgumentError, "parent_scope cannot be set when scope is blank"
+      TypedEAV::Partition::DefinitionBatch
+        .resolve(entity_type: host_class.polymorphic_name, tuples: tuples)
+        .transform_values { |fields_by_name| fields_by_name.transform_values(&:id) }
     end
 
     def preload_values(records)

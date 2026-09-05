@@ -8,6 +8,8 @@ module TypedEAV
   # values. Ambient resolution (`TypedEAV.current_scope`, `with_scope`,
   # `unscoped`) stays with the adapters that know their calling context.
   module Partition
+    autoload :DefinitionBatch, "typed_eav/partition/definition_batch"
+
     # Frozen orphan-parent ArgumentError message. Kept as a module constant
     # so both `visible_fields` and `visible_sections` raise the same string
     # without re-allocating per call. The string is the wire-stable BC error

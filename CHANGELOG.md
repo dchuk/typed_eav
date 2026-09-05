@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bulk reads, writes, and registry/versioning opt-ins through Rails'
   canonical polymorphic name.
 
+### Performance
+
+- Batch BulkUpsert field-definition resolution into one SELECT per transaction
+  unit while preserving exact tuple isolation and definition precedence.
+
 ## [0.7.0] - 2026-08-18
 
 This release hardens TypedEAV's correctness and operational behavior, replaces

@@ -24,7 +24,7 @@ The contract `BulkWrite.execute` ships: outer transaction wraps the run; each re
 
 ## Bulk-write definitions memo
 
-The `Thread.current[:typed_eav_bulk_defs_memo]` Hash that the bulk loop sets before iterating records. Per-instance `typed_eav_defs_by_name` consults the memo so each record in the loop doesn't re-issue a fresh `typed_eav_definitions` SELECT. Keyed by `[host_class, scope, parent_scope]`; one memo entry per partition tuple touched by the bulk call. Cleared on bulk-call exit.
+The `Thread.current[:typed_eav_bulk_defs_memo]` Hash that the bulk loop sets before iterating records. Per-instance `typed_eav_defs_by_name` consults the memo so each record in the loop doesn't re-issue a fresh `typed_eav_definitions` SELECT. Keyed by `[host_class.polymorphic_name, scope, parent_scope]`, so inherited hosts share the same canonical EAV type; one memo entry per partition tuple touched by the bulk call. Cleared on bulk-call exit.
 
 ## Snapshot vs portable schema
 
