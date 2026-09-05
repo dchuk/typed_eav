@@ -21,7 +21,7 @@ module TypedEAV
     NULL_PLACEMENTS = %i[first last].freeze
 
     # rubocop:disable Metrics/ParameterLists -- the query object receives the resolved public API inputs explicitly.
-    def initialize(model:, name:, direction:, nulls:, scope:, parent_scope:)
+    def initialize(model:, name:, scope:, parent_scope:, direction: :asc, nulls: :last)
       @model = model
       @name = normalize_name(name)
       @direction = normalize_option(direction, DIRECTIONS, "direction")
@@ -45,6 +45,45 @@ module TypedEAV
         Arel.sql("(#{value_query.to_sql}) #{@direction.to_s.upcase} NULLS #{@nulls.to_s.upcase}"),
         host_table[@model.primary_key].asc,
       )
+    end
+
+    def distinct_values(limit:)
+      raise_all_scopes!
+
+      field = field_for_name
+      column = scalar_column_for(field)
+      relation = value_relation(field).select(column).distinct
+      relation = relation.order(Arel.sql("#{quoted_value_column(column)} ASC NULLS LAST"))
+
+      relation.limit(validate_limit(limit)).pluck(column)
+    end
+
+    def count_distinct_values
+      raise_all_scopes!
+
+      field = field_for_name
+      column = scalar_column_for(field)
+      distinct_relation = value_relation(field).select(column).distinct
+      aliased_relation = TypedEAV::Value.from(
+        "(#{distinct_relation.to_sql}) #{quoted_table_name("typed_eav_distinct_values")}",
+      )
+
+      aliased_relation.count
+    end
+
+    def value_counts(limit:)
+      raise_all_scopes!
+
+      field = field_for_name
+      column = scalar_column_for(field)
+      count_sql = Arel.sql("COUNT(DISTINCT #{quoted_value_column(:entity_id)})")
+
+      value_relation(field)
+        .group(column)
+        .order(Arel.sql("#{quoted_value_column(column)} ASC NULLS LAST"))
+        .limit(validate_limit(limit))
+        .pluck(column, count_sql)
+        .to_h
     end
 
     private
@@ -100,6 +139,47 @@ module TypedEAV
     rescue NotImplementedError
       raise ArgumentError,
             "Typed field '#{field.name}' (#{field.field_type_name}) is not a supported scalar field for ordering"
+    end
+
+    def value_relation(field)
+      TypedEAV::Value.where(
+        field_id: field.id,
+        entity_type: @model.polymorphic_name,
+        entity_id: host_id_relation,
+      )
+    end
+
+    def host_id_relation
+      # `all` is intentional: EntityQuery's relation delegation exposes the
+      # caller relation through the model's current scope at this boundary.
+      # rubocop:disable Rails/RedundantActiveRecordAllMethod
+      relation = @model.all.unscope(:select)
+      # rubocop:enable Rails/RedundantActiveRecordAllMethod
+      alias_name = "typed_eav_host_ids"
+      qualified_primary_key = "#{quoted_table_name(alias_name)}.#{quoted_column_name(@model.primary_key)}"
+      wrapped_sql = "(#{relation.to_sql}) #{quoted_table_name(alias_name)}"
+
+      @model.base_class.unscoped.from(wrapped_sql).select(Arel.sql(qualified_primary_key))
+    end
+
+    def quoted_value_column(column)
+      "#{quoted_table_name(TypedEAV::Value.table_name)}.#{quoted_column_name(column)}"
+    end
+
+    def quoted_table_name(table_name)
+      TypedEAV::Value.connection.quote_table_name(table_name)
+    end
+
+    def quoted_column_name(column_name)
+      TypedEAV::Value.connection.quote_column_name(column_name)
+    end
+
+    def validate_limit(limit)
+      unless limit.is_a?(Integer) && limit.positive? && limit <= 1_000
+        raise ArgumentError, "typed scalar query limit must be a positive Integer no greater than 1000"
+      end
+
+      limit
     end
 
     def value_subquery(value_table, host_table, column, field)

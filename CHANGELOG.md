@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- SQL-backed distinct typed values, exact distinct counts, and bounded
+  per-value host counts. Caller host filters/pagination and field-definition
+  precedence are retained; explicit NULL, false, and empty strings have
+  documented semantics without host or Value hydration. (#49)
 - Explicit `source: :preloaded` bulk reads reuse caller-loaded Value graphs,
   including unsaved edits, with one batched definition lookup and no duplicate
   Value hydration. Incomplete required preloads fail clearly; fresh database

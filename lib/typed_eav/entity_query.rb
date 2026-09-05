@@ -136,6 +136,72 @@ module TypedEAV
     end
     # rubocop:enable Metrics/ParameterLists
 
+    # Return distinct values for a scalar typed field without hydrating host
+    # or Value records. Values are ordered by the native database column and
+    # limited before they are transferred to Ruby; an explicit NULL is
+    # returned as `nil`, while hosts with no value row are absent.
+    #
+    # `scope:` and `parent_scope:` choose the visible field definition with
+    # the same ambient/explicit/nil semantics as `where_typed_eav`. They do
+    # not add host predicates; keep tenant or other host filtering in the
+    # caller relation. The current relation's filters, limit, and offset are
+    # applied through a host-ID subquery.
+    # rubocop:disable Metrics/ParameterLists -- mirrors the existing query wrappers' public partition kwargs.
+    def distinct_typed_eav_values(name, limit: 100, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
+      resolved = resolve_scope(scope, parent_scope)
+      effective_scope, effective_parent = scope_pair(resolved)
+
+      TypedEAV::ScalarQuery.new(
+        model: self,
+        name: name,
+        scope: effective_scope,
+        parent_scope: effective_parent,
+      ).distinct_values(limit: limit)
+    end
+    # rubocop:enable Metrics/ParameterLists
+
+    # Count exact distinct values for a scalar typed field. The count is
+    # calculated in SQL, including one explicit-NULL category as `nil`; hosts
+    # without a value row remain absent. Caller relation filters and
+    # pagination are applied through the same host-ID subquery as the bounded
+    # distinct-value API.
+    # rubocop:disable Metrics/ParameterLists -- mirrors the existing query wrappers' public partition kwargs.
+    def count_distinct_typed_eav_values(name, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
+      resolved = resolve_scope(scope, parent_scope)
+      effective_scope, effective_parent = scope_pair(resolved)
+
+      TypedEAV::ScalarQuery.new(
+        model: self,
+        name: name,
+        scope: effective_scope,
+        parent_scope: effective_parent,
+      ).count_distinct_values
+    end
+    # rubocop:enable Metrics/ParameterLists
+
+    # Return an insertion-ordered `{ value => host_count }` hash for a scalar
+    # typed field. Values are grouped and counted in SQL using distinct host
+    # identities; explicit NULL is represented by a `nil` key and hosts with
+    # no value row are omitted. The result is ordered by the native value
+    # column with NULL last and capped by `limit:` before transfer to Ruby.
+    #
+    # The caller relation's filters, joins, distinctness, limit, and offset
+    # determine the host-ID subquery. Scope kwargs only choose the visible
+    # field definition and do not add host predicates.
+    # rubocop:disable Metrics/ParameterLists -- mirrors the existing query wrappers' public partition kwargs.
+    def typed_eav_value_counts(name, limit: 100, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
+      resolved = resolve_scope(scope, parent_scope)
+      effective_scope, effective_parent = scope_pair(resolved)
+
+      TypedEAV::ScalarQuery.new(
+        model: self,
+        name: name,
+        scope: effective_scope,
+        parent_scope: effective_parent,
+      ).value_counts(limit: limit)
+    end
+    # rubocop:enable Metrics/ParameterLists
+
     # Returns field definitions for this entity type.
     #
     # `scope:` and `parent_scope:` behavior:

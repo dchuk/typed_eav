@@ -220,6 +220,34 @@ supported, using their stored values (for example, reference IDs and attachment
 signed IDs, not display labels). JSON/array and multi-cell fields such as
 Currency are rejected rather than assigned an implicit ordering.
 
+### Distinct values and grouped counts
+
+```ruby
+contacts = Contact.where(tenant_id: "t1")
+contacts.distinct_typed_eav_values("status", scope: "t1", limit: 100)
+# => ["active", "paused", nil]
+contacts.typed_eav_value_counts("status", scope: "t1", limit: 100)
+# => {"active" => 24, "paused" => 3, nil => 2}
+contacts.count_distinct_typed_eav_values("status", scope: "t1")
+# => 3
+```
+
+These scalar queries run in SQL without hydrating hosts or Values. Results
+use native ascending value order, with explicit NULL (`nil`) last. Missing
+value rows contribute nothing; `false` and empty strings remain real values.
+Grouped counts count host identities, not duplicate rows introduced by joins.
+The caller's filters, STI restrictions, distinctness, and pagination determine
+the host set before summarization. Scope arguments choose field-definition
+visibility, not host authorization, just as with typed sorting.
+
+Lists and grouped-count hashes default to 100 values and accept a positive
+Integer `limit:` up to 1,000. They are truncated in value order, not ranked by
+frequency. Compare their length with `count_distinct_typed_eav_values` to
+detect truncation; that exact SQL count includes one NULL category and returns
+only an Integer, regardless of cardinality. It still requires database work
+over the matching set. Collection/multi-cell fields and all-partitions mode
+are unsupported, matching scalar sorting.
+
 ### Available Operators
 
 | Operator | Works On | Description |
@@ -1462,6 +1490,11 @@ TypedEAV::QueryBuilder                ← low altitude: per-field SQL primitive
 ```
 
 `QueryBuilder` is the single place that decides "given this field and this operator, which column and which SQL fragment?" `FilterQuery` never builds SQL fragments directly; `EntityQuery` never touches columns. Splitting the two altitudes keeps custom field types extending only the column-mapping surface (`value_column`, `operators`, `operator_column`) without ever subclassing `FilterQuery`.
+
+Scalar ordering and summaries are a separate `EntityQuery` delegation to
+`ScalarQuery`: it resolves one winning definition, checks scalar support, and
+builds SQL over the field's declared native column. It does not add operators
+to the filter DSL or load the host/Value graph to calculate summaries.
 
 ### Bulk reads: `BulkRead`
 
