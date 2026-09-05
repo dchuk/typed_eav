@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "schema_portability/import_index"
+require_relative "schema_portability/preview"
 
 module TypedEAV
   # Export and import field + section definitions for an exact partition
@@ -84,6 +85,25 @@ module TypedEAV
           "snapshot_schema_version" => 1,
           "fields" => fields,
         }
+      end
+
+      # Compare an exported schema with the exact target partition without
+      # invoking the import pipeline. The result is a JSON-safe, read-only
+      # snapshot of the definitions currently in the database and the
+      # conditional action the requested conflict policy would take.
+      #
+      # `:error` marks divergent definitions as blocked, `:skip` predicts
+      # leaving them unchanged, and `:overwrite` predicts replacement. Type
+      # changes are always blocked because the importer refuses unsafe typed
+      # value conversions under every policy. Omitted target definitions are
+      # intentionally absent from the result: import_schema never deletes
+      # them. A preview is advisory and does not lock or reserve the target;
+      # custom validations and concurrent changes can still affect a later
+      # import. Every field/section entry must also repeat the exact
+      # entity_type/scope/parent_scope envelope identity; inconsistent
+      # payloads are rejected instead of being silently retargeted.
+      def preview_schema(hash, on_conflict: :error)
+        TypedEAV::SchemaPortability::Preview.new(hash, on_conflict: on_conflict).call
       end
 
       def import_schema(hash, on_conflict: :error)
