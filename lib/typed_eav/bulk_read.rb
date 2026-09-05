@@ -13,24 +13,35 @@ module TypedEAV
   # particular record's partition tuple. An empty selection returns one empty
   # inner hash per record without querying definitions or values.
   #
-  # ## Pipeline (one batched definition query + one bulk value preload)
+  # `source: :database` (the default) always reads a fresh Value graph. The
+  # explicit `source: :preloaded` mode projects only the already-loaded
+  # `typed_values` targets and their loaded `field` associations; it never
+  # falls back to an association query. Incomplete preload requirements raise
+  # `ArgumentError` before projection. The preloaded mode is therefore a
+  # snapshot of caller-owned in-memory records and can include unsaved Value
+  # assignments; it never saves or mutates those records.
+  #
+  # ## Pipeline
   #
   #   1. validate_records!    — nil -> ArgumentError; single-class invariant
   #   2. group_by_tuple       — `[typed_eav_scope, typed_eav_parent_scope]`
   #   3. winning_ids_by_tuple — one `Partition::DefinitionBatch` query, then
   #                             extract the winning field ids per tuple
-  #   4. preload_values       — single SELECT across ALL records, restricted
-  #                             to selected field IDs when `fields:` is used
+  #   4. load_values          — fresh `:database` SELECT across ALL records,
+  #                             restricted to selected field IDs when
+  #                             `fields:` is used; or `:preloaded` association
+  #                             targets after a strict loaded-state check
   #   5. build_result_hash    — per-record inner hash; orphan-skip + winning-id
   #                             precedence mirrored from the instance path.
   #
   # ## Query bound
   #
-  #   - 1 SELECT typed_eav_values WHERE entity_type=? AND entity_id IN (?)
-  #   - 1 SELECT typed_eav_fields WHERE id IN (?)           (via includes)
-  #   - 1 SELECT typed_eav_fields for the union of requested partitions
-  #
-  # Total: 3 queries — independent of record count and partition cardinality.
+  # Database mode performs up to three SELECTs — one bulk Value query, one
+  # field-association query for those values, and one definition query for the
+  # union of requested partitions. The preloaded mode performs one fresh
+  # definition SELECT and reads Value/field association targets in memory;
+  # `fields: []` bypasses even that definition query. Both bounds are
+  # independent of record count and partition cardinality.
   #
   # ## Single-class invariant
   #
@@ -39,13 +50,16 @@ module TypedEAV
   # class. Mixed, unrelated input would still be invalid; STI subclasses pass
   # via `records.all?(host_class)`.
   class BulkRead
-    def initialize(host_class:, records:, fields: nil)
+    def initialize(host_class:, records:, fields: nil, source: :database)
       @host_class = host_class
       @records    = records
       @fields     = fields
+      @source     = source
     end
 
     def to_hash
+      validate_source!
+
       records = coerce_records
       return {} if records.empty?
 
@@ -56,7 +70,11 @@ module TypedEAV
 
       tuples_by_record = group_by_tuple(records)
       winning_ids_by_tuple = winning_ids_by_tuple(tuples_by_record.values.uniq, selected_names)
-      values_by_record_id = preload_values(records, winning_ids_by_tuple, selected_names)
+      values_by_record_id = if @source == :preloaded
+                              preloaded_values(records, tuples_by_record, winning_ids_by_tuple, selected_names)
+                            else
+                              preload_values(records, winning_ids_by_tuple, selected_names)
+                            end
 
       build_result(records, tuples_by_record, winning_ids_by_tuple, values_by_record_id, selected_names)
     end
@@ -64,6 +82,12 @@ module TypedEAV
     private
 
     attr_reader :host_class
+
+    def validate_source!
+      return if %i[database preloaded].include?(@source)
+
+      raise ArgumentError, "typed_eav_hash_for source must be :database or :preloaded"
+    end
 
     def normalize_fields
       return nil if @fields.nil?
@@ -135,6 +159,48 @@ module TypedEAV
 
       rows = relation.to_a
       rows.group_by(&:entity_id)
+    end
+
+    # Reuse a caller's fully-preloaded association graph without allowing an
+    # accidental association reader to issue an N+1 query. `target` is used
+    # deliberately: unlike `record.typed_values`, it never loads an unloaded
+    # association. For a selected projection, filter each target by the
+    # winning field IDs before checking field associations; unselected Values
+    # therefore need not have their `field` association loaded. The all-fields
+    # path retains the stricter check over every Value, including orphan rows
+    # whose loaded field target is nil.
+    def preloaded_values(records, tuples_by_record, winning_ids_by_tuple, selected_names)
+      unloaded_records = records.reject { |record| record.association(:typed_values).loaded? }
+      if unloaded_records.any?
+        raise ArgumentError,
+              "typed_eav_hash_for source: :preloaded requires the typed_values association " \
+              "to be preloaded for every record"
+      end
+
+      records.to_h do |record|
+        values = record.association(:typed_values).target
+        if selected_names
+          tuple = tuples_by_record.fetch(record)
+          selected_ids = winning_ids_by_tuple.fetch(tuple, {}).values
+          values = values.select { |value| selected_ids.include?(effective_field_id(value)) }
+        end
+
+        unloaded_values = values.reject { |value| value.association(:field).loaded? }
+        if unloaded_values.any?
+          raise ArgumentError,
+                "typed_eav_hash_for source: :preloaded requires the field association " \
+                "to be preloaded for every typed value"
+        end
+
+        [record.id, values]
+      end
+    end
+
+    def effective_field_id(value)
+      return value.field_id if value.field_id
+
+      association = value.association(:field)
+      association.loaded? ? association.target&.id : nil
     end
 
     def build_result(records, tuples_by_record, winning_ids_by_tuple, values_by_record_id, selected_names)

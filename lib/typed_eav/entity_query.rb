@@ -164,8 +164,20 @@ module TypedEAV
     # `fields:` preserves the existing all-fields behavior. Passing `[]`
     # returns one empty inner hash per supplied record without querying field
     # definitions or values.
-    def typed_eav_hash_for(records, fields: nil)
-      TypedEAV::BulkRead.new(host_class: self, records: records, fields: fields).to_hash
+    #
+    # `source: :database` (default) performs a fresh batched read even when
+    # the records already have typed values loaded. `source: :preloaded` is an
+    # explicit snapshot mode: `typed_values` and every retained value's
+    # `field` association must already be loaded, otherwise `ArgumentError` is
+    # raised instead of introducing an N+1 query. It reuses unsaved in-memory
+    # values and never saves or mutates caller records.
+    def typed_eav_hash_for(records, fields: nil, source: :database)
+      TypedEAV::BulkRead.new(
+        host_class: self,
+        records: records,
+        fields: fields,
+        source: source,
+      ).to_hash
     end
 
     # Bulk write API. Sets the same `values_by_field_name` Hash on every

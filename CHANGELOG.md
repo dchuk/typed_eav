@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Explicit `source: :preloaded` bulk reads reuse caller-loaded Value graphs,
+  including unsaved edits, with one batched definition lookup and no duplicate
+  Value hydration. Incomplete required preloads fail clearly; fresh database
+  reads remain the default. (#46)
 - Pending logical typed-value changes via `typed_eav_changes`, covering
   host-associated named/nested edits and marked removals without loading
   untouched Value collections. Failed saves retain validation feedback and

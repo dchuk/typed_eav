@@ -1502,6 +1502,27 @@ winning field IDs constrain the value query before hydration, so unrequested
 values and their field readers are not loaded or evaluated. Definition lookup
 remains batched across the records' partitions.
 
+To explicitly reuse already-loaded values:
+
+```ruby
+contacts = Contact.where(tenant_id: "t1").includes(typed_values: :field).to_a
+Contact.typed_eav_hash_for(contacts, fields: [:name], source: :preloaded)
+```
+
+The default `source: :database` still fetches persisted values afresh, even
+when associations are loaded or edited in memory. `:preloaded` uses the caller's
+association targets, including unsaved Value builds/assignments, without saving
+or mutating them. It performs one fresh batched definition query to choose
+current winners, but no Value or field-association preload queries. This is a
+value snapshot, not a guarantee of current database contents or frozen schema.
+
+Every host's `typed_values` association must be loaded, as must each retained
+Value's `field` association; incomplete preloads raise `ArgumentError` instead
+of silently issuing N+1 queries. With `fields:`, unselected Values need no field
+preload. With all fields selected, all field associations must be loaded
+(including loaded `nil` for orphans). `fields: []` needs neither associations
+nor definition/value queries. Only `:database` and `:preloaded` are valid sources.
+
 ### Bulk writes: `BulkWrite`
 
 `bulk_set_typed_eav_values(records, attrs)` routes through `TypedEAV::BulkWrite`,
