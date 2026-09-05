@@ -1432,6 +1432,23 @@ measure their own scope cardinality, selected fields, hydration, and contention.
 
 Single-record reads (`typed_eav_value`, `typed_eav_hash`) live on `InstanceMethods` and use the same partition helpers but without batching.
 
+Use `fields:` to load only the values needed by a view or export:
+
+```ruby
+Contact.typed_eav_hash_for(contacts, fields: [:name, :score])
+# => {123 => {"name" => "Ada", "score" => 42}, ...}
+```
+
+Omitting `fields:` (or passing `nil`) retains the all-fields behavior. A single
+String/Symbol or an enumerable of names is accepted; duplicates are removed.
+Unknown names and names unavailable in an individual record's partition are
+omitted, as are missing value rows. An explicitly stored NULL remains `nil`.
+`fields: []` returns an empty inner hash for each record without definition or
+value queries (the supplied collection itself may still need loading). Selected
+winning field IDs constrain the value query before hydration, so unrequested
+values and their field readers are not loaded or evaluated. Definition lookup
+remains batched across the records' partitions.
+
 ### Bulk writes: `BulkWrite`
 
 `bulk_set_typed_eav_values(records, attrs)` routes through `TypedEAV::BulkWrite`,

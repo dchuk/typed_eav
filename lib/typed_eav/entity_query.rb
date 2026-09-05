@@ -115,8 +115,15 @@ module TypedEAV
     # `HasTypedEAV::InstanceMethods#typed_eav_hash`. N+1-free regardless of
     # record count or field count. See `TypedEAV::BulkRead` for the pipeline
     # and query bound.
-    def typed_eav_hash_for(records)
-      TypedEAV::BulkRead.new(host_class: self, records: records).to_hash
+    #
+    # `fields:` optionally limits the projection to selected String/Symbol
+    # names. Names are normalized to strings and de-duplicated; unknown names
+    # and names absent from a record's partition are ignored. Omitting
+    # `fields:` preserves the existing all-fields behavior. Passing `[]`
+    # returns one empty inner hash per supplied record without querying field
+    # definitions or values.
+    def typed_eav_hash_for(records, fields: nil)
+      TypedEAV::BulkRead.new(host_class: self, records: records, fields: fields).to_hash
     end
 
     # Bulk write API. Sets the same `values_by_field_name` Hash on every

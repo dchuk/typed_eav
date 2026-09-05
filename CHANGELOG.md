@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Field-selective bulk reads with `typed_eav_hash_for(records, fields: names)`.
+  Selected winning field IDs narrow value loading before hydration; omitted
+  `fields:` preserves all-fields reads. Empty, duplicate, unknown, and
+  partition-specific names have explicit projection semantics. (#45)
+
 ## [0.7.1] - 2026-09-04
 
 A focused patch release for inherited Active Record hosts and multi-partition
