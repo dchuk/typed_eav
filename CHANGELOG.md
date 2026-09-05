@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Database-backed `order_typed_eav` for scalar fields, with explicit NULL
+  placement and stable primary-key tie-breaking. Caller host filters and
+  partition-definition precedence are preserved without Value hydration. (#44)
 - Field-selective bulk reads with `typed_eav_hash_for(records, fields: names)`.
   Selected winning field IDs narrow value loading before hydration; omitted
   `fields:` preserves all-fields reads. Empty, duplicate, unknown, and

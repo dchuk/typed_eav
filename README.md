@@ -197,6 +197,29 @@ Contact.where(company_id: 42)
        .limit(25)
 ```
 
+### Sorting by a typed field
+
+```ruby
+Contact.where(tenant_id: "t1")
+       .order_typed_eav("age", direction: :desc, nulls: :last, scope: "t1")
+       .limit(25)
+```
+
+`order_typed_eav` returns an Active Record relation and orders in PostgreSQL,
+without loading typed values into Ruby. It replaces prior ordering while
+preserving host filters, STI restrictions, limits, and offsets. `direction:`
+accepts `:asc` (default) or `:desc`; `nulls:` accepts `:first` or `:last`
+(default in either direction). Missing rows and explicit NULLs share that
+placement. Equal values use the host primary key ascending as a stable tie-break.
+
+Scope arguments (or the ambient scope) select the winning field definition;
+**they do not filter host records by tenant**. Keep authorization/tenant filters
+on the caller relation. All-partitions `TypedEAV.unscoped` is rejected for this
+API: choose one effective definition instead. Single native scalar cells are
+supported, using their stored values (for example, reference IDs and attachment
+signed IDs, not display labels). JSON/array and multi-cell fields such as
+Currency are rejected rather than assigned an implicit ordering.
+
 ### Available Operators
 
 | Operator | Works On | Description |

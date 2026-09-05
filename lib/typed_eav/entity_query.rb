@@ -94,6 +94,48 @@ module TypedEAV
     end
     # rubocop:enable Metrics/ParameterLists
 
+    # Order this host relation by a scalar typed field in SQL.
+    #
+    #   Contact.order_typed_eav("score")
+    #   Contact.where(active: true).order_typed_eav("score", direction: :desc)
+    #
+    # `direction:` accepts :asc or :desc. `nulls:` accepts :first or :last
+    # and defaults to :last for both directions. Missing value rows and rows
+    # whose selected typed cell is explicitly NULL are both SQL NULLs and
+    # therefore share the requested placement. Equal values are ordered by
+    # the host primary key ascending so pagination has a stable tie-break.
+    #
+    # The method keeps the caller's current relation scope (including normal
+    # Active Record filters, limits, and offsets) through Rails relation
+    # delegation. Typed ordering has explicit precedence and replaces any
+    # prior host ordering while retaining those filters and pagination.
+    #
+    # Scope kwargs choose the visible field definition and follow the same
+    # ambient/explicit/nil resolution as `where_typed_eav`; they do not add a
+    # host tenant predicate. Applications should keep host filtering in the
+    # caller relation. `TypedEAV.unscoped` is rejected because ordering across
+    # multiple same-name partition definitions is ambiguous; use an explicit
+    # scope when one field definition must win.
+    #
+    # Only single-cell scalar fields backed by the native scalar columns are
+    # supported. Collection and multi-cell fields raise ArgumentError rather
+    # than silently choosing one physical cell.
+    # rubocop:disable Metrics/ParameterLists -- mirrors the existing query wrappers' public partition kwargs.
+    def order_typed_eav(name, direction: :asc, nulls: :last, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
+      resolved = resolve_scope(scope, parent_scope)
+      effective_scope, effective_parent = scope_pair(resolved)
+
+      TypedEAV::ScalarQuery.new(
+        model: self,
+        name: name,
+        direction: direction,
+        nulls: nulls,
+        scope: effective_scope,
+        parent_scope: effective_parent,
+      ).order_relation
+    end
+    # rubocop:enable Metrics/ParameterLists
+
     # Returns field definitions for this entity type.
     #
     # `scope:` and `parent_scope:` behavior:
