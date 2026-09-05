@@ -1105,6 +1105,36 @@ Production code rarely calls either — they exist for test isolation and
 for the rare case where a host app wants to fully unwire the gem in a
 specific request lifecycle.
 
+## In-memory typed-value changes
+
+```ruby
+contact.set_typed_eav_value("age", 41)
+contact.typed_eav_changes # => {"age" => [40, 41]}
+contact.save!
+contact.typed_eav_changes # => {}
+```
+
+`typed_eav_changes` reports logical `[before, after]` pairs for pending changes
+on this host's in-memory `typed_values` target. It covers named setters,
+`typed_eav_attributes=`, nested `typed_values_attributes=`, association builds,
+edits to target Values, and `mark_for_destruction`/nested `_destroy`. Multi-cell
+fields such as Currency retain their logical shape; returned hashes, pairs,
+and mutable values are copies. Same-value assignments, reversions, and logical
+`nil`-to-`nil` changes are omitted, including creating/removing a NULL value row.
+Invalid input reports the cast logical result without discarding validation errors.
+
+Failed saves retain pending state; successful saves and reload clear it. An
+outer rollback follows Active Record's restored child dirty state. The API
+resolves effective field names using this record's partition precedence, and
+does not load all persisted Values merely to inspect an untouched host.
+
+This is in-memory editing state, not audit history. Independently loaded/saved
+Values, reassignment of an existing Value's field identity, SQL/`delete_all`,
+and collection operations that immediately remove rows from the host target
+are not tracked. Use nested destruction or `mark_for_destruction` for tracked
+removal. Reduced `BulkUpsert` does not update unrelated in-memory host objects;
+reload them after external writes. Bulk reads do not create dirty state.
+
 ## Versioning
 
 `typed_eav` ships an opt-in append-only audit log for changes to typed

@@ -40,6 +40,7 @@ module TypedEAV
     extend ActiveSupport::Concern
 
     autoload :InstanceMethods, "typed_eav/has_typed_eav/instance_methods"
+    autoload :DirtyTracking, "typed_eav/has_typed_eav/dirty_tracking"
 
     class_methods do
       # Register this model as having typed fields.
@@ -82,6 +83,7 @@ module TypedEAV
                                                   default: types && types.map(&:to_s).freeze
 
         include InstanceMethods
+        include DirtyTracking
         extend TypedEAV::EntityQuery
 
         has_many :typed_values,

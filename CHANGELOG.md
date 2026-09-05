@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Pending logical typed-value changes via `typed_eav_changes`, covering
+  host-associated named/nested edits and marked removals without loading
+  untouched Value collections. Failed saves retain validation feedback and
+  pending changes; this API is separate from persisted audit history. (#47)
 - Database-backed `order_typed_eav` for scalar fields, with explicit NULL
   placement and stable primary-key tie-breaking. Caller host filters and
   partition-definition precedence are preserved without Value hydration. (#44)
