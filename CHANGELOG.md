@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Database-backed `aggregate_typed_eav` min/max/sum for Integer and Decimal
+  field families, including Percentage. Decimal precision, caller host sets,
+  and explicit empty/NULL semantics are preserved; references and multi-cell
+  Currency are rejected instead of silently aggregated. (#50)
 - SQL-backed distinct typed values, exact distinct counts, and bounded
   per-value host counts. Caller host filters/pagination and field-definition
   precedence are retained; explicit NULL, false, and empty strings have

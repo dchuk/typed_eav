@@ -248,6 +248,27 @@ only an Integer, regardless of cardinality. It still requires database work
 over the matching set. Collection/multi-cell fields and all-partitions mode
 are unsupported, matching scalar sorting.
 
+### Numeric aggregates
+
+```ruby
+Contact.where(tenant_id: "t1").aggregate_typed_eav(
+  "score", operation: :sum, scope: "t1"
+)
+```
+
+`aggregate_typed_eav` requires `operation: :min`, `:max`, or `:sum` and returns
+one SQL-calculated scalar over the caller's host set. Integer fields return
+Integers; Decimal and Percentage fields preserve `BigDecimal` precision, with
+no Float conversion. Percentage values remain stored fractions, not formatted
+percent strings. Missing rows and explicit NULLs are ignored. With no non-NULL
+values, min/max return `nil` and sum returns the field's typed zero.
+
+The same host filtering, partition visibility, STI, and pagination rules as
+distinct queries apply. Only Integer/Decimal families (including Percentage)
+with a single numeric cell are supported. Reference IDs, text, collections,
+and multi-cell Currency are rejected; the gem does not silently sum identifiers
+or combine currencies. No values or host records are loaded to compute the result.
+
 ### Available Operators
 
 | Operator | Works On | Description |

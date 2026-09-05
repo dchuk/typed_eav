@@ -202,6 +202,31 @@ module TypedEAV
     end
     # rubocop:enable Metrics/ParameterLists
 
+    # Compute a database-backed numeric aggregate for a typed field.
+    # `operation:` is required and accepts :min, :max, or :sum. Integer fields return
+    # Integer results; Decimal and Percentage fields return BigDecimal
+    # results. Missing rows and explicit NULL cells are ignored. Empty
+    # min/max queries return nil, while empty sums return the typed zero.
+    #
+    # The caller relation's filters, joins, distinctness, limit, and offset
+    # are preserved through a host-ID subquery. Scope kwargs choose the
+    # visible definition and do not add host predicates. Only Integer,
+    # Decimal, and Percentage field families are supported; references,
+    # text, collections, and multi-cell fields raise ArgumentError.
+    # rubocop:disable Metrics/ParameterLists -- mirrors the existing query wrappers' public partition kwargs.
+    def aggregate_typed_eav(name, operation:, scope: UNSET_SCOPE, parent_scope: UNSET_SCOPE)
+      resolved = resolve_scope(scope, parent_scope)
+      effective_scope, effective_parent = scope_pair(resolved)
+
+      TypedEAV::ScalarQuery.new(
+        model: self,
+        name: name,
+        scope: effective_scope,
+        parent_scope: effective_parent,
+      ).aggregate(operation: operation)
+    end
+    # rubocop:enable Metrics/ParameterLists
+
     # Returns field definitions for this entity type.
     #
     # `scope:` and `parent_scope:` behavior:

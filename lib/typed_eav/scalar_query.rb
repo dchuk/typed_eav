@@ -19,6 +19,7 @@ module TypedEAV
     ].freeze
     DIRECTIONS = %i[asc desc].freeze
     NULL_PLACEMENTS = %i[first last].freeze
+    AGGREGATE_OPERATIONS = %i[min max sum].freeze
 
     # rubocop:disable Metrics/ParameterLists -- the query object receives the resolved public API inputs explicitly.
     def initialize(model:, name:, scope:, parent_scope:, direction: :asc, nulls: :last)
@@ -86,6 +87,21 @@ module TypedEAV
         .to_h
     end
 
+    def aggregate(operation:)
+      raise_all_scopes!
+
+      operation = normalize_option(operation, AGGREGATE_OPERATIONS, "operation")
+      field = field_for_name
+      column = numeric_column_for(field)
+      relation = value_relation(field)
+
+      case operation
+      when :min then relation.minimum(column)
+      when :max then relation.maximum(column)
+      when :sum then relation.sum(column)
+      end
+    end
+
     private
 
     def normalize_name(name)
@@ -111,7 +127,8 @@ module TypedEAV
       return unless @scope.equal?(TypedEAV::EntityQuery::ALL_SCOPES)
 
       raise ArgumentError,
-            "typed field ordering across all partitions is ambiguous; pass an explicit scope"
+            "typed scalar queries across all partitions are ambiguous; leave `TypedEAV.unscoped` " \
+            "and select an explicit scope"
     end
 
     def field_for_name
@@ -132,13 +149,31 @@ module TypedEAV
       columns = field.class.value_columns
       if columns.length != 1 || SCALAR_COLUMNS.exclude?(columns.first)
         raise ArgumentError,
-              "Typed field '#{field.name}' (#{field.field_type_name}) is not a supported scalar field for ordering"
+              "Typed field '#{field.name}' (#{field.field_type_name}) is not a supported scalar field for typed queries"
       end
 
       columns.first
     rescue NotImplementedError
       raise ArgumentError,
-            "Typed field '#{field.name}' (#{field.field_type_name}) is not a supported scalar field for ordering"
+            "Typed field '#{field.name}' (#{field.field_type_name}) is not a supported scalar field for typed queries"
+    end
+
+    def numeric_column_for(field)
+      unless field.is_a?(TypedEAV::Field::Integer) || field.is_a?(TypedEAV::Field::Decimal)
+        raise ArgumentError,
+              "Typed field '#{field.name}' (#{field.field_type_name}) is not a supported numeric field"
+      end
+
+      columns = field.class.value_columns
+      if columns.length != 1 || %i[decimal_value integer_value].exclude?(columns.first)
+        raise ArgumentError,
+              "Typed field '#{field.name}' (#{field.field_type_name}) is not a supported numeric field"
+      end
+
+      columns.first
+    rescue NotImplementedError
+      raise ArgumentError,
+            "Typed field '#{field.name}' (#{field.field_type_name}) is not a supported numeric field"
     end
 
     def value_relation(field)
