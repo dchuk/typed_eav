@@ -5,8 +5,9 @@ module TypedEAV
     # Read-only, on-demand dirty tracking for typed Value rows that are part
     # of a host association's in-memory target.
     #
-    # This deliberately follows Active Record's own dirty state rather than
-    # adding another mutation callback or transaction ledger. A typed Value
+    # Pending comparisons follow Active Record's own dirty state; saved
+    # snapshots use the host lifecycle, not a separate Value mutation registry.
+    # A typed Value
     # retains its database snapshot through `attribute_in_database`, while
     # autosave clears its ordinary dirty state after a successful host save.
     # Consequently failed saves and outer transaction rollbacks retain the
@@ -20,6 +21,16 @@ module TypedEAV
     # eager query of every Value row or a new global mutation registry.
     module DirtyTracking
       extend ActiveSupport::Concern
+
+      included do
+        # Register before has_typed_eav declares the autosave association.
+        # Active Model prepends after_* callbacks, so the later autosave
+        # callback executes after this capture. The public save wrappers
+        # restore prior state when a later save callback raises.
+        after_create :_typed_eav_capture_saved_changes
+        after_update :_typed_eav_capture_saved_changes
+        after_destroy :_typed_eav_clear_saved_changes
+      end
 
       # Pending typed-value changes keyed by effective Field name.
       #
@@ -41,6 +52,72 @@ module TypedEAV
 
           changes[name] = pair.map(&:deep_dup)
         end
+      end
+
+      # Logical changes from the most recent successful host save. The value
+      # is intentionally available in host `after_save` callbacks, where the
+      # child autosave has already consumed ordinary dirty state. This is
+      # successful-save state, not evidence that an outer transaction later
+      # committed and not a replacement for ValueVersion history.
+      def saved_typed_eav_changes
+        (@typed_eav_saved_changes || {}).deep_dup
+      end
+
+      # Bracket the complete public save call, including callbacks that run
+      # after the model's create/update callbacks. An around_save callback
+      # cannot rescue an after_save callback that is compiled outside its
+      # around sequence, but these wrappers can restore the previous snapshot
+      # for both false returns and raised errors.
+      def save(...)
+        _typed_eav_track_save { super }
+      end
+
+      def save!(...)
+        _typed_eav_track_save { super }
+      end
+
+      private
+
+      # Capture from the host lifecycle before autosave runs. Because this
+      # callback was registered before the association's autosave callback,
+      # before_save mutations and marked-for-destruction Values are still
+      # observable here.
+      def _typed_eav_capture_saved_changes
+        # A record-level rollback callback can be skipped after a later
+        # failed validation; use Rails' transaction-level callback instead.
+        self.class.current_transaction.after_rollback { _typed_eav_clear_saved_changes }
+        @typed_eav_saved_changes = typed_eav_changes.deep_dup
+      end
+
+      # Keep failed saves from replacing the last successful result. A normal
+      # return of false is handled here as well as exceptions raised by save
+      # callbacks or autosave. If the failed save opened a transaction that
+      # rolled back, Active Record may have cleared the snapshot before this
+      # wrapper resumes; restoring `previous` here preserves the failed-save
+      # contract. A successful save leaves the new snapshot in place until a
+      # later outer rollback callback clears it.
+      def _typed_eav_track_save
+        previous = @typed_eav_saved_changes
+        result = yield
+
+        @typed_eav_saved_changes = previous unless result
+        result
+      rescue StandardError
+        @typed_eav_saved_changes = previous
+        raise
+      end
+
+      def _typed_eav_clear_saved_changes
+        @typed_eav_saved_changes = {}
+      end
+
+      public
+
+      # Reload replaces the host's association target. Clear the separate
+      # saved snapshot at the same boundary so it cannot outlive the state it
+      # describes.
+      def reload(...)
+        super.tap { _typed_eav_clear_saved_changes }
       end
 
       private

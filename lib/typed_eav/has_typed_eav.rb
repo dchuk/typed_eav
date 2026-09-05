@@ -31,10 +31,12 @@ module TypedEAV
   # ## Architecture (ADR-0002, 0.3.0 refactor)
   #
   # This file holds the macro entry + macro-time guards. Per-record API
-  # lives in `TypedEAV::HasTypedEAV::InstanceMethods`. Class-level query
+  # lives in `TypedEAV::HasTypedEAV::InstanceMethods`, with pending/saved
+  # change tracking in `TypedEAV::HasTypedEAV::DirtyTracking`. Class-level query
   # orchestration lives in `TypedEAV::EntityQuery` (extended onto the host
   # class), which delegates the heavy lifting to `TypedEAV::FilterQuery`
-  # (where_typed_eav) and `TypedEAV::BulkRead` (typed_eav_hash_for).
+  # (where_typed_eav), `TypedEAV::ScalarQuery` (ordering/summaries), and
+  # `TypedEAV::BulkRead` (typed_eav_hash_for).
   # `bulk_set_typed_eav_values` continues to delegate to `TypedEAV::BulkWrite`.
   module HasTypedEAV
     extend ActiveSupport::Concern

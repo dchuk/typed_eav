@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   differences, conditional import actions, and risk flags. Type swaps remain
   blocked and omitted definitions are not treated as deletions. Previewing
   never applies changes or guarantees a later import's success. (#51)
+- `saved_typed_eav_changes` exposes the last successful host save's logical
+  changes inside `after_save` callbacks. Failed saves preserve the prior
+  snapshot; no-op saves, reload, and rollback have explicit lifecycle
+  semantics independent of audit/versioning. (#48)
 - Database-backed `aggregate_typed_eav` min/max/sum for Integer and Decimal
   field families, including Percentage. Decimal precision, caller host sets,
   and explicit empty/NULL semantics are preserved; references and multi-cell

@@ -1177,6 +1177,25 @@ outer rollback follows Active Record's restored child dirty state. The API
 resolves effective field names using this record's partition precedence, and
 does not load all persisted Values merely to inspect an untouched host.
 
+After saving, `saved_typed_eav_changes` exposes the most recent successful
+host save's logical pairs:
+
+```ruby
+contact.set_typed_eav_value("age", 42)
+contact.save!
+contact.saved_typed_eav_changes # => {"age" => [41, 42]}
+contact.typed_eav_changes       # => {}
+```
+
+Saved changes are available in normal host `after_save` callbacks, including
+values assigned by `before_save`. Each successful save replaces the snapshot;
+a no-op save replaces it with `{}`. Failed validation or a save-callback
+exception preserves the previous successful snapshot. Reload and an outer
+transaction rollback clear saved changes. These are successful-save semantics,
+not proof of a durable commit: use `after_commit` when external effects must
+wait for commit. Exceptions after a transaction has already committed cannot
+undo persisted data. Neither dirty API requires versioning or adds audit rows.
+
 This is in-memory editing state, not audit history. Independently loaded/saved
 Values, reassignment of an existing Value's field identity, SQL/`delete_all`,
 and collection operations that immediately remove rows from the host target
@@ -1512,7 +1531,7 @@ validations and concurrent changes still apply to the actual import.
 
 ## Architecture
 
-Internal module layout as of 0.7.0. Most consumers never reach for these directly — the public surface is the `has_typed_eav` macro and the instance/class methods it installs — but the split matters if you're extending the gem, debugging an integration, or evaluating it for production. Decisions are anchored by ADR-0001 through ADR-0013.
+Current internal module layout. Most consumers never reach for these directly — the public surface is the `has_typed_eav` macro and the instance/class methods it installs — but the split matters if you're extending the gem, debugging an integration, or evaluating it for production. Decisions are anchored by ADR-0001 through ADR-0013.
 
 ### Macro entry: `HasTypedEav`
 

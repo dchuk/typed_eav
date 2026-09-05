@@ -22,6 +22,17 @@ RSpec.describe "typed EAV pending dirty tracking", type: :model do
     queries
   end
 
+  def typed_eav_queries(&block)
+    queries = []
+    callback = lambda do |_, _, _, _, payload|
+      next if %w[SCHEMA CACHE].include?(payload[:name])
+
+      queries << payload[:sql] if payload[:sql].match?(/SELECT.*FROM.*typed_eav_(fields|values)/i)
+    end
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+    queries
+  end
+
   describe "#typed_eav_changes" do
     it "reports a named assignment without loading unrelated rows" do
       contact.set_typed_eav_value("age", 21)
@@ -221,16 +232,190 @@ RSpec.describe "typed EAV pending dirty tracking", type: :model do
     it "exposes pending changes to a host before_save callback" do
       observed = nil
       callback = proc { observed = typed_eav_changes }
-      Contact.set_callback(:save, :before, callback, prepend: true)
+      Contact.before_save(callback, prepend: true)
 
       begin
         contact.set_typed_eav_value("age", 36)
         contact.save!
       ensure
-        Contact.skip_callback(:save, :before, callback, prepend: true)
+        Contact.skip_callback(:save, :before, callback)
       end
 
       expect(observed).to eq("age" => [nil, 36])
+    end
+  end
+
+  describe "#saved_typed_eav_changes" do
+    def observe_after_save
+      observed = []
+      callback = proc { observed << saved_typed_eav_changes }
+      Contact.after_save(callback)
+      yield observed
+    ensure
+      Contact.skip_callback(:save, :after, callback)
+    end
+
+    it "starts empty and exposes the successful create in after_save" do
+      expect(contact.saved_typed_eav_changes).to eq({})
+
+      observe_after_save do |observed|
+        contact.set_typed_eav_value("age", 41)
+        contact.save!
+
+        expect(observed.last).to eq("age" => [nil, 41])
+      end
+
+      expect(contact.saved_typed_eav_changes).to eq("age" => [nil, 41])
+      expect(contact.typed_eav_changes).to eq({})
+    end
+
+    it "exposes saved changes when a new host and typed value are created together" do
+      new_contact = Contact.new(name: "New dirty host")
+      new_contact.set_typed_eav_value("age", 40)
+
+      observe_after_save do |observed|
+        new_contact.save!
+
+        expect(observed.last).to eq("age" => [nil, 40])
+      end
+
+      expect(new_contact.saved_typed_eav_changes).to eq("age" => [nil, 40])
+      expect(new_contact.typed_eav_changes).to eq({})
+    end
+
+    it "reports updates and replaces the result on a repeated no-op save" do
+      contact.set_typed_eav_value("age", 41)
+      contact.save!
+
+      contact.set_typed_eav_value("age", 42)
+      contact.save!
+      expect(contact.saved_typed_eav_changes).to eq("age" => [41, 42])
+
+      contact.save!
+      expect(contact.saved_typed_eav_changes).to eq({})
+    end
+
+    it "includes values assigned by a host before_save callback" do
+      callback = proc { set_typed_eav_value("age", 43) }
+      Contact.set_callback(:save, :before, callback)
+
+      begin
+        contact.save!
+      ensure
+        Contact.skip_callback(:save, :before, callback)
+      end
+
+      expect(contact.saved_typed_eav_changes).to eq("age" => [nil, 43])
+    end
+
+    it "reports nested removal as a saved change" do
+      value = save_value(age_field, 44)
+      contact.reload
+      contact.typed_values_attributes = [{ id: value.id, _destroy: true }]
+
+      contact.save!
+
+      expect(contact.saved_typed_eav_changes).to eq("age" => [44, nil])
+      expect(contact.typed_eav_changes).to eq({})
+    end
+
+    it "preserves the prior saved result after validation failure" do
+      contact.set_typed_eav_value("age", 45)
+      contact.save!
+      contact.set_typed_eav_value("age", "not-an-integer")
+
+      expect(contact.save).to be(false)
+      expect(contact.saved_typed_eav_changes).to eq("age" => [nil, 45])
+      expect(contact.typed_eav_changes).to eq("age" => [45, nil])
+    end
+
+    it "preserves the prior saved result after a raised save error" do
+      contact.set_typed_eav_value("age", 47)
+      contact.save!
+      contact.set_typed_eav_value("age", 48)
+      callback = proc { raise "save interrupted" }
+      Contact.before_save(callback)
+
+      begin
+        expect { contact.save! }.to raise_error(RuntimeError, "save interrupted")
+      ensure
+        Contact.skip_callback(:save, :before, callback)
+      end
+
+      expect(contact.saved_typed_eav_changes).to eq("age" => [nil, 47])
+    end
+
+    it "preserves the prior saved result when an after_save callback raises" do
+      contact.set_typed_eav_value("age", 51)
+      contact.save!
+      prior = contact.saved_typed_eav_changes
+      contact.set_typed_eav_value("age", 52)
+      observed = []
+      callback = proc do
+        observed << saved_typed_eav_changes
+        raise "after-save interrupted"
+      end
+      Contact.after_save(callback)
+
+      begin
+        expect { contact.save! }.to raise_error(RuntimeError, "after-save interrupted")
+      ensure
+        Contact.skip_callback(:save, :after, callback)
+      end
+
+      expect(observed).to eq([{ "age" => [51, 52] }])
+      expect(contact.saved_typed_eav_changes).to eq(prior)
+      expect(contact.typed_eav_changes).to eq("age" => [51, 52])
+      expect(TypedEAV::Value.find_by(entity: contact, field: age_field).value).to eq(51)
+    end
+
+    it "clears saved changes when the outer transaction rolls back" do
+      contact.set_typed_eav_value("age", 48)
+      contact.save!
+      contact.set_typed_eav_value("age", 49)
+
+      Contact.transaction do
+        contact.save!
+        expect(contact.saved_typed_eav_changes).to eq("age" => [48, 49])
+        raise ActiveRecord::Rollback
+      end
+
+      expect(contact.saved_typed_eav_changes).to eq({})
+      expect(TypedEAV::Value.find_by(entity: contact, field: age_field).value).to eq(48)
+    end
+
+    it "clears a prior success after a later failed save and outer rollback" do
+      Contact.transaction do
+        contact.set_typed_eav_value("age", 54)
+        contact.save!
+        contact.set_typed_eav_value("age", "not-an-integer")
+
+        expect(contact.save).to be(false)
+        expect(contact.saved_typed_eav_changes).to eq("age" => [nil, 54])
+        raise ActiveRecord::Rollback
+      end
+
+      expect(contact.saved_typed_eav_changes).to eq({})
+    end
+
+    it "clears saved changes on reload" do
+      contact.set_typed_eav_value("age", 50)
+      contact.save!
+
+      expect(contact.reload.saved_typed_eav_changes).to eq({})
+    end
+
+    it "does not query typed values or fields for an untouched no-op save" do
+      save_value(age_field, 53)
+      reloaded = contact.reload
+      reloaded.typed_values.load
+
+      queries = typed_eav_queries do
+        reloaded.save!
+        expect(reloaded.saved_typed_eav_changes).to eq({})
+      end
+
+      expect(queries).to eq([])
     end
   end
 end
