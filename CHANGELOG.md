@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-04
+
+New SQL-backed query APIs, selective/preloaded bulk reads, logical dirty
+tracking, and read-only schema previews. Existing read defaults are preserved;
+no database migrations or new runtime dependencies are required.
+
 ### Added
 
 - Read-only `SchemaPortability.preview_schema` compares exact-partition
@@ -41,6 +47,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Selected winning field IDs narrow value loading before hydration; omitted
   `fields:` preserves all-fields reads. Empty, duplicate, unknown, and
   partition-specific names have explicit projection semantics. (#45)
+
+### Compatibility and usage notes
+
+- Typed sorting and summaries select one effective field definition. Scope
+  arguments do not authorize or filter host records: retain tenant and access
+  filters on the caller's Active Record relation. All-partitions mode and
+  unsupported collection/multi-cell operations fail explicitly.
+- Distinct lists and grouped counts default to 100 values (maximum 1,000),
+  ordered by value rather than frequency. Exact distinct counts include the
+  explicit NULL category; missing rows are omitted. Numeric min/max/sum retain
+  Integer/BigDecimal types and do not aggregate reference IDs or currencies.
+- Preloaded reads are explicit in-memory value snapshots with a current
+  definition lookup; database reads remain the default. Dirty/saved changes
+  describe host-associated editing and save state, not durable audit history
+  or independently executed bulk SQL writes.
+- Schema previews are advisory, exact-partition comparisons. They neither
+  apply changes nor reserve the schema or guarantee a later import's success.
+- Local verification: 1,404 examples, 0 failures; 160 Ruby files lint-clean.
+  The release workflow additionally verifies the supported compatibility
+  matrix and the exact packaged artifact before publication.
 
 ## [0.7.1] - 2026-09-04
 
@@ -644,7 +670,8 @@ worked examples.
 
 Initial release.
 
-[Unreleased]: https://github.com/dchuk/typed_eav/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/dchuk/typed_eav/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.8.0
 [0.7.1]: https://github.com/dchuk/typed_eav/releases/tag/v0.7.1
 [0.7.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.7.0
 [0.6.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.6.0

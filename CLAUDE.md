@@ -5,7 +5,7 @@
 ## Active Context
 
 **Work:** No active milestone
-**Last shipped:** 0.7.1 (2026-09-04) — canonical polymorphic host types for inherited models and batched BulkUpsert field-definition resolution. The earlier "Enhancement plan v1" milestone remains archived at `.vbw-planning/milestones/01-two-level-scope-partitioning-phase-1-pipeline-completions/SHIPPED.md`. `lib/typed_eav/version.rb` and `CHANGELOG.md` are the canonical release-status sources; `RELEASING.md` defines when publication is complete.
+**Last shipped:** 0.8.0 (2026-09-04) — SQL-backed scalar queries, selective/preloaded bulk reads, logical dirty tracking, and read-only schema previews. The earlier "Enhancement plan v1" milestone remains archived at `.vbw-planning/milestones/01-two-level-scope-partitioning-phase-1-pipeline-completions/SHIPPED.md`. `lib/typed_eav/version.rb` and `CHANGELOG.md` are the canonical release-status sources; `RELEASING.md` defines when publication is complete.
 **Next action:** Run /vbw:vibe to start a new milestone, or /vbw:status to review progress
 
 ## VBW Rules
