@@ -59,6 +59,11 @@ The checker verifies local page/asset targets and heading anchors in generated
 HTML. It does not make network requests or certify the accuracy of examples.
 Review examples against the relevant gem specs as part of each change.
 
+After layout changes, check getting-started, field tables, and the API reference
+at phone and desktop widths. Confirm the page itself does not scroll horizontally;
+long code blocks and tables should scroll inside their own containers. Checking
+only the documentation home misses content-dependent sizing bugs.
+
 ## Publish on GitHub Pages
 
 The repository includes `.github/workflows/docs.yml`. Pull requests build and

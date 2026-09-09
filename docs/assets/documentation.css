@@ -6,7 +6,8 @@ a:focus-visible, summary:focus-visible { outline: 2px solid var(--docs-accent); 
 .docs-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 20px 32px; border-bottom: 1px solid var(--docs-border); }
 .docs-brand { font-size: 24px; font-weight: 600; color: #222 !important; }
 .docs-brand span { margin-left: 12px; font-size: 14px; font-weight: 400; color: var(--docs-muted); }
-.docs-shell { display: grid; grid-template-columns: 264px minmax(0, 1fr); max-width: 1320px; margin: auto; }
+/* Definite width prevents the theme’s flex body from sizing this to long code/table content. */
+.docs-shell { width: 100%; box-sizing: border-box; display: grid; grid-template-columns: 264px minmax(0, 1fr); max-width: 1320px; margin: auto; }
 .docs-sidebar { padding: 24px 16px 40px 24px; border-right: 1px solid var(--docs-border); position: sticky; top: 0; max-height: 100vh; overflow-y: auto; box-sizing: border-box; scrollbar-color: #aaa #fdfdfd; }
 .docs-sidebar summary { cursor: pointer; font-weight: 600; padding: 12px 8px; }
 .nav-group { margin: 0 0 24px; }

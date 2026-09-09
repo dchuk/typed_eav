@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep documentation pages within the mobile viewport when they contain wide
+  code examples or tables; overflow scrolls inside those elements.
+
 ## [0.8.1] - 2026-09-08
 
 Documentation-focused patch release; no runtime API or database migration changes.
