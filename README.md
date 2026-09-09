@@ -1,5 +1,7 @@
 # TypedEAV
 
+[Documentation](https://dchuk.github.io/typed_eav/) · [Getting started](https://dchuk.github.io/typed_eav/getting-started.html) · [API reference](https://dchuk.github.io/typed_eav/reference/api.html)
+
 Add runtime-defined custom fields to Active Record models, with typed values,
 validation, and SQL filtering, sorting, and summaries.
 
