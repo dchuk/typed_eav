@@ -15,12 +15,13 @@ RSpec.describe "maintainer and architecture documentation" do
   end
 
   it "documents the complete schema and public partition seam" do
-    readme = root.join("README.md").read
+    schema = root.join("docs/guides/schema.md").read
+    architecture = root.join("docs/guides/architecture.md").read
 
-    expect(readme).to include("typed_eav_value_versions")
-    expect(readme).to include("append-only audit history")
-    expect(readme).to include("ADR-0006")
-    expect(readme).to include("effective_fields_by_name")
-    expect(readme).to include("find_visible_section!")
+    expect(schema).to include("typed_eav_value_versions")
+    expect(schema).to include("append-only audit history")
+    expect(architecture).to include("ADR-0006")
+    expect(architecture).to include("effective_fields_by_name")
+    expect(architecture).to include("find_visible_section!")
   end
 end

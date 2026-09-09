@@ -1,3 +1,7 @@
+---
+title: "ADR 0011: Retain chained-IN multi-filter queries"
+---
+
 # ADR 0011: Retain chained-IN multi-filter queries
 
 ## Status

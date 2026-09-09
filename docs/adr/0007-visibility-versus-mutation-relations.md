@@ -1,3 +1,7 @@
+---
+title: "ADR 0007: Visibility versus mutation relations"
+---
+
 # ADR 0007: Visibility versus mutation relations
 
 ## Status

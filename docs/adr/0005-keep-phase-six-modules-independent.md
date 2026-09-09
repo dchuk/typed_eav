@@ -1,3 +1,7 @@
+---
+title: "Keep Phase-6 modules independent; do not introduce an import-pipeline orchestrator"
+---
+
 # Keep Phase-6 modules independent; do not introduce an import-pipeline orchestrator
 
 **Status:** accepted

@@ -1,3 +1,7 @@
+---
+title: "Introduce family intermediate bases on `Field` (ValidatedString, RangeBounded, Optionable)"
+---
+
 # Introduce family intermediate bases on `Field` (ValidatedString, RangeBounded, Optionable)
 
 **Status:** accepted

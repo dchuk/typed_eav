@@ -1,3 +1,7 @@
+---
+title: "Keep the EventDispatcher broker; do not inline"
+---
+
 # Keep the EventDispatcher broker; do not inline
 
 **Status:** accepted

@@ -1,3 +1,7 @@
+---
+title: "ADR 0009: Application-owned trigram indexes for measured string workloads"
+---
+
 # ADR 0009: Application-owned trigram indexes for measured string workloads
 
 ## Status

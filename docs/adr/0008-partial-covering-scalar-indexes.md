@@ -1,3 +1,7 @@
+---
+title: "ADR 0008: Partial-covering scalar indexes"
+---
+
 # ADR 0008: Partial-covering scalar indexes
 
 ## Status

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-08
+
+Documentation-focused patch release; no runtime API or database migration changes.
+
+### Added
+
+- Browsable documentation site with grouped sidebar navigation, a public API and
+  configuration reference, and a user-facing summary of design decisions.
+- Guides for CSV mapping, schema import/export and snapshots, defaults,
+  missing-value queries, bulk-write results, and public partition helpers.
+- GitHub Pages build and deployment workflow with local link and anchor checks.
+  The site renders its changelog from the canonical root file.
+- Public documentation Markdown included in the gem package.
+
+### Changed
+
+- Shortened the README into an installation and discovery entry point, preserving
+  detailed examples and contracts in linked guides.
+- Corrected scope-resolver examples to use the documented tuple return shape.
+- Required documentation review after every repository change in both agent
+  instruction files.
+
 ## [0.8.0] - 2026-09-04
 
 New SQL-backed query APIs, selective/preloaded bulk reads, logical dirty
@@ -652,7 +674,7 @@ without giving up the existing single-scope ergonomics.
 4. Optional: declare `parent_scope_method:` on hosts that have an in-tenant
    partition. Existing single-scope models continue to work without changes.
 
-See the README ["Migrating from v0.1.x"](README.md#migrating-from-v01x)
+See the README ["Migrating from v0.1.x"](docs/guides/upgrading.md#migrating-from-v01x)
 section for the full guidance, including the orphan-parent invariant and
 worked examples.
 
@@ -670,7 +692,8 @@ worked examples.
 
 Initial release.
 
-[Unreleased]: https://github.com/dchuk/typed_eav/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/dchuk/typed_eav/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/dchuk/typed_eav/releases/tag/v0.8.1
 [0.8.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.8.0
 [0.7.1]: https://github.com/dchuk/typed_eav/releases/tag/v0.7.1
 [0.7.0]: https://github.com/dchuk/typed_eav/releases/tag/v0.7.0

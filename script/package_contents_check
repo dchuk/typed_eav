@@ -10,6 +10,9 @@ REQUIRED_FILES = %w[
   CHANGELOG.md
   MIT-LICENSE
   README.md
+  docs/index.md
+  docs/guides/usage.md
+  docs/reference/api.md
   lib/typed_eav/version.rb
   lib/generators/typed_eav/install/install_generator.rb
 ].freeze

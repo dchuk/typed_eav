@@ -1,3 +1,7 @@
+---
+title: "ADR 0013: Durable versioning and callback-preserving field deletion"
+---
+
 # ADR 0013: Durable versioning and callback-preserving field deletion
 
 ## Status

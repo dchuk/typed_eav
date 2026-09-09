@@ -1,3 +1,7 @@
+---
+title: "ADR 0012: Bound cross-scope administrative queries in applications"
+---
+
 # ADR 0012: Bound cross-scope administrative queries in applications
 
 ## Status

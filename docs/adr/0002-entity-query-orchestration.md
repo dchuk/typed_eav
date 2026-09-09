@@ -1,3 +1,7 @@
+---
+title: "Split `HasTypedEav` into mixin + `EntityQuery` + query objects"
+---
+
 # Split `HasTypedEav` into mixin + `EntityQuery` + query objects
 
 **Status:** accepted

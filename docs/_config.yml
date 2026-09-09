@@ -1,0 +1,44 @@
+title: TypedEAV
+description: Runtime-defined custom fields for Active Record, backed by typed PostgreSQL columns.
+url: https://dchuk.github.io
+baseurl: /typed_eav
+theme: minima
+repository: dchuk/typed_eav
+markdown: kramdown
+kramdown:
+  input: GFM
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: false
+navigation_groups:
+  - Start here
+  - Guides
+  - Reference
+  - Project
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: documentation
+      nav_group: Project
+  - scope:
+      path: guides
+    values:
+      nav_group: Guides
+  - scope:
+      path: reference
+    values:
+      nav_group: Reference
+  - scope:
+      path: adr
+    values:
+      nav_exclude: true
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - goals
+  - improvement-program.md
+  - vendor
+  - .bundle

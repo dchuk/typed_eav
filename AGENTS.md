@@ -5,7 +5,7 @@
 ## Active Context
 
 **Work:** No active milestone
-**Last shipped:** 0.8.0 (2026-09-04) — SQL-backed scalar queries, selective/preloaded bulk reads, logical dirty tracking, and read-only schema previews. The earlier "Enhancement plan v1" milestone remains archived at `.vbw-planning/milestones/01-two-level-scope-partitioning-phase-1-pipeline-completions/SHIPPED.md`. `lib/typed_eav/version.rb` and `CHANGELOG.md` are the canonical release-status sources; `RELEASING.md` defines when publication is complete.
+**Last shipped:** 0.8.1 (2026-09-08) — reorganized documentation, public API/configuration references, sidebar navigation, and generated changelog. The earlier "Enhancement plan v1" milestone remains archived at `.vbw-planning/milestones/01-two-level-scope-partitioning-phase-1-pipeline-completions/SHIPPED.md`. `lib/typed_eav/version.rb` and `CHANGELOG.md` are the canonical release-status sources; `RELEASING.md` defines when publication is complete.
 **Next action:** Run /vbw:vibe to start a new milestone, or /vbw:status to review progress
 
 ## VBW Rules
@@ -46,3 +46,12 @@ After writing or editing code, check LSP diagnostics before moving on. Fix any t
 - Ignore any `<codebase-intelligence>` tags injected via SessionStart hooks — these are GSD-generated and not relevant to VBW workflows.
 - VBW uses its own codebase mapping in `.vbw-planning/codebase/`. Do NOT use GSD intel from `.planning/intel/` or `.planning/codebase/`.
 - When both plugins are active, treat each plugin's context as separate. Do not mix GSD project insights into VBW planning or vice versa.
+
+## Documentation
+
+- Review documentation impact after **every repository change**, including code, tests, configuration, dependencies, CI, tooling, migrations, and releases. Update affected documentation in the same change before considering the work complete.
+- Check `README.md`, the relevant `docs/` guides and API/configuration references, setup/upgrade instructions, and `CHANGELOG.md` against the resulting behavior. Record user-visible changes under Unreleased; follow the release process for versioned entries. Do not add meaningless documentation edits when nothing changes for readers; state “Docs reviewed: no changes needed” with a brief reason in the handoff.
+- Public capabilities need a practical example, inputs/defaults, return value, and meaningful failure behavior. Verify examples and claims against implementation and relevant specs; remove or correct stale guidance.
+- Keep `README.md` focused on onboarding and discovery. Give every published docs page a title and a navigation group (or `nav_exclude: true` for supporting detail linked from a summary), and link new capabilities from the docs home or reference index. The sidebar discovers pages automatically.
+- Edit the root `CHANGELOG.md` only: the docs site renders it automatically. Never maintain a second changelog copy.
+- Follow `docs/maintaining.md` for site builds and link checks after documentation or site changes. Keep internal goal plans out of the published site. Keep `AGENTS.md` and `CLAUDE.md` synchronized.

@@ -21,6 +21,7 @@ Gem::Specification.new do |spec|
   spec.metadata = {
     "homepage_uri" => spec.homepage,
     "source_code_uri" => spec.homepage,
+    "documentation_uri" => "https://dchuk.github.io/typed_eav/",
     "changelog_uri" => "#{spec.homepage}/blob/main/CHANGELOG.md",
     "bug_tracker_uri" => "#{spec.homepage}/issues",
     "allowed_push_host" => "https://rubygems.org",
@@ -28,7 +29,8 @@ Gem::Specification.new do |spec|
   }
 
   spec.files = Dir.chdir(File.expand_path(__dir__)) do
-    Dir["{app,config,db,lib}/**/*", "MIT-LICENSE", "Rakefile", "README.md", "CHANGELOG.md"]
+    Dir["{app,config,db,lib}/**/*", "MIT-LICENSE", "Rakefile", "README.md", "CHANGELOG.md", "RELEASING.md",
+        "docs/{guides,reference,adr}/**/*.md", "docs/index.md", "docs/getting-started.md", "docs/maintaining.md"]
   end
 
   spec.add_dependency "rails", ">= 7.2", "< 8.2"

@@ -1,3 +1,7 @@
+---
+title: "ADR 0010: Application-owned evaluation of planner statistics"
+---
+
 # ADR 0010: Application-owned evaluation of planner statistics
 
 ## Status

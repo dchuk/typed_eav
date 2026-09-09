@@ -1,0 +1,15 @@
+<nav aria-label="Documentation pages">
+  {% assign ordered_pages = site.pages | sort: 'title' %}
+  {% for group in site.navigation_groups %}
+    <section class="nav-group">
+      <h2>{{ group }}</h2>
+      <ul>
+        {% for entry in ordered_pages %}
+          {% if entry.nav_group == group and entry.title and entry.nav_exclude != true %}
+            <li><a href="{{ entry.url | relative_url }}"{% if page.url == entry.url %} aria-current="page"{% endif %}>{{ entry.nav_title | default: entry.title | escape }}</a></li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    </section>
+  {% endfor %}
+</nav>

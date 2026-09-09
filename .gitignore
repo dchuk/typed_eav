@@ -21,3 +21,11 @@ Gemfile.lock
 /.rspec_status
 
 .DS_Store
+
+# Documentation site build output and local dependencies
+/docs/_site/
+/docs/.jekyll-cache/
+/docs/.jekyll-metadata
+/docs/.bundle/
+/docs/vendor/
+!/docs/Gemfile.lock

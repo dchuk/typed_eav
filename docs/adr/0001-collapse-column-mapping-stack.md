@@ -1,3 +1,7 @@
+---
+title: "Collapse column-mapping stack; break `FieldStorageContract` extension API pre-1.0"
+---
+
 # Collapse column-mapping stack; break `FieldStorageContract` extension API pre-1.0
 
 **Status:** accepted

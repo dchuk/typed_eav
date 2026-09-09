@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="{{ page.lang | default: site.lang | default: 'en' }}">
+  {% include head.html %}
+  <body>
+    <a class="skip-link" href="#page-content">Skip to content</a>
+    <header class="docs-header">
+      <a class="docs-brand" href="{{ '/' | relative_url }}">TypedEAV <span>Documentation</span></a>
+      <a href="https://github.com/{{ site.repository }}">GitHub</a>
+    </header>
+    <div class="docs-shell">
+      <aside class="docs-sidebar">
+        <details id="docs-navigation" open>
+          <summary>Browse documentation</summary>
+          {% include docs-navigation.html %}
+        </details>
+      </aside>
+      <main id="page-content" class="docs-content" tabindex="-1">
+        <article>{{ content }}</article>
+      </main>
+    </div>
+    <script>
+      const navigation = document.getElementById('docs-navigation');
+      const mobile = window.matchMedia('(max-width: 800px)');
+      const adaptNavigation = () => { navigation.open = !mobile.matches; };
+      adaptNavigation();
+      mobile.addEventListener('change', adaptNavigation);
+    </script>
+  </body>
+</html>
